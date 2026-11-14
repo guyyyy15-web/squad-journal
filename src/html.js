@@ -197,19 +197,13 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .enemies .ek{color:#ff8a8a}.enemies .ed{color:#fff;background:rgba(229,56,59,.35);border-radius:4px;padding:0 5px}
 .enemies .dmg{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--panel2);margin:6px 0 3px}
 .enemies .dmg u{display:block;background:var(--gold)}.enemies .dmg s{display:block;background:#e5383b;text-decoration:none}
-.map .vs{position:absolute;inset:0;display:none;place-items:center;padding:10px;background:rgba(4,6,9,.72);z-index:3;cursor:pointer}
-.map .vs.on{display:grid;animation:vsIn .25s ease-out}
-@keyframes vsIn{from{opacity:0;transform:scale(1.04)}}
-.vsb{width:100%;max-width:440px;background:#0b0d12;border:3px solid #eef1f5;box-shadow:0 0 0 3px #0b0d12,0 0 0 6px var(--gold),0 12px 30px rgba(0,0,0,.6);padding:10px 10px 8px;image-rendering:pixelated}
-.vt{font:14px/1.2 "Press Start 2P",monospace;color:var(--gold2);text-align:center;letter-spacing:.06em}
-.vsub{font:9px/1.4 "Press Start 2P",monospace;color:var(--muted);text-align:center;margin:4px 0 8px;direction:ltr}
-.vg{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center}.vg .side{min-width:0}
-.vmid{font:16px/1 "Press Start 2P",monospace;color:#ff6b6b;text-shadow:2px 2px 0 #000}
-.vhint{font:8px/1 "Press Start 2P",monospace;color:var(--dim);text-align:center;margin-top:8px}
-.vres{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}.vres div{text-align:center;border:2px solid var(--line);padding:6px}
-.vres b{display:block;font:20px/1.2 "Press Start 2P",monospace}.vres span{font:9px "Press Start 2P",monospace;color:var(--muted)}
-.vres .pg{color:var(--gold2)}.vres .pr{color:#ff6b6b}
-.vline{font-size:13px;text-align:center;color:var(--text)}.vmvp{font-size:13px;text-align:center;margin-top:6px;color:var(--gold2)}
+.map .bn{position:absolute;top:44px;inset-inline:0;margin-inline:auto;width:max-content;max-width:86%;z-index:3;pointer-events:none;text-align:center;background:rgba(11,13,18,.8);border:1px solid rgba(242,169,0,.7);border-radius:4px;padding:4px 8px;opacity:0;transform:translateY(-4px);transition:opacity .3s,transform .3s;visibility:hidden}
+.map .bn.on{opacity:1;transform:none;visibility:visible}
+.map .bn .bt{font:9px/1.3 "Press Start 2P",monospace;color:var(--gold2);letter-spacing:.04em}.map .bn.result .bt{color:#eef1f5}
+.map .bn .bv{font:9px/1.3 "Press Start 2P",monospace;color:#ff6b6b;margin-inline-start:4px}.map .bn .bv i{font-style:normal}
+.map .bn .pg{color:var(--gold2)}.map .bn .pr{color:#ff6b6b}
+.map .bn .bs{font-size:10px;line-height:1.3;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.map .bn .bs b{color:var(--gold2)}
+.map .bn .patch{vertical-align:-2px}
 .fr{display:flex;gap:6px;align-items:center;padding:4px 0;direction:ltr}
 .fr .foe{width:22px;height:25px;display:grid;place-items:center;color:#ff6b6b;font-size:16px}
 .fr .fn{flex:1;min-width:0}.fr .nm{font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
@@ -420,7 +414,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=5', '/app/session.js?v=34'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=6', '/app/session.js?v=36'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

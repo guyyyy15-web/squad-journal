@@ -190,7 +190,7 @@
     var clip = opts.clip || null, windows = actionWindows(d, match.ours), actionOnly = false;
     // Director: at each firefight pause on an ENGAGEMENT card, play the fight slowly with a live battle panel,
     // then a RESULT card. Needs derived v5 (damage/HP/gear); older data falls back to the plain replay.
-    var model = d.pp ? battleModel(d, match.ours) : null, director = !!model, introduced = {}, phase = null, phaseUntil = 0, curW = null, fight = null;
+    var model = d.pp ? battleModel(d, match.ours) : null, director = !!model, introduced = {}, phase = null, curW = null, fight = null;
     var battle = null, lastHp = {}, held = null, lastCut = 0, lastTiles = 0;
     var card = el.closest('.match');
     var ours = new Set(match.ours);
@@ -204,6 +204,7 @@
     var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + cur.join(' ') + ' ' + cur[2] + '">'].concat(baseLayers(match, d));
     svg.push('<circle class="zs" fill="rgba(59,139,235,.08)" stroke="#3b8beb" stroke-width="3" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<circle class="zw" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" r="0"/>');
+    svg.push('<g class="ops"></g>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
     ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 6) + '</g><text class="pmn" y="5" font-size="1.75" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
@@ -240,6 +241,12 @@
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
     var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
     var squadIds = ids.filter(function (id) { return ours.has(id); });
+    // Everyone else in the match (derived v6): faint dots; the squads we trade with turn red with a trail
+    // from ~90 s before first contact, so you see them coming.
+    var others = d.op || [], opBy = {}, foeT = {};
+    others.forEach(function (r) { opBy[r[0]] = r; });
+    (d.enemies || []).forEach(function (x) { foeT[x.t] = x; });
+    var opsG = $('.ops', el);
     var kfKey = '';
 
     function feedLine(e) {
@@ -339,7 +346,7 @@
       });
       if (model) {
         // tracers and floating damage numbers (RPG style), and enemies seen in the last 8 s with their HP
-        var seen = {};
+        var seen = {}; var diam = {};
         var combos = {}, shown = [];
         for (var di = 0; di < model.dmg.length; di++) {
           var hx = model.dmg[di];
@@ -368,11 +375,28 @@
           var hh = hpAt(model, i, t);
           if (hh.state === 2) return;
           var pos = lx.a == i ? lx.ap : lx.vp, r = u * 1.6;
+          var live = opBy[i] && t - lx.t > 1.5 ? opAt(opBy[i], t) : null;
+          if (live) pos = live;
           if (!pos[0] && !pos[1]) return;
+          diam[i] = 1;
           fxh.push('<path d="M' + pos[0] + ' ' + (pos[1] - r) + 'L' + (pos[0] + r) + ' ' + pos[1] + 'L' + pos[0] + ' ' + (pos[1] + r) + 'L' + (pos[0] - r) + ' ' + pos[1] + 'Z" fill="#e5383b" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
           fxh.push('<rect x="' + (pos[0] - u * 2.5) + '" y="' + (pos[1] + r + u * 0.6) + '" width="' + (u * 5) + '" height="' + (u * 0.8) + '" fill="#000"/><rect x="' + (pos[0] - u * 2.5) + '" y="' + (pos[1] + r + u * 0.6) + '" width="' + (u * 5 * (hh.state ? 0.15 : hh.hp / 100)) + '" height="' + (u * 0.8) + '" fill="' + (hh.state === 1 ? '#e5383b' : '#ff8a8a') + '"/>');
         });
       }
+      var oh = [], dim = [];
+      for (var oi = 0; oi < others.length; oi++) {
+        var orow = others[oi], opos = opAt(orow, t);
+        if (!opos || (diam && diam[orow[0]])) continue;
+        var team = d.pp[orow[0]] ? d.pp[orow[0]][2] : 0, en = foeT[team];
+        if (en && t >= en.f - 90 && t <= en.l + 15) {
+          var tp = [];
+          for (var ts2 = Math.max(orow[1], t - 60); ts2 < t; ts2 += 10) { var q2 = opAt(orow, ts2); if (q2) tp.push(q2[0].toFixed(1) + ',' + q2[1].toFixed(1)); }
+          tp.push(opos[0].toFixed(1) + ',' + opos[1].toFixed(1));
+          oh.push('<polyline points="' + tp.join(' ') + '" fill="none" stroke="#ff6b6b" stroke-opacity=".7" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>');
+          oh.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 1.1).toFixed(2) + '" fill="#ff5c5c" stroke="#000" stroke-width="1.2" vector-effect="non-scaling-stroke"/>');
+        } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.7).toFixed(2) + '"/>');
+      }
+      opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
       fx.innerHTML = fxh.join('');
       lb.innerHTML = lbh.join('');
       var shown = recent.slice(-2);
@@ -389,27 +413,25 @@
         + '<div class="hpb"><u style="width:' + (h.state ? 0 : h.hp) + '%" class="' + (h.hp > 50 ? 'g' : h.hp > 25 ? 'y' : 'r') + '"></u></div>'
         + '<div class="gr">' + (g.helmet ? 'H' + g.helmet + ' ' : '') + (g.vest ? 'V' + g.vest + ' ' : '') + esc(gun || '') + '</div></div></div>';
     }
-    function showCard(kind) {
-      var ov = $('.vs', el);
-      if (!ov) { ov = document.createElement('div'); el.appendChild(ov); }
-      var tt = mmss(curW ? curW.t0 : t);
+    // ENGAGEMENT / RESULT: a small banner over the map that fades by itself; the replay never stops for it.
+    var bannerUntil = 0;
+    function banner(kind, until) {
+      var bn = $('.bn', el);
+      if (!bn) { bn = document.createElement('div'); bn.className = 'bn'; el.appendChild(bn); }
       if (kind === 'intro') {
-        ov.innerHTML = '<div class="vsb"><div class="vt">ENGAGEMENT</div><div class="vsub">' + esc(fmt(S.matchAt, { m: match.n, t: tt })) + '</div><div class="vg"><div class="side">'
-          + fight.us.map(function (i) { return fighterRow(i, curW.s, true); }).join('') + '</div><div class="vmid">VS</div><div class="side">'
-          + (fight.them.length ? fight.them.map(function (i) { return fighterRow(i, curW.s, false); }).join('') : '<div class="muted small">?</div>') + '</div></div><div class="vhint">' + esc(S.tapSkip) + '</div></div>';
+        var foes = fight.them.map(function (i) { return name(i); });
+        bn.innerHTML = '<b class="bt">ENGAGEMENT</b> <span class="bv">' + fight.us.length + ' VS ' + (fight.them.length || '?') + '</span>'
+          + (foes.length ? '<div class="bs" dir="ltr">' + esc(foes.slice(0, 3).join(' · ') + (foes.length > 3 ? ' +' + (foes.length - 3) : '')) + '</div>' : '');
       } else {
-        var w = curW, mv = fight.mvp;
-        var mm = mv !== null ? member(model.pp[mv][0]) : null;
-        ov.innerHTML = '<div class="vsb"><div class="vt">RESULT</div><div class="vsub">' + esc(fmt(S.matchAt, { m: match.n, t: tt })) + '</div>'
-          + '<div class="vres"><div><b class="pg">' + fight.dealt + '</b><span>' + esc(S.dealt) + '</span></div><div><b class="pr">' + fight.taken + '</b><span>' + esc(S.taken) + '</span></div></div>'
-          + '<div class="vline">' + [w.kills ? plural('ffKills', w.kills) : '', w.knocks ? plural('ffKnocks', w.knocks) : '', w.deaths ? plural('ffDown', w.deaths) : ''].filter(Boolean).map(esc).join(' · ') + '</div>'
-          + (mv !== null ? '<div class="vmvp">MVP ' + (mm ? patchSvg(mm.emblem, mm.color, 20) : '') + ' <b>' + esc(name(mv)) + '</b> · ' + fight.dealtBy[mv] + ' dmg</div>' : '')
-          + '<div class="vhint">' + esc(S.tapSkip) + '</div></div>';
+        var w = curW, mv = fight.mvp, mm = mv !== null ? member(model.pp[mv][0]) : null;
+        var line = [w.kills ? plural('ffKills', w.kills) : '', w.knocks ? plural('ffKnocks', w.knocks) : '', w.deaths ? plural('ffDown', w.deaths) : ''].filter(Boolean).map(esc).join(' · ');
+        bn.innerHTML = '<b class="bt">RESULT</b> <span class="bv" dir="ltr"><i class="pg">+' + fight.dealt + '</i> / <i class="pr">-' + fight.taken + '</i></span>'
+          + '<div class="bs">' + line + (mv !== null ? (line ? ' · ' : '') + 'MVP ' + (mm ? patchSvg(mm.emblem, mm.color, 12) + ' ' : '') + '<b>' + esc(name(mv)) + '</b>' : '') + '</div>';
       }
-      ov.className = 'vs on';
-      ov.onclick = function () { phaseUntil = 0; };
+      bn.className = 'bn on ' + kind;
+      bannerUntil = until;
     }
-    function hideCard() { var ov = $('.vs', el); if (ov) ov.className = 'vs'; }
+    function hideBanner() { var bn = $('.bn', el); if (bn) bn.className = 'bn'; bannerUntil = 0; }
     function showBattle() {
       if (!battle) { battle = document.createElement('div'); battle.className = 'battle'; el.parentNode.insertBefore(battle, el.nextSibling); }
       battle.innerHTML = '<div class="bh"><span>' + esc(S.squad) + '</span><span class="vsm">VS</span><span>' + esc(S.enemy) + '</span></div><div class="bg"><div class="side us"></div><div class="side them"></div></div>';
@@ -426,28 +448,25 @@
         lastHp[i] = val;
       });
     }
-    function endFight() { phase = null; curW = null; fight = null; hideCard(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
+    function endFight(keepBanner) { phase = null; curW = null; fight = null; if (!keepBanner) hideBanner(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
     var lastBattle = 0;
     function frame(ts) {
       var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;
       if (director && model && playing) {
-        if (phase === 'intro' || phase === 'result') {
-          if (ts < phaseUntil) { draw(realDt); raf = requestAnimationFrame(frame); return; }
-          if (phase === 'intro') { phase = 'fight'; hideCard(); showBattle(); el.classList.add('fighting'); } else endFight();
-        }
         var cw = windows.filter(function (x) { return t >= x.s && t <= x.e; })[0];
         if (cw && !introduced[cw.s] && phase !== 'fight') {
-          introduced[cw.s] = 1; curW = cw; fight = fightOf(model, cw); phase = 'intro'; phaseUntil = ts + 2200; showCard('intro');
-          draw(realDt); raf = requestAnimationFrame(frame); return;
+          introduced[cw.s] = 1; curW = cw; fight = fightOf(model, cw); phase = 'fight';
+          showBattle(); el.classList.add('fighting'); banner('intro', ts + 2000);
         }
-        if (phase === 'fight' && curW && t >= curW.e) { phase = 'result'; phaseUntil = ts + 2200; if (battle) battle.classList.add('hide'); showCard('result'); draw(realDt); raf = requestAnimationFrame(frame); return; }
+        if (phase === 'fight' && curW && t >= curW.e) { banner('result', ts + 2600); endFight(true); }
         if (phase === 'fight' && ts - lastBattle > 120) { lastBattle = ts; updateBattle(); }
       }
+      if (bannerUntil && ts > bannerUntil) hideBanner();
       var slow = slowmo && actionNear(d, match.ours, t);
       hud.sm.classList.toggle('hide', !(slow && playing));
       if (playing) {
         t += phase === 'fight' ? realDt * Math.min(4, speeds[si] * 0.4) : realDt * speeds[si] * (slow ? 0.25 : 1);
-        if (clip && t >= clip[1] && phase !== 'fight' && phase !== 'result') {
+        if (clip && t >= clip[1] && phase !== 'fight' && !(bannerUntil && $('.bn.result', el))) {
           introduced = {};
           if (opts.next && opts.auto) { opts.next(); return; } // reel: on to the next clip
           t = clip[0]; snap = true;                             // single clip: loop
@@ -636,7 +655,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=8');
+      var w = new Worker('/app/extract-worker.js?v=9');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -662,7 +681,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 5
+    var p = match.derived >= 6
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -673,11 +692,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 5)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 6)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 5)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 6)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 5: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3). Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 6: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
@@ -61,9 +61,11 @@ GitHub does **not** deploy.
 - **Highlights are clips:** `actionWindows` (replay.js) chains our kills/knocks/deaths/revives ≤ 12 s apart into
   FIREFIGHT windows (score ≥ 5); moments inside a window become its tags. Cards open the replay in clip mode
   (loop, ⏭ next); the reel plays the top clips in order; "Action only" skips quiet stretches in a full replay.
-- **Director** (replay): at each firefight an ENGAGEMENT card (HP, helmet/vest, guns per fighter), the fight in slow
-  motion with a live battle panel (HP bars, DOWN/KIA), combo damage numbers, tracers, enemy markers and a combat
-  camera, then a RESULT card (dealt/taken, kills, MVP). Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
+- **Director** (replay): at each firefight a small ENGAGEMENT banner (n VS n, enemy names), the fight in slow
+  motion with a live battle panel under the map (HP bars, DOWN/KIA, helmet/vest, guns), combo damage numbers, tracers,
+  enemy markers and a combat camera, then a RESULT banner (dealt/taken, kills, MVP). Banners fade by themselves and
+  **never pause the replay**. Everyone else in the match is a faint dot (`opAt`); squads we trade with turn red with a
+  60 s trail from 90 s before first contact. Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
   `fightOf`, tested); RPG look uses the Press Start 2P font. Grid columns must be `minmax(0,1fr)` or they overflow.
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
   (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s, a big jump is a

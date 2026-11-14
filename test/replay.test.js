@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { posAt, zoneAt, aliveAt, phaseAt, timelineMarks, actionNear, cameraTarget } from '../src/replay.js';
-import { extractDerived, MAP_SIZE } from '../src/telemetry.js';
+import { extractDerived, validDerived, MAP_SIZE } from '../src/telemetry.js';
 
 const P = (land, path, death = null, jump = null) => ({ name: 'x', team: 1, land, path, death, jump });
 const inside = (box, p) => p[0] >= box[0] && p[0] <= box[0] + box[2] && p[1] >= box[1] && p[1] <= box[1] + box[2];
@@ -66,7 +66,7 @@ test('actionWindows chains nearby action into firefights and skips lone events',
   assert.equal(typeof new Function(`return (${actionWindows.toString()})`)(), 'function');
 });
 
-import { battleModel, hpAt, gearAt, fightOf } from '../src/replay.js';
+import { battleModel, hpAt, gearAt, fightOf, opAt } from '../src/replay.js';
 test('battle model: HP over time, gear, and a fight summary from real telemetry', () => {
   const tele = JSON.parse(readFileSync(new URL('./fixtures/telemetry-squad.json', import.meta.url)));
   const OURS = ['account.f4aed77befae474187ef476ca3715ac3', 'account.4076bb8d31b84d9dbabf382401b33766', 'account.f3d6b4266a824ab99e9c90ef2e60003f'];
@@ -114,4 +114,30 @@ test('directorShot: close shots for kills, duels and approaches; groups over str
   const one = directorShot(d, null, ['A', 'B', 'C'], 150, 'C');
   assert.ok(inside(one.box, [806, 800]));
   assert.equal(typeof new Function(`return (${directorShot.toString()})`)(), 'function');
+});
+
+test('v6: everyone else on the map (op tracks) and opAt', () => {
+  const D = (sec) => new Date(Date.UTC(2026, 0, 1, 0, 0, sec)).toISOString();
+  const ch = (id, team, x, y) => ({ accountId: id, name: id.toUpperCase(), teamId: team, location: { x, y, z: 0 } });
+  const tele = [{ _T: 'LogMatchStart', _D: D(0) },
+    { _T: 'LogVehicleLeave', _D: D(30), vehicle: { vehicleType: 'TransportAircraft' }, character: ch('us', 1, 1000, 1000) },
+    { _T: 'LogVehicleLeave', _D: D(31), vehicle: { vehicleType: 'TransportAircraft' }, character: ch('foe', 2, 1000, 1000) },
+    { _T: 'LogPlayerPosition', _D: D(40), elapsedTime: 40, character: ch('foe', 2, 5000, 5000) }, // still in the air: skipped
+    { _T: 'LogParachuteLanding', _D: D(55), character: ch('foe', 2, 8000, 8000) },
+    { _T: 'LogPlayerPosition', _D: D(58), elapsedTime: 58, character: ch('foe', 2, 8000, 8000) },
+    { _T: 'LogPlayerPosition', _D: D(68), elapsedTime: 68, character: ch('foe', 2, 16000, 8000) },
+    { _T: 'LogPlayerPosition', _D: D(78), elapsedTime: 78, character: ch('foe', 2, 24000, 8000) },
+    { _T: 'LogPlayerPosition', _D: D(78), elapsedTime: 78, character: ch('us', 1, 24000, 9000) },
+    { _T: 'LogPlayerKillV2', _D: D(85), victim: ch('foe', 2, 24000, 8000), killer: ch('us', 1, 24000, 9000) }];
+  const d = extractDerived(tele, ['us'], 800000);
+  assert.equal(d.op.length, 1);
+  const row = d.op[0];
+  assert.equal(d.pp[row[0]][0], 'foe');
+  assert.deepEqual(row, [row[0], 60, 85, 10, 10, 20, 10, 30, 10]);
+  assert.deepEqual(opAt(row, 60), [10, 10]);
+  assert.deepEqual(opAt(row, 65), [15, 10]);
+  assert.deepEqual(opAt(row, 84), [30, 10]);
+  assert.equal(opAt(row, 59), null);
+  assert.equal(opAt(row, 86), null);
+  assert.equal(validDerived(JSON.parse(JSON.stringify(d)), new Set(['us'])), true);
 });

@@ -25,6 +25,17 @@ export function posAt(p, t) {
   return [last[1], last[2]];
 }
 
+/**
+ * Position of another player (derived v6 `op` row: [pp index, tStart, tEnd, x0, y0, …], one point per 10 s)
+ * at time t, interpolated; null before the landing or after death.
+ */
+export function opAt(row, t) {
+  if (t < row[1] || t > row[2]) return null;
+  const n = (row.length - 3) / 2;
+  const f = (t - row[1]) / 10; const i = Math.min(n - 1, Math.floor(f)); const j = Math.min(n - 1, i + 1); const g = f - i;
+  return [row[3 + i * 2] + (row[3 + j * 2] - row[3 + i * 2]) * g, row[4 + i * 2] + (row[4 + j * 2] - row[4 + i * 2]) * g];
+}
+
 /** Blue zone (interpolated) and the next white circle at time t. */
 export function zoneAt(d, t) {
   const z = d.zones; let a = null; let b = null;
