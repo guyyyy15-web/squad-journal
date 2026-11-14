@@ -1,5 +1,5 @@
 // Squad Journal Worker: routes + cron entry point.
-import { tick, drain, rebuildSessions, getSettings, enqueue } from './collector.js';
+import { tick, drain, rebuildSessions, getSettings, enqueue, saveTotals } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
 import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
@@ -93,18 +93,20 @@ async function clanOf(db) {
 
 async function home(env, origin, lang) {
   const db = env.DB;
-  const [sessions, members, recent, totals] = await db.batch([
+  // Cheap page: ≤ 40 sessions + members + three settings rows. Totals are precomputed by rebuildSessions.
+  const [sessions, members, cached] = await db.batch([
     db.prepare('SELECT * FROM sessions ORDER BY start_at DESC LIMIT 40'),
     db.prepare('SELECT * FROM members'),
-    db.prepare(`SELECT p.account_id, p.name, p.place, p.kills, p.damage, m.map, m.mode, m.created_at FROM participants p
-      JOIN matches m ON m.match_id = p.match_id JOIN members mb ON mb.account_id = p.account_id
-      ORDER BY m.created_at DESC LIMIT 8`),
-    db.prepare(`SELECT (SELECT COUNT(*) FROM sessions) AS sessions, (SELECT COUNT(*) FROM session_matches) AS matches,
-      (SELECT COUNT(DISTINCT sm.match_id) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
-        JOIN members mb ON mb.account_id = p.account_id WHERE p.place = 1) AS wins,
-      (SELECT COALESCE(SUM(p.kills), 0) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
-        JOIN members mb ON mb.account_id = p.account_id) AS kills`),
+    db.prepare("SELECT key, value FROM settings WHERE key IN ('totals', 'poll_state', 'clan')"),
   ]);
+  const kv = Object.fromEntries(cached.results.map((r) => [r.key, r.value]));
+  let totals = null;
+  try { totals = JSON.parse(kv.totals || 'null'); } catch { /* recompute */ }
+  if (!totals) totals = await saveTotals(db);
+  // "Recent matches" is only shown before the first session exists.
+  const recent = sessions.results.length ? { results: [] } : await db.prepare(`SELECT p.account_id, p.name, p.place, p.kills, p.damage, m.map, m.mode, m.created_at FROM participants p
+      JOIN matches m ON m.match_id = p.match_id JOIN members mb ON mb.account_id = p.account_id
+      ORDER BY m.created_at DESC LIMIT 8`).all();
   // Fill missing summaries a few at a time (CPU budget); the rest show without them until the next visit.
   let budget = 4;
   const list = [];
@@ -115,8 +117,9 @@ async function home(env, origin, lang) {
     if (summary && summary.v !== 2) summary = null;
     list.push({ ...s, summary });
   }
-  const poll = JSON.parse((await setting(db, 'poll_state')) || '{}');
-  return homePage({ lang, sessions: list, members: members.results, recent: recent.results, totals: totals.results[0], status: poll, origin, clan: await clanOf(db) });
+  let poll = {}; let clan = null;
+  try { poll = JSON.parse(kv.poll_state || '{}'); clan = JSON.parse(kv.clan || 'null'); } catch { /* ignore */ }
+  return homePage({ lang, sessions: list, members: members.results, recent: recent.results, totals, status: poll, origin, clan });
 }
 
 async function session(env, id, origin, lang, path) {

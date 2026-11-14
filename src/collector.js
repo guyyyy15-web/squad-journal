@@ -214,8 +214,22 @@ export async function rebuildSessions(env, settings) {
   for (const [mid, sid] of previous) {
     if (!inSession.has(mid) && keep.has(sid)) stmts.push(db.prepare('DELETE FROM session_matches WHERE match_id = ?').bind(mid));
   }
-  if (stmts.length) await db.batch(stmts);
+  if (stmts.length) {
+    await db.batch(stmts);
+    await saveTotals(db);
+  }
   return { sessions: sessions.length, changed: stmts.length };
+}
+
+/** Season totals for the home page, recomputed only when sessions change (home then reads one row). */
+export async function saveTotals(db) {
+  const t = await db.prepare(`SELECT (SELECT COUNT(*) FROM sessions) AS sessions, (SELECT COUNT(*) FROM session_matches) AS matches,
+    (SELECT COUNT(DISTINCT sm.match_id) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
+      JOIN members mb ON mb.account_id = p.account_id WHERE p.place = 1) AS wins,
+    (SELECT COALESCE(SUM(p.kills), 0) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
+      JOIN members mb ON mb.account_id = p.account_id) AS kills`).first();
+  await db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('totals', ?)").bind(JSON.stringify(t)).run();
+  return t;
 }
 
 export async function logRun(db, kind, ok, info) {
