@@ -4,6 +4,7 @@ import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
 import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
 import { hallOfFame } from './hall.js';
+import { factsOf, prompt, checkNumbers, cleanRecap, isLang, NARRATOR_MODEL, DAILY_CAP } from './narrator.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
 import * as R from './replay.js';
@@ -132,6 +133,44 @@ async function session(env, id, origin, lang, path) {
   const head = await env.DATA.head(`og/${s.session_id}.jpg`);
   return sessionPage({ lang, session: s, summary, members, origin, ogVer, ogReady: head?.customMetadata?.ver === ogVer, clan, path,
     derivedIds: new Map(derived.results.map((r) => [r.match_id, r.v])) });
+}
+
+// ---- AI narrator ----
+
+/** The session recap (English for every page language), generated once per fact sheet, cached in sessions.ai_recap. */
+async function recap(env, id) {
+  const lang = 'en';
+  const db = env.DB;
+  const s = await db.prepare('SELECT * FROM sessions WHERE session_id = ?').bind(id).first();
+  if (!s) return null;
+  const members = (await db.prepare('SELECT * FROM members').all()).results;
+  const summary = await summaryOf(env, s, members);
+  const facts = factsOf(summary, new Map(members.map((m) => [m.account_id, m])));
+  const ver = hash(facts.text);
+  let cache = {};
+  try { cache = JSON.parse(s.ai_recap || '{}'); } catch { /* ignore */ }
+  if (cache.ver === ver && typeof cache[lang] === 'string') return cache[lang];
+  if (!env.AI) return null;
+  // Daily cap so a busy day can never exhaust the free neurons.
+  const day = new Date().toISOString().slice(0, 10);
+  const used = JSON.parse((await setting(db, 'ai_day')) || '{}');
+  const n = used.day === day ? used.n : 0;
+  if (n >= DAILY_CAP) return null;
+  await putSetting(db, 'ai_day', JSON.stringify({ day, n: n + 1 }));
+  let text = null;
+  for (const temperature of [0.8, 0.5]) {
+    const model = NARRATOR_MODEL;
+    try {
+      const r = await env.AI.run(model, { messages: prompt(facts, lang), max_tokens: 260, temperature });
+      const out = cleanRecap(r?.response ?? r?.choices?.[0]?.message?.content);
+      if (out && checkNumbers(out, facts.numbers) && isLang(out, lang)) { text = out; console.log('narrator ok', id, lang, model); break; }
+      console.log('narrator rejected', id, lang, model, out ? 'numbers/lang' : 'empty');
+    } catch (e) { console.error('narrator failed', id, lang, e?.message); }
+  }
+  if (cache.ver !== ver) cache = { ver };
+  cache[lang] = text || ''; // '' = tried and refused; we don't retry until the facts change
+  await db.prepare('UPDATE sessions SET ai_recap = ? WHERE session_id = ?').bind(JSON.stringify(cache), id).run();
+  return text;
 }
 
 // ---- hall of fame ----
@@ -393,6 +432,11 @@ export default {
               WHERE p.map = ? AND p.kind = ?`).bind(map, kind).all().then((r) => r.results),
             env.DB.prepare('SELECT * FROM members WHERE active = 1').all().then((r) => r.results), clanOf(env.DB)]);
           return mapsPage({ lang, maps, map, kind, points, members, clan });
+        }
+        let rm;
+        if ((rm = /^\/api\/recap\/([\w-]{1,40})$/.exec(path))) {
+          const text = await recap(env, rm[1]);
+          return json({ text: text || '' });
         }
         if (path === '/hall') {
           const [hall, members, clan] = await Promise.all([hallData(env), env.DB.prepare('SELECT * FROM members').all().then((r) => r.results), clanOf(env.DB)]);

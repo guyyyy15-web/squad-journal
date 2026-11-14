@@ -28,6 +28,10 @@ migrations_dir = "migrations"
 binding = "DATA"
 bucket_name = "squad-journal-data"
 
+# Workers AI: the session narrator (src/narrator.js). Free tier: 10k neurons/day; a recap costs ~50.
+[ai]
+binding = "AI"
+
 # Browser scripts in src/client/ are bundled as text and served from /app/.
 [[rules]]
 type = "Text"

@@ -44,6 +44,9 @@ GitHub does **not** deploy.
 - **Telemetry data versions:** `derived.json.v` (now 3: adds the `alive` series). Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (now 2).
+- **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
+  (its Hebrew was stilted; Gemma 4 reasons and returns no text). Fact sheet only; `checkNumbers` rejects any number
+  not in the facts; cached in `sessions.ai_recap` per fact-sheet hash; `DAILY_CAP` recaps a day.
 - **Client scripts** in `src/client/` are bundled as text and served from `/app/`. Bump the `?v=` in the page
   when they change. Functions shipped to the browser via `toString()` must be self-contained.
 

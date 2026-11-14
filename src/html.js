@@ -182,6 +182,7 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .h2h .score{font:24px/1 var(--stencil)}.h2h b{font-size:14px}
 .tug{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px;background:var(--panel2)}.tug u{display:block;height:100%}
 .pairs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.pair{margin:0}
+.radio{border-color:rgba(185,167,122,.4)}.radio .rtext{margin:8px 0 0;font-size:16px;line-height:1.55;white-space:pre-line}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -321,6 +322,10 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
       <div class="st"><b>${tm.damage.toLocaleString('en')}</b><span>${esc(t.damage)}</span></div></div>
     <div class="row muted small" style="margin-top:10px">${esc(t.avgPlace(tm.avg_place))}${tm.top10_streak >= 2 ? ` · ${esc(t.streak(tm.top10_streak))}` : ''}</div>`;
 
+  let cachedRecap = '';
+  try { const c = JSON.parse(session.ai_recap || '{}'); cachedRecap = typeof c.en === 'string' ? c.en : ''; } catch { /* none */ }
+  const narrator = `<div class="panel radio" id="recap" data-cached="${cachedRecap ? 1 : 0}"><span class="tag">FIELD REPORT</span><div class="kicker" style="margin-top:4px">🎙 ${esc(t.narrator)}</div>
+    <p class="rtext" dir="ltr" lang="en" style="text-align:start">${cachedRecap ? esc(cachedRecap) : `<span class="muted">${esc(t.narratorWait)}</span>`}</p></div>`;
   const highlights = `<h2>${esc(t.highlights)} <span class="tag">HIGHLIGHTS</span></h2><div class="moments" id="moments"><div class="muted small">…</div></div>`;
 
   const carry = mvp ? `<h2>${esc(t.whoCarried)} <span class="tag">CARRY</span></h2>
@@ -367,10 +372,10 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     labels: { medicLog: t.medicLog, medicSub: t.medicSub, setupLog: t.setupLog, setupSub: t.setupSub, reviver: t.reviver, assister: t.assister, matchN: t.matchN(0).replace('0', '{n}') },
   };
   const ogDesc = S.en.sessionDesc(tm, mvp?.nickname);
-  return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
+  return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=17'], script: meScript + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=17'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 
