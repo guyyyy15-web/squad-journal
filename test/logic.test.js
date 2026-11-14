@@ -98,11 +98,11 @@ import { nextPollDelay } from '../src/logic.js';
 test('nextPollDelay adapts to activity and rate limit', () => {
   const now = Date.parse('2026-11-14T20:00:00Z');
   const min = 60_000;
-  assert.equal(nextPollDelay({ now, foundNew: true }), min);
-  assert.equal(nextPollDelay({ now, lastActivity: now - 30 * min }), min);
-  assert.equal(nextPollDelay({ now, lastActivity: now - 2 * 60 * min }), 5 * min);
-  assert.equal(nextPollDelay({ now, lastActivity: now - 2 * 86_400_000 }), 10 * min);
-  assert.equal(nextPollDelay({ now, lastActivity: 0 }), 10 * min);
-  assert.equal(nextPollDelay({ now, foundNew: true, rateRemaining: 1, rateResetAt: now + 3 * min }), 3 * min);
-  assert.equal(nextPollDelay({ now, foundNew: true, rateRemaining: 5 }), min);
+  assert.equal(nextPollDelay({ now, foundNew: true }), 5 * min);
+  assert.equal(nextPollDelay({ now, lastActivity: now - 30 * min }), 5 * min);
+  assert.equal(nextPollDelay({ now, lastActivity: now - 2 * 60 * min }), 15 * min);
+  assert.equal(nextPollDelay({ now, lastActivity: now - 2 * 86_400_000 }), 30 * min);
+  assert.equal(nextPollDelay({ now, lastActivity: 0 }), 30 * min);
+  assert.equal(nextPollDelay({ now, foundNew: true, rateRemaining: 1, rateResetAt: now + 8 * min }), 8 * min);
+  assert.equal(nextPollDelay({ now, foundNew: true, rateRemaining: 5 }), 5 * min);
 });

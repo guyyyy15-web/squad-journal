@@ -11,7 +11,7 @@ workers_dev = true
 enabled = true
 
 [triggers]
-crons = ["* * * * *"]  # every minute; the collector decides whether to call PUBG (adaptive)
+crons = ["*/5 * * * *"]  # every 5 minutes; the collector decides whether to call PUBG (adaptive)
 
 [vars]
 PUBG_SHARD = "steam"

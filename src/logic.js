@@ -171,15 +171,16 @@ export const validIgn = (s) => /^[A-Za-z0-9_-]{2,24}$/.test(s);
 
 const MIN = 60_000;
 /**
- * Adaptive polling. Returns ms until the next /players poll.
- * - found new matches, or our last match ended < 75 min ago → session in progress: every minute
- * - last activity < 6 h → every 5 min (people come back)
- * - otherwise → every 10 min (idle ping; PUBG keeps matches 14 days, so nothing is lost)
+ * Adaptive polling (the cron fires every 5 minutes). Returns ms until the next /players poll.
+ * - found new matches, or our last match ended < 75 min ago → session in progress: every 5 min
+ * - last activity < 6 h → every 15 min
+ * - otherwise → every 30 min (idle ping; PUBG keeps matches 14 days, so nothing is lost)
  * - low rate-limit budget → wait at least until it resets
  */
 export function nextPollDelay({ now, lastActivity = 0, foundNew = false, rateRemaining = null, rateResetAt = 0 }) {
   const since = now - lastActivity;
-  let delay = foundNew || since < 75 * MIN ? MIN : since < 6 * 60 * MIN ? 5 * MIN : 10 * MIN;
+  // PUBG keeps matches 14 days, so nothing is lost by checking less often; this only sets how fresh the page is.
+  let delay = foundNew || since < 75 * MIN ? 5 * MIN : since < 6 * 60 * MIN ? 15 * MIN : 30 * MIN;
   if (rateRemaining !== null && rateRemaining <= 2) delay = Math.max(delay, rateResetAt - now, 2 * MIN);
   return delay;
 }

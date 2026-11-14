@@ -9,7 +9,7 @@ short ranked list and ask before building.
 
 ## Runs on its own
 
-Nothing here needs Claude or a computer to keep working. A cron fires every minute; `tick()` decides whether
+Nothing here needs Claude or a computer to keep working. A cron fires every 5 minutes; `tick()` decides whether
 to call PUBG (adaptive polling) and drains the queue. Deploying = `npm run deploy` (wrangler) — pushing to
 GitHub does **not** deploy.
 
@@ -21,7 +21,7 @@ GitHub does **not** deploy.
   Never in git, chat, logs or code. Never log request bodies.
 - **PUBG API budget:** `/players` is 10 req/min on the dev key and is called only from `poll()` (≤10 members
   per request) and the /join lookup. `/matches` and telemetry are not rate-limited. Keep `nextPollDelay`
-  (1 min in a session, 5 min for 6 h after, 10 min idle) unless deliberately changing it.
+  (5 min in a session, 15 min for 6 h after, 30 min idle; cron every 5 min) unless deliberately changing it.
 - **Free-plan CPU (10 ms/invocation):** never parse telemetry in the Worker. Telemetry is copied to R2 as the
   CDN's gzip bytes (`encodeResponseBody: 'manual'`) and parsed in the **browser** (Web Worker); the compact
   result is POSTed back and validated (`validDerived`). Keep per-run slices small (`drain(env, 2)`).

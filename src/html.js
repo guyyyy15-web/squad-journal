@@ -242,7 +242,7 @@ const meScript = `try{var me=localStorage.getItem('sj.me');if(me)document.queryS
 /** While the squad is playing, check /api/live every minute; on a new match reload (home) or offer a refresh. */
 const LIVE_WATCH = (how, text = '') => `;(function(){var last=null;function chk(){fetch('/api/live').then(function(r){return r.json()}).then(function(j){
 if(last!==null&&j.newest!==last){${how === 'reload' ? 'location.reload()' : `var b=document.getElementById('newmatch');if(!b){b=document.createElement('button');b.id='newmatch';b.className='btn toast';b.textContent=${JSON.stringify(text)};b.onclick=function(){location.reload()};document.body.appendChild(b)}`}}
-last=j.newest;if(j.live)setTimeout(chk,60000)}).catch(function(){})}chk()})();`;
+last=j.newest;if(j.live)setTimeout(chk,300000)}).catch(function(){})}chk()})();`;
 const clanBlock = (clan) => (clan?.name ? `<div class="clan"><span class="ct">[${esc(clan.tag)}]</span><span class="cn">${esc(clan.name)}</span>${clan.level ? `<span class="cl">LVL ${esc(clan.level)}</span>` : ''}</div>` : '');
 
 /** Home: clan header, season totals and the session timeline. */

@@ -17,9 +17,9 @@ Live: https://squad-journal.guyyyy15-web.workers.dev
 
 ## How collection works
 
-- Cron fires **every minute**, but `/players` (10 req/min limit) is called only when the adaptive
-  schedule says so (`nextPollDelay` in `src/logic.js`): every minute during a session, every 5 min for
-  6 h after, every 10 min when idle. One request covers up to 10 members. Idle minutes cost one D1 read.
+- Cron fires **every 5 minutes**, but `/players` (10 req/min limit) is called only when the adaptive
+  schedule says so (`nextPollDelay` in `src/logic.js`): every 5 min during a session, every 15 min for
+  6 h after, every 30 min when idle. One request covers up to 10 members. Idle minutes cost one D1 read.
 - New match ids go to `queue`; `/matches/{id}` (not rate-limited) is fetched, the raw JSON is archived in
   R2 (`matches/<id>.json`), and only rosters containing a member are written to D1.
 - Telemetry of squad matches is copied to R2 **still gzipped** (`encodeResponseBody: 'manual'`), ~1.2 MB
