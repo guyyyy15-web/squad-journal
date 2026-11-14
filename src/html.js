@@ -157,6 +157,11 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
  -webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${WORN};mask-size:240px}
 .st{background-image:${DUST};background-color:rgba(0,0,0,.28)}
 .patch .stitch{stroke-dasharray:1.3 .9}
+.live{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-color:rgba(229,56,59,.55)}
+.live b{font:18px/1 var(--stencil);color:#ff6b6b;letter-spacing:.08em}
+.livedot{width:12px;height:12px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 0 rgba(229,56,59,.7);animation:pulse 1.6s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 12px rgba(229,56,59,0)}100%{box-shadow:0 0 0 0 rgba(229,56,59,0)}}
+.toast{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.6)}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -208,6 +213,10 @@ export const placeBadge = (p) => `<span class="pl ${p === 1 ? 'w' : p && p <= 10
 const pt = (m, size = 22) => patch(emblemOf(m), m?.color, size);
 const who = (m) => `<span class="who" data-acc="${esc(m.account_id)}">${pt(m)}${esc(m.nickname)}</span>`;
 const meScript = `try{var me=localStorage.getItem('sj.me');if(me)document.querySelectorAll('[data-acc="'+me+'"]').forEach(function(e){e.classList.add('me')})}catch(e){}`;
+/** While the squad is playing, check /api/live every minute; on a new match reload (home) or offer a refresh. */
+const LIVE_WATCH = (how, text = '') => `;(function(){var last=null;function chk(){fetch('/api/live').then(function(r){return r.json()}).then(function(j){
+if(last!==null&&j.newest!==last){${how === 'reload' ? 'location.reload()' : `var b=document.getElementById('newmatch');if(!b){b=document.createElement('button');b.id='newmatch';b.className='btn toast';b.textContent=${JSON.stringify(text)};b.onclick=function(){location.reload()};document.body.appendChild(b)}`}}
+last=j.newest;if(j.live)setTimeout(chk,60000)}).catch(function(){})}chk()})();`;
 const clanBlock = (clan) => (clan?.name ? `<div class="clan"><span class="ct">[${esc(clan.tag)}]</span><span class="cn">${esc(clan.name)}</span>${clan.level ? `<span class="cl">LVL ${esc(clan.level)}</span>` : ''}</div>` : '');
 
 /** Home: clan header, season totals and the session timeline. */
@@ -254,8 +263,9 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
       <div class="st gold"><b>${totals.wins}</b><span>🍗 ${esc(t.chickens)}</span></div>
       <div class="st"><b>${totals.kills}</b><span>${esc(t.kills)}</span></div>
     </div>
+    ${status.last_activity && Date.now() - status.last_activity < 75 * 60000 ? `<div class="panel live"><span class="livedot"></span><b>${esc(t.live)}</b><span class="muted small">${esc(t.liveText(ago(lang, status.last_activity)))}</span></div>` : ''}
     <h2>${esc(t.sessions)} <span class="muted small" style="margin-inline-start:auto;font-family:var(--body)">${status.last_poll ? esc(t.updated(ago(lang, status.last_poll))) : ''}</span></h2>
-    ${sessions.length ? cards : empty}${rec}`, { script: meScript, og: { image: `${origin}/og/default.jpg`, title: clan?.name ? `${t.brand} · [${clan.tag}] ${clan.name}` : t.brand } });
+    ${sessions.length ? cards : empty}${rec}`, { script: meScript + LIVE_WATCH('reload'), og: { image: `${origin}/og/default.jpg`, title: clan?.name ? `${t.brand} · [${clan.tag}] ${clan.name}` : t.brand } });
 }
 
 const METAL = { killer: 'gold', sniper: 'gold', angel: 'gold', headshot: 'gold', knocker: 'silver', assist: 'silver', pharmacy: 'silver',
@@ -340,7 +350,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=16'], script: meScript,
+    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=17'], script: meScript + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

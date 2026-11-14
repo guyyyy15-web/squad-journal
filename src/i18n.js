@@ -50,6 +50,7 @@ export const S = {
     kd: (k, d, kn, r) => `${k} kills · ${d} damage · ${kn} knocks · ${r} revives`,
     sessionDesc: (t, mvp) => `${t.wins ? `🍗 ${t.wins > 1 ? `${t.wins} chicken dinners` : 'Chicken dinner'}` : `Best finish #${t.best_place}`} · ${t.kills} kills in ${t.games} games${mvp ? ` · ${mvp} carried the squad` : ''}`,
     siteDesc: 'Our PUBG squad journal: every session, medal and record',
+    live: 'LIVE', liveText: (a) => `The squad is in the field. Last match ended ${a}. Checking PUBG every minute.`,
     squadLogs: 'Squad logs', medicLog: 'Medic log', medicSub: 'who revived whom', setupLog: 'Set-ups', setupSub: 'who assisted whose kill',
     reviver: 'reviver ↓ / revived →', assister: 'assist ↓ / killer →',
     // join
@@ -78,6 +79,7 @@ export const S = {
     kd: (k, d, kn, r) => `${k} הריגות · ${d} נזק · ${kn} נוקים · ${r} החייאות`,
     sessionDesc: (t, mvp) => `${t.games} משחקים · ${t.wins ? `${t.wins} צ׳יקן דינר 🍗 · ` : `מקום הכי טוב #${t.best_place} · `}${t.kills} הריגות${mvp ? ` · ${mvp} סחב` : ''}`,
     siteDesc: 'יומן הסקוואד: כל הסשנים, המדליות והשיאים שלנו ב־PUBG',
+    live: 'LIVE', liveText: (a) => `הסקוואד בשטח. המשחק האחרון נגמר ${a}. בודקים מול PUBG כל דקה.`,
     squadLogs: 'יומני הסקוואד', medicLog: 'יומן חובש', medicSub: 'מי הקים את מי', setupLog: 'הכנות', setupSub: 'מי עזר להריגה של מי',
     reviver: 'מקים ↓ / הוקם →', assister: 'עוזר ↓ / הורג →',
     joinTitle: 'מצטרפים ליומן הסקוואד', welcome: 'ברוכים הבאים לסקוואד 🪂', noPassword: 'בלי סיסמה ובלי הרשמה. רק השם שלך במשחק.',
@@ -98,7 +100,7 @@ export const S = {
 export function clientStrings(lang) {
   return lang === 'he' ? {
     loadOnScroll: 'המפה נטענת כשגוללים אליה', queued: 'ממתין בתור לניתוח…', downloading: 'מורידים טלמטריה…', parsing: 'מנתחים {n}MB של אירועים…',
-    retry: 'עוד ניסיון…', camAuto: 'מצלמה חכמה', slowmo: 'הילוך איטי באקשן', theater: 'מסך מלא', noTele: 'אין טלמטריה למשחק הזה 🤷', failed: 'לא הצלחנו לנתח את המשחק הזה', fullMap: 'כל המפה', zoomIn: 'זום לפעולה',
+    retry: 'עוד ניסיון…', shareMoment: 'לשתף את הרגע', newMatch: 'משחק חדש נכנס · לרענון', camAuto: 'מצלמה חכמה', slowmo: 'הילוך איטי באקשן', theater: 'מסך מלא', noTele: 'אין טלמטריה למשחק הזה 🤷', failed: 'לא הצלחנו לנתח את המשחק הזה', fullMap: 'כל המפה', zoomIn: 'זום לפעולה',
     killed: '{a} חיסל את {v}', knocked: '{a} הפיל את {v}', died: '{v} נפל ל־{a}', diedAlone: '{v} נפל', revived: '{a} הקים את {v}',
     more: 'עוד {n} אירועים', fists: 'אגרופים', copied: 'הקישור הועתק', replay: 'הילוך חוזר', stop: 'סגור', analyzing: 'מנתחים משחק {i}/{n}…',
     noMoments: 'עוד לא זוהו רגעים מיוחדים בסשן הזה.',
@@ -106,7 +108,7 @@ export function clientStrings(lang) {
     longshot: '{a} פגע מ־{d} מ׳ עם {w}', lastgasp: '{a} הקים את {v} אחרי {s} שניות על הרצפה', matchAt: 'משחק {m} · {t}', none: '—',
   } : {
     loadOnScroll: 'The map loads when you scroll to it', queued: 'Queued for analysis…', downloading: 'Downloading telemetry…', parsing: 'Crunching {n}MB of events…',
-    retry: 'One more try…', camAuto: 'Auto camera', slowmo: 'Slow-mo on action', theater: 'Fullscreen', noTele: 'No telemetry for this match 🤷', failed: 'Could not analyse this match', fullMap: 'Full map', zoomIn: 'Zoom to action',
+    retry: 'One more try…', shareMoment: 'Share this moment', newMatch: 'New match in · tap to refresh', camAuto: 'Auto camera', slowmo: 'Slow-mo on action', theater: 'Fullscreen', noTele: 'No telemetry for this match 🤷', failed: 'Could not analyse this match', fullMap: 'Full map', zoomIn: 'Zoom to action',
     killed: '{a} eliminated {v}', knocked: '{a} knocked {v}', died: '{v} went down to {a}', diedAlone: '{v} went down', revived: '{a} revived {v}',
     more: '{n} more events', fists: 'fists', copied: 'Link copied', replay: 'Replay', stop: 'Close', analyzing: 'Analysing match {i}/{n}…',
     noMoments: 'No special moments detected in this session yet.',

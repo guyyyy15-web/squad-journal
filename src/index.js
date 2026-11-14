@@ -342,6 +342,10 @@ export default {
         if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
+        if (path === '/api/live') {
+          const st = JSON.parse((await setting(env.DB, 'poll_state')) || '{}');
+          return json({ live: !!st.last_activity && Date.now() - st.last_activity < 75 * 60000, newest: st.last_activity || 0, next_poll: st.next_poll || 0 });
+        }
         let m;
         if ((m = /^\/s\/([\w-]{1,40})$/.exec(path))) return await session(env, m[1], url.origin, lang, path);
         if ((m = /^\/maps\/(\w{3,30})\.jpg$/.exec(path))) {

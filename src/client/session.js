@@ -171,7 +171,7 @@
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
       + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>';
-    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button></div><div class="cams">' + chips + '</div>';
+    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button><button type="button" class="ghost lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button></div><div class="cams">' + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
     var svgEl = $('svg.mp', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
@@ -261,6 +261,13 @@
     function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = '×' + speeds[si]; };
+    var lnk = $('.lnk', bar);
+    lnk.onclick = function () {
+      // A link straight to this second of this match (opens the replay there).
+      var url = location.origin + location.pathname + '?m=' + match.n + '&t=' + Math.max(0, Math.round(t) - 3);
+      if (navigator.share) navigator.share({ title: document.title, url: url }).catch(function () {});
+      else if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { lnk.textContent = '✅'; setTimeout(function () { lnk.textContent = '🔗'; }, 1500); });
+    };
     range.oninput = function () { seek(Number(range.value)); };
     bar.querySelectorAll('.mk').forEach(function (b) { b.onclick = function () { seek(marks[Number(b.dataset.i)].t - 5); }; });
     bar.querySelectorAll('.cam').forEach(function (b) {
@@ -388,7 +395,17 @@
     box.innerHTML = table(L.medicLog, L.medicSub, L.reviver, mx.revives) + table(L.setupLog, L.setupSub, L.assister, mx.setups);
   }
 
-  window.SJ.ready = loadAll().then(function () { renderMoments(); renderMatrices(); });
+  window.SJ.ready = loadAll().then(function () {
+    renderMoments(); renderMatrices();
+    // Deep link: ?m=<match number>&t=<seconds> opens the replay at that moment.
+    var qs = new URLSearchParams(location.search), mn = Number(qs.get('m')), tt = Number(qs.get('t'));
+    var match = SJ.matches[mn - 1];
+    if (match && data[match.id] && tt >= 0) {
+      var el = $('.map[data-match="' + match.id + '"]');
+      el.scrollIntoView({ block: 'center' });
+      replay(match, el, data[match.id], tt);
+    }
+  });
 
   // ---------- share ----------
   var shareBtn = $('#share');
