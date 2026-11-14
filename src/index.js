@@ -2,7 +2,9 @@
 import { tick, drain, rebuildSessions, getSettings, enqueue } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
-import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo } from './html.js';
+import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage } from './html.js';
+import { S, langOf } from './i18n.js';
+import { findMoments, squadMatrices } from './moments.js';
 import { summarize } from './summary.js';
 import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
 import SESSION_JS from './client/session.js';
@@ -71,7 +73,7 @@ function hash(str) {
 /** Summary of a session, computed once and cached in sessions.summary_json (cleared when the session changes). */
 async function summaryOf(env, s, members) {
   if (s.summary_json) {
-    try { const j = JSON.parse(s.summary_json); if (j.v === 1) return j; } catch { /* recompute */ }
+    try { const j = JSON.parse(s.summary_json); if (j.v === 2) return j; } catch { /* recompute */ }
   }
   const { results } = await env.DB.prepare(`SELECT m.match_id, m.map, m.mode, m.created_at, m.duration, p.* FROM session_matches sm
       JOIN matches m ON m.match_id = sm.match_id JOIN participants p ON p.match_id = m.match_id
@@ -82,7 +84,11 @@ async function summaryOf(env, s, members) {
   return sum;
 }
 
-async function home(env, origin) {
+async function clanOf(db) {
+  try { return JSON.parse((await setting(db, 'clan')) || 'null'); } catch { return null; }
+}
+
+async function home(env, origin, lang) {
   const db = env.DB;
   const [sessions, members, recent, totals] = await db.batch([
     db.prepare('SELECT * FROM sessions ORDER BY start_at DESC LIMIT 40'),
@@ -102,26 +108,28 @@ async function home(env, origin) {
   for (const s of sessions.results) {
     let summary = null;
     if (s.summary_json) { try { summary = JSON.parse(s.summary_json); } catch { /* ignore */ } }
-    else if (budget-- > 0) summary = await summaryOf(env, s, members.results);
+    if ((!summary || summary.v !== 2) && budget-- > 0) summary = await summaryOf(env, { ...s, summary_json: null }, members.results);
+    if (summary && summary.v !== 2) summary = null;
     list.push({ ...s, summary });
   }
   const poll = JSON.parse((await setting(db, 'poll_state')) || '{}');
-  return homePage({ sessions: list, members: members.results, recent: recent.results, totals: totals.results[0], status: poll, origin });
+  return homePage({ lang, sessions: list, members: members.results, recent: recent.results, totals: totals.results[0], status: poll, origin, clan: await clanOf(db) });
 }
 
-async function session(env, id, origin) {
+async function session(env, id, origin, lang, path) {
   const db = env.DB;
   const s = await db.prepare('SELECT * FROM sessions WHERE session_id = ?').bind(id).first();
-  if (!s) return page('לא נמצא', '<h1 style="margin-top:40px">הסשן הזה לא קיים 🤷</h1><p><a href="/">לכל הסשנים</a></p>');
+  if (!s) return notFoundPage(lang);
   const members = (await db.prepare('SELECT * FROM members').all()).results;
   const summary = await summaryOf(env, s, members);
   const ids = summary.matches.map((m) => m.match_id);
-  const derived = await db.prepare('SELECT match_id FROM derived WHERE match_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(ids)).all();
+  const derived = await db.prepare("SELECT match_id, json_extract(json, '$.v') AS v FROM derived WHERE match_id IN (SELECT value FROM json_each(?))").bind(JSON.stringify(ids)).all();
   const byId = new Map(members.map((m) => [m.account_id, m]));
-  const ogVer = hash(JSON.stringify(ogInfo(s, summary, byId)));
+  const clan = await clanOf(db);
+  const ogVer = hash(JSON.stringify(ogInfo(s, summary, byId, clan)));
   const head = await env.DATA.head(`og/${s.session_id}.jpg`);
-  return sessionPage({ session: s, summary, members, origin, ogVer, ogReady: head?.customMetadata?.ver === ogVer,
-    derivedIds: new Set(derived.results.map((r) => r.match_id)) });
+  return sessionPage({ lang, session: s, summary, members, origin, ogVer, ogReady: head?.customMetadata?.ver === ogVer, clan, path,
+    derivedIds: new Map(derived.results.map((r) => [r.match_id, r.v])) });
 }
 
 // ---- maps, telemetry, derived data, share images ----
@@ -149,6 +157,11 @@ onmessage = async function (e) {
     postMessage({ done: extractDerived(events, e.data.ours, MAP_SIZE[e.data.map] || 816000) });
   } catch (err) { postMessage({ error: String(err && err.message || err) }); }
 };`;
+
+// Moment/matrix helpers for the session page (same source as src/moments.js, tested there).
+const LIB_JS = `var __name = function (f) { return f; };
+var findMoments = ${findMoments.toString()};
+var squadMatrices = ${squadMatrices.toString()};`;
 
 const asset = (body, type, maxAge = 86400) => new Response(body, {
   headers: { 'Content-Type': type, 'Cache-Control': `public, max-age=${maxAge}` },
@@ -178,7 +191,9 @@ async function putDerived(env, id, req) {
   if (!results.length) return fail('unknown match', 404);
   if (!validDerived(d, new Set(results.map((r) => r.account_id)))) return fail('invalid');
   await env.DB.batch([
-    env.DB.prepare('INSERT OR IGNORE INTO derived (match_id, json) VALUES (?, ?)').bind(id, text),
+    // First write wins, except that a newer extractor version replaces an older one.
+    env.DB.prepare(`INSERT INTO derived (match_id, json) VALUES (?, ?) ON CONFLICT(match_id) DO UPDATE SET json = excluded.json
+      WHERE json_extract(derived.json, '$.v') < json_extract(excluded.json, '$.v')`).bind(id, text),
     env.DB.prepare('UPDATE matches SET processed_level = 2 WHERE match_id = ? AND processed_level < 2').bind(id),
   ]);
   return json({ ok: true });
@@ -190,7 +205,7 @@ async function putOg(env, id, ver, req) {
   if (!s) return fail('unknown session', 404);
   const members = (await env.DB.prepare('SELECT * FROM members').all()).results;
   const summary = await summaryOf(env, s, members);
-  const current = hash(JSON.stringify(ogInfo(s, summary, new Map(members.map((m) => [m.account_id, m])))));
+  const current = hash(JSON.stringify(ogInfo(s, summary, new Map(members.map((m) => [m.account_id, m])), await clanOf(env.DB))));
   if (ver !== current) return fail('stale', 409);
   const head = await env.DATA.head(`og/${id}.jpg`);
   if (head?.customMetadata?.ver === ver) return json({ ok: true, existed: true });
@@ -210,18 +225,21 @@ async function ogImage(env, id) {
 
 // ---- onboarding ----
 
+const bodyLang = (b) => (b.lang === 'he' ? 'he' : 'en');
+
 async function lookup(env, b) {
-  if (b.token !== await inviteToken(env.DB)) return fail('הקישור הזה כבר לא בתוקף, בקשו מגיא קישור חדש', 403);
+  const t = S[bodyLang(b)];
+  if (b.token !== await inviteToken(env.DB)) return fail(t.errToken, 403);
   const ign = String(b.ign || '').trim();
-  if (!validIgn(ign)) return fail('השם לא נראה כמו שם PUBG');
+  if (!validIgn(ign)) return fail(t.errName);
   const api = pubg(env);
   let players;
   try { players = parsePlayers(await api.playersByNames([ign])); } catch (e) {
-    if (e.status === 429) return fail('יותר מדי ניסיונות, חכו דקה ונסו שוב', 429);
+    if (e.status === 429) return fail(t.errRate, 429);
     throw e;
   }
   const p = players[0];
-  if (!p) return fail(`לא מצאנו את "${ign}". שימו לב לאותיות גדולות/קטנות ול־0 מול O.`, 404);
+  if (!p) return fail(t.errNotFound(ign), 404);
   await putSetting(env.DB, `lookup:${p.accountId}`, JSON.stringify({ name: p.name, matchIds: p.matchIds, at: Date.now() }));
   let latest = null;
   if (p.matchIds[0]) {
@@ -230,7 +248,7 @@ async function lookup(env, b) {
       const m = JSON.parse(text);
       const st = m.included.find((i) => i.type === 'participant' && i.attributes.stats.playerId === p.accountId)?.attributes.stats;
       const a = m.data.attributes;
-      if (st) latest = { text: `${mapName(a.mapName)} · ${modeName(a.gameMode)} · ${ago(Date.parse(a.createdAt))} · ${st.kills} הריגות · מקום #${st.winPlace}` };
+      if (st) latest = { text: `${mapName(a.mapName)} · ${modeName(a.gameMode)} · ${ago(bodyLang(b), Date.parse(a.createdAt))} · ${st.kills} ${t.kills} · #${st.winPlace}` };
     }
   }
   const member = await env.DB.prepare('SELECT nickname, color, emoji FROM members WHERE account_id = ?').bind(p.accountId).first();
@@ -239,12 +257,13 @@ async function lookup(env, b) {
 
 async function confirm(env, b) {
   const db = env.DB;
-  if (b.token !== await inviteToken(db)) return fail('הקישור הזה כבר לא בתוקף', 403);
+  const t = S[bodyLang(b)];
+  if (b.token !== await inviteToken(db)) return fail(t.errToken, 403);
   if (!ACC.test(b.accountId || '')) return fail('bad account');
   const look = JSON.parse((await setting(db, `lookup:${b.accountId}`)) || 'null');
-  if (!look || Date.now() - look.at > 3_600_000) return fail('עבר יותר מדי זמן, חפשו את השם שוב');
+  if (!look || Date.now() - look.at > 3_600_000) return fail(t.errSlow);
   let prof;
-  try { prof = cleanProfile(b); } catch { return fail('צריך כינוי'); }
+  try { prof = cleanProfile(b); } catch { return fail(t.errNick); }
   await db.batch([
     db.prepare(`INSERT INTO members (account_id, ign, nickname, color, emoji, joined_at, active) VALUES (?, ?, ?, ?, ?, ?, 1)
       ON CONFLICT(account_id) DO UPDATE SET ign = excluded.ign, nickname = excluded.nickname, color = excluded.color,
@@ -305,14 +324,24 @@ export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const path = url.pathname;
+    const lang = langOf(req);
     try {
       if (req.method === 'GET') {
-        if (path === '/') return await home(env, url.origin);
+        if (path === '/') return await home(env, url.origin, lang);
+        let lm;
+        if ((lm = /^\/lang\/(en|he)$/.exec(path))) {
+          const r = url.searchParams.get('r') || '/';
+          const to = /^\/[\w\-/]*$/.test(r) ? r : '/';
+          return new Response(null, { status: 303, headers: {
+            Location: to, 'Set-Cookie': `sj_lang=${lm[1]}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`,
+          } });
+        }
+        if (path === '/app/lib.js') return asset(LIB_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
         let m;
-        if ((m = /^\/s\/([\w-]{1,40})$/.exec(path))) return await session(env, m[1], url.origin);
+        if ((m = /^\/s\/([\w-]{1,40})$/.exec(path))) return await session(env, m[1], url.origin, lang, path);
         if ((m = /^\/maps\/(\w{3,30})\.jpg$/.exec(path))) {
           const obj = await env.DATA.get(`maps/${m[1]}.jpg`);
           return obj ? asset(obj.body, 'image/jpeg', 31536000) : new Response('no map', { status: 404 });
@@ -324,15 +353,15 @@ export default {
         }
         if ((m = /^\/og\/([\w-]{1,40})\.jpg$/.exec(path))) return await ogImage(env, m[1]);
         if ((m = /^\/join\/([\w-]{8,40})$/.exec(path))) {
-          if (m[1] !== await inviteToken(env.DB)) return page('קישור לא בתוקף', '<h1>הקישור הזה כבר לא בתוקף 😬</h1><p class="muted">בקשו מגיא קישור חדש.</p>');
-          return joinPage(m[1]);
+          if (m[1] !== await inviteToken(env.DB)) return page(lang, S[lang].linkExpired, `<h1 style="margin-top:40px">${S[lang].linkExpired}</h1><p class="muted">${S[lang].askGuy}</p>`);
+          return joinPage(lang, m[1], path);
         }
         if (path === '/admin') {
           const authed = await isAdmin(req, env);
           const [members, settings] = authed ? await Promise.all([
             env.DB.prepare('SELECT * FROM members ORDER BY joined_at').all().then((r) => r.results), getSettings(env.DB),
           ]) : [[], {}];
-          return adminPage({ authed, invite: authed ? await inviteToken(env.DB) : '', members, settings, origin: url.origin });
+          return adminPage({ lang, authed, invite: authed ? await inviteToken(env.DB) : '', members, settings, origin: url.origin, clan: await clanOf(env.DB) });
         }
         if (path === '/robots.txt') return new Response('User-agent: *\nDisallow: /\n');
       }
@@ -344,7 +373,7 @@ export default {
           const form = await req.formData();
           if (!env.ADMIN_CODE || form.get('code') !== env.ADMIN_CODE) {
             await new Promise((r) => setTimeout(r, 800));
-            return page('ניהול', '<h1>קוד שגוי</h1><p><a href="/admin">נסו שוב</a></p>');
+            return page(lang, 'Admin', '<h1 style="margin-top:40px">Wrong code</h1><p><a href="/admin">Try again</a></p>');
           }
           return new Response(null, { status: 303, headers: {
             Location: '/admin', 'Set-Cookie': `sj_admin=${await sha(`sj-admin:${env.ADMIN_CODE}`)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`,
@@ -366,7 +395,7 @@ export default {
       return new Response('Not found', { status: 404 });
     } catch (e) {
       console.error('request failed', path, e?.message);
-      return fail('משהו השתבש בשרת, נסו שוב עוד רגע', 500);
+      return fail(S[langOf(req)].errServer, 500);
     }
   },
 

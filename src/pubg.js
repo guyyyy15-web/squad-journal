@@ -36,6 +36,11 @@ export function pubg(env) {
       const res = await get(`/players?filter[playerIds]=${qs(ids)}`);
       return res ? res.json() : null;
     },
+    /** Clan name/tag/level. Rate-limited like /players, so the collector asks at most once a day. */
+    async clan(id) {
+      const res = await get(`/clans/${encodeURIComponent(id)}`);
+      return res ? (await res.json()).data?.attributes || null : null;
+    },
     /** Raw match JSON text (we archive it as-is). null when PUBG doesn't have it. */
     async matchText(id) {
       const res = await get(`/matches/${encodeURIComponent(id)}`, false);

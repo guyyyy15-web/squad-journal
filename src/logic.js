@@ -1,4 +1,5 @@
 // Pure logic: no I/O, no Worker APIs. Tested in test/logic.test.js.
+import { EMBLEM_KEYS } from './emblems.js';
 
 export const MAPS = {
   Baltic_Main: 'Erangel', Erangel_Main: 'Erangel', Desert_Main: 'Miramar', Savage_Main: 'Sanhok',
@@ -146,19 +147,20 @@ export function parsePlayers(json) {
   return (json?.data || []).map((p) => ({
     accountId: p.id,
     name: p.attributes?.name || '',
+    clanId: p.attributes?.clanId || '',
     matchIds: (p.relationships?.matches?.data || []).map((m) => m.id),
   }));
 }
 
 export const COLORS = ['#ff4d6d', '#ffb703', '#3ddc97', '#4cc9f0', '#b388ff', '#ff8fab', '#f77f00', '#90e0ef'];
-export const EMOJIS = ['🐔', '🦊', '🐺', '🦁', '🐸', '🦅', '🐻', '🐙', '🦈', '🐲', '🤡', '👻', '🥷', '🧟', '🍗', '💀'];
 
 /** Validate the profile a friend picks on /join. Returns a clean object or throws. */
 export function cleanProfile(p) {
   const nickname = String(p?.nickname ?? '').trim().replace(/\s+/g, ' ').slice(0, 20);
   if (!nickname) throw new Error('nickname');
   const color = COLORS.includes(p?.color) ? p.color : COLORS[0];
-  const emoji = EMOJIS.includes(p?.emoji) ? p.emoji : EMOJIS[0];
+  // The members.emoji column now holds an insignia key (see emblems.js).
+  const emoji = EMBLEM_KEYS.includes(p?.emblem) ? p.emblem : EMBLEM_KEYS[0];
   return { nickname, color, emoji };
 }
 

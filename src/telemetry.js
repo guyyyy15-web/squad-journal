@@ -23,7 +23,7 @@ export function extractDerived(events, ours, mapSize) {
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 1, plane: null, zones: [], final: null, players, events: [] };
+  const out = { v: 2, plane: null, zones: [], final: null, players, events: [] };
   const jumps = [];
   let lastZone = null;
   const W = (info) => (info && info.damageCauserName ? String(info.damageCauserName).replace(/^Weap|_C$|_C_\d+$/g, '') : '');
@@ -60,7 +60,7 @@ export function extractDerived(events, ours, mapSize) {
       case 'LogPlayerMakeGroggy': {
         const a = e.attacker; const v = e.victim;
         if ((a && set.has(a.accountId)) || (v && set.has(v.accountId))) {
-          out.events.push({ t: T(e), k: 'knock', a: a?.accountId || '', an: a?.name || '', v: v.accountId, vn: v.name,
+          out.events.push({ t: T(e), k: 'knock', a: a?.accountId || '', an: a?.name || '', v: v.accountId, vn: v.name, vt: v.teamId || 0,
             ap: a ? P(a.location) : null, vp: P(v.location), w: W(e), d: Math.round((e.distance || 0) / 100) });
         }
         break;
@@ -71,9 +71,11 @@ export function extractDerived(events, ours, mapSize) {
         const ourV = set.has(v.accountId); const ourK = k && set.has(k.accountId);
         if (ourV) pl(v).death = [...P(v.location), T(e)];
         if (ourV || ourK) {
-          out.events.push({ t: T(e), k: 'kill', a: k?.accountId || '', an: k?.name || '', v: v.accountId, vn: v.name,
+          out.events.push({ t: T(e), k: 'kill', a: k?.accountId || '', an: k?.name || '', v: v.accountId, vn: v.name, vt: v.teamId || 0,
             ap: k ? P(k.location) : null, vp: P(v.location), w: W(e.killerDamageInfo || e.finishDamageInfo),
-            d: D(e.killerDamageInfo || e.finishDamageInfo) });
+            d: D(e.killerDamageInfo || e.finishDamageInfo),
+            km: e.dBNOMaker && set.has(e.dBNOMaker.accountId) ? e.dBNOMaker.accountId : '',
+            as: (e.assists_AccountId || []).filter((id) => set.has(id)).slice(0, 4) });
         }
         break;
       }
@@ -110,7 +112,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || d.v !== 1 || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || (d.v !== 1 && d.v !== 2) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.zones.length > 300 || !d.zones.every((z) => isPt(z, 4) || isPt(z, 7))) return false;
@@ -129,6 +131,9 @@ export function validDerived(d, allowedIds) {
     if (!isPt(e.vp, 2)) return false;
     if (e.w !== undefined && !str(e.w)) return false;
     if (e.d !== undefined && !isInt(e.d, 0, 10000)) return false;
+    if (e.vt !== undefined && !isInt(e.vt, 0, 100000)) return false;
+    if (e.km !== undefined && !(str(e.km) && (e.km === '' || allowedIds.has(e.km)))) return false;
+    if (e.as !== undefined && !(Array.isArray(e.as) && e.as.length <= 4 && e.as.every((id) => allowedIds.has(id)))) return false;
   }
   return true;
 }

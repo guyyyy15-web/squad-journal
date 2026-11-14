@@ -4,8 +4,6 @@
 /** Carry score: what "who carried" ranks by. Damage is the backbone; kills, knocks, assists, revives on top. */
 export const carryScore = (p) => Math.round(p.damage + p.kills * 100 + p.dbnos * 30 + p.assists * 40 + p.revives * 60);
 
-const km = (m) => (m / 1000).toFixed(1);
-
 /**
  * rows: participants of our teams in the session's matches, joined with match info:
  *   {match_id, map, mode, created_at, duration, account_id, name, team_id, place, kills, ...}
@@ -80,7 +78,7 @@ export function summarize(rows, memberIds) {
   };
 
   return {
-    v: 1,
+    v: 2,
     team,
     carry: carry.map((p) => ({ account_id: p.account_id, score: p.carry, share: Math.round((p.carry / carryTotal) * 100),
       kills: p.kills, damage: p.damage, dbnos: p.dbnos, assists: p.assists, revives: p.revives, games: p.games })),
@@ -96,25 +94,23 @@ export function summarize(rows, memberIds) {
   };
 }
 
-/** Award rules. Each picks the max of a metric among members, with a threshold; ties share the award. */
+/** Award rules. Each picks the max of a metric among members, with a threshold; ties share the award.
+ * Titles and descriptions live in i18n.js (AWARD_TITLES / awardText); here only ids and numbers. */
 const RULES = [
-  { id: 'killer', icon: '🔫', title: 'מכונת הריגות', metric: (p) => p.kills, min: 3, text: (v) => `${v} הריגות` },
-  { id: 'gravedigger', icon: '🪦', title: 'נוחת ראשון לקבר', metric: (p) => p.died_first, min: 2, games: 2,
-    text: (v) => `מת ראשון בצוות ${v} פעמים` },
-  { id: 'angel', icon: '😇', title: 'מלאך שומר', metric: (p) => p.revives, min: 2, text: (v) => `${v} החייאות` },
-  { id: 'sniper', icon: '🎯', title: 'הצלף מהספה', metric: (p) => p.longest_kill, min: 100, text: (v) => `הריגה ממרחק ${v} מ׳` },
-  { id: 'pacifist', icon: '🕊️', title: 'פציפיסט', metric: (p) => (p.kills === 0 ? p.damage : 0), min: 150,
-    text: (v) => `${v} נזק ואפס הריגות` },
-  { id: 'knocker', icon: '👊', title: 'מפיל סדרתי', metric: (p) => p.dbnos, min: 4, text: (v) => `${v} נוקים` },
-  { id: 'assist', icon: '🤝', title: 'עוזר מקצועי', metric: (p) => p.assists, min: 3, text: (v) => `${v} אסיסטים` },
-  { id: 'headshot', icon: '🧠', title: 'ראש בראש', metric: (p) => p.headshots, min: 3, text: (v) => `${v} הריגות בראש` },
-  { id: 'pharmacy', icon: '💊', title: 'בית מרקחת מהלך', metric: (p) => p.heals, min: 12, text: (v) => `${v} תחבושות, משככים ואנרגיות` },
-  { id: 'marathon', icon: '🏃', title: 'מרתוניסט', metric: (p) => p.walk, min: 3000, text: (v) => `${km(v)} ק״מ ברגל` },
-  { id: 'taxi', icon: '🚕', title: 'נהג מונית', metric: (p) => p.ride, min: 3000, text: (v) => `${km(v)} ק״מ ברכב` },
-  { id: 'roadkill', icon: '🚗', title: 'דורס', metric: (p) => p.road_kills, min: 1, text: (v) => `${v} דריסות` },
-  { id: 'oops', icon: '🤦', title: 'אש ידידותית', metric: (p) => p.team_kills, min: 1, text: (v) => `הרג חבר צוות ${v === 1 ? 'פעם אחת' : `${v} פעמים`}` },
-  { id: 'tourist', icon: '📸', title: 'תייר', metric: (p) => -p.damage / p.games, max: true, games: 2, low: true,
-    text: (v) => `ממוצע ${Math.round(-v)} נזק למשחק. בא לראות נוף` },
+  { id: 'killer', metric: (p) => p.kills, min: 3 },
+  { id: 'gravedigger', metric: (p) => p.died_first, min: 2, games: 2 },
+  { id: 'angel', metric: (p) => p.revives, min: 2 },
+  { id: 'sniper', metric: (p) => p.longest_kill, min: 100 },
+  { id: 'pacifist', metric: (p) => (p.kills === 0 ? p.damage : 0), min: 150 },
+  { id: 'knocker', metric: (p) => p.dbnos, min: 4 },
+  { id: 'assist', metric: (p) => p.assists, min: 3 },
+  { id: 'headshot', metric: (p) => p.headshots, min: 3 },
+  { id: 'pharmacy', metric: (p) => p.heals, min: 12 },
+  { id: 'marathon', metric: (p) => p.walk, min: 3000 },
+  { id: 'taxi', metric: (p) => p.ride, min: 3000 },
+  { id: 'roadkill', metric: (p) => p.road_kills, min: 1 },
+  { id: 'oops', metric: (p) => p.team_kills, min: 1 },
+  { id: 'tourist', metric: (p) => -p.damage / p.games, games: 2, low: true },
 ];
 
 export function awards(people, games) {
@@ -130,7 +126,7 @@ export function awards(people, games) {
     }
     if (!holders.length || (!r.low && best < r.min)) continue;
     if (r.low && holders.length === pool.length) continue; // everyone tied → nobody is the tourist
-    out.push({ id: r.id, icon: r.icon, title: r.title, holders, value: best, text: r.text(best) });
+    out.push({ id: r.id, holders, value: best });
   }
   return out;
 }

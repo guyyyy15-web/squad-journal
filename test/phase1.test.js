@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { summarize, awards, carryScore } from '../src/summary.js';
 import { extractDerived, validDerived, MAP_SIZE } from '../src/telemetry.js';
 import { parseMatch } from '../src/logic.js';
+import { awardText, AWARD_TITLES } from '../src/i18n.js';
 
 const match = JSON.parse(readFileSync(new URL('./fixtures/match-squad.json', import.meta.url)));
 const tele = JSON.parse(readFileSync(new URL('./fixtures/telemetry-squad.json', import.meta.url)));
@@ -46,11 +47,14 @@ test('awards: ties share, thresholds hold, tourist needs a real difference', () 
   const a = Object.fromEntries(awards(ppl, 3).map((x) => [x.id, x]));
   assert.deepEqual(a.killer.holders, ['A', 'B']);
   assert.deepEqual(a.gravedigger.holders, ['A']);
-  assert.equal(a.sniper.text, 'הריגה ממרחק 250 מ׳');
-  assert.equal(a.taxi.text, '4.2 ק״מ ברכב');
+  assert.equal(awardText('he', a.sniper), 'הריגה ממרחק 250 מ׳');
+  assert.equal(awardText('en', a.taxi), '4.2 km behind the wheel');
+  assert.equal(AWARD_TITLES[a.taxi.id], 'Transport Corps');
   assert.deepEqual(a.tourist.holders, ['B']);
   assert.equal(a.angel, undefined);
-  assert.equal(a.oops.text, 'הרג חבר צוות פעם אחת');
+  assert.equal(awardText('he', a.oops), 'הרג חבר צוות פעם אחת');
+  assert.equal(awardText('en', a.tourist), 'avg 50 damage a game. Came for the view');
+  for (const x of Object.values(a)) assert.ok(AWARD_TITLES[x.id] && awardText('en', x) && awardText('he', x), x.id);
 });
 
 test('summarize works on a real match', () => {
@@ -86,7 +90,8 @@ test('extractDerived on real telemetry', () => {
 test('validDerived rejects junk and foreign players', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
   assert.equal(validDerived(d, new Set(OURS.slice(1))), false);
-  assert.equal(validDerived({ ...d, v: 2 }, new Set(OURS)), false);
+  assert.equal(validDerived({ ...d, v: 3 }, new Set(OURS)), false);
+  assert.equal(validDerived({ ...d, events: [{ ...d.events[0], as: ['account.stranger'] }] }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, events: [{ k: 'kill', t: 'x' }] }, new Set(OURS)), false);
   assert.equal(validDerived(null, new Set(OURS)), false);
 });

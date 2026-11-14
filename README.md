@@ -1,7 +1,11 @@
 # Squad Journal
 
-Private, mobile-first, Hebrew journal of our PUBG (Steam) sessions. One Cloudflare Worker:
-cron collector + API + pages. Free tier only.
+Private, mobile-first journal of our PUBG (Steam) sessions — English by default, Hebrew on a switch.
+One Cloudflare Worker: cron collector + API + pages. Free tier only.
+
+What a session page has: who carried (MVP), medals (rule-based awards), highlights (clutch, squad wipe,
+rampage, long shot, last-gasp revive), medic log and set-ups (who revived / assisted whom), and per match a
+map zoomed on the squad, an animated replay (zones, routes, kills, knocks, revives) and a kill feed.
 
 Live: https://squad-journal.guyyyy15-web.workers.dev
 
@@ -23,6 +27,9 @@ Live: https://squad-journal.guyyyy15-web.workers.dev
 src/index.js      routes + cron entry       src/collector.js  poll, ingest, telemetry, sessions
 src/logic.js      pure logic (tested)       src/pubg.js       PUBG API client
 src/html.js       server-rendered pages     migrations/       D1 schema
+src/i18n.js       en + he strings           src/emblems.js    unit patches + medals (SVG)
+src/summary.js    awards, carry (tested)    src/telemetry.js  browser-side extraction (tested)
+src/moments.js    highlights, matrices      src/client/       session page script (served at /app/)
 test/             node --test               scripts/          dev relay, seed
 ```
 

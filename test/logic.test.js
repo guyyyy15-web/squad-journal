@@ -81,12 +81,13 @@ test('buildSessions merges two old sessions into one id, new ids are unique', ()
 });
 
 test('parsePlayers', () => {
-  const j = { data: [{ id: 'account.1', attributes: { name: 'Guy' }, relationships: { matches: { data: [{ id: 'm1' }, { id: 'm2' }] } } }] };
-  assert.deepEqual(parsePlayers(j), [{ accountId: 'account.1', name: 'Guy', matchIds: ['m1', 'm2'] }]);
+  const j = { data: [{ id: 'account.1', attributes: { name: 'Guy', clanId: 'clan.x' }, relationships: { matches: { data: [{ id: 'm1' }, { id: 'm2' }] } } }] };
+  assert.deepEqual(parsePlayers(j), [{ accountId: 'account.1', name: 'Guy', clanId: 'clan.x', matchIds: ['m1', 'm2'] }]);
 });
 
 test('cleanProfile and validIgn', () => {
-  assert.deepEqual(cleanProfile({ nickname: '  הצלף   הגדול ', color: 'red', emoji: '🐔' }), { nickname: 'הצלף הגדול', color: '#ff4d6d', emoji: '🐔' });
+  assert.deepEqual(cleanProfile({ nickname: '  הצלף   הגדול ', color: 'red', emblem: 'dagger' }), { nickname: 'הצלף הגדול', color: '#ff4d6d', emoji: 'dagger' });
+  assert.equal(cleanProfile({ nickname: 'x', emblem: '<script>' }).emoji, 'skull');
   assert.throws(() => cleanProfile({ nickname: ' ' }));
   assert.equal(validIgn('Guy_15-x'), true);
   assert.equal(validIgn('a b'), false);

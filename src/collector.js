@@ -41,12 +41,14 @@ export async function poll(env, members) {
   const api = pubg(env);
   let queued = 0;
   const renamed = [];
+  const clans = {};
   for (let i = 0; i < members.length; i += 10) {
     const chunk = members.slice(i, i + 10);
     const json = await api.playersByIds(chunk.map((m) => m.account_id));
     for (const p of parsePlayers(json)) {
       const m = chunk.find((x) => x.account_id === p.accountId);
       if (!m) continue;
+      if (p.clanId) clans[p.clanId] = (clans[p.clanId] || 0) + 1;
       if (p.name && p.name !== m.ign) {
         renamed.push(env.DB.prepare('UPDATE members SET ign = ? WHERE account_id = ?').bind(p.name, m.account_id));
       }
@@ -61,7 +63,21 @@ export async function poll(env, members) {
     }
   }
   if (renamed.length) await env.DB.batch(renamed);
+  await refreshClan(env, api, clans).catch(() => {});
   return { queued, rate: api.rate };
+}
+
+/** The squad's clan (the one most members share), refreshed at most once a day. */
+async function refreshClan(env, api, counts) {
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (!top || top[1] < 2) return;
+  const cur = JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key = 'clan'").first('value')) || 'null');
+  if (cur && cur.id === top[0] && Date.now() - cur.at < 86_400_000) return;
+  if (api.rate.remaining !== null && api.rate.remaining <= 3) return;
+  const c = await api.clan(top[0]);
+  if (!c) return;
+  const value = { id: top[0], name: c.clanName || '', tag: c.clanTag || '', level: c.clanLevel || 0, members: c.clanMemberCount || 0, at: Date.now() };
+  await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('clan', ?)").bind(JSON.stringify(value)).run();
 }
 
 /** Fetch, archive and store one match. Returns 'stored' | 'skipped' | 'retry'. */
