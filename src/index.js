@@ -2,7 +2,8 @@
 import { tick, drain, rebuildSessions, getSettings, enqueue } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
-import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage } from './html.js';
+import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage } from './html.js';
+import { hallOfFame } from './hall.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
 import * as R from './replay.js';
@@ -131,6 +132,37 @@ async function session(env, id, origin, lang, path) {
   const head = await env.DATA.head(`og/${s.session_id}.jpg`);
   return sessionPage({ lang, session: s, summary, members, origin, ogVer, ogReady: head?.customMetadata?.ver === ogVer, clan, path,
     derivedIds: new Map(derived.results.map((r) => [r.match_id, r.v])) });
+}
+
+// ---- hall of fame ----
+
+/** All-time records and ranks, cached in settings until a match, summary or member changes. */
+async function hallData(env) {
+  const db = env.DB;
+  const keyRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM session_matches) AS n, (SELECT MAX(end_at) FROM sessions) AS e,
+    (SELECT COUNT(*) FROM sessions WHERE summary_json IS NOT NULL) AS s, (SELECT group_concat(account_id) FROM members WHERE active = 1) AS m`).first();
+  const key = `v1:${keyRow.n}:${keyRow.e}:${keyRow.s}:${hash(keyRow.m || '')}`;
+  try {
+    const c = JSON.parse((await setting(db, 'hall_cache')) || 'null');
+    if (c && c.key === key) return c.data;
+  } catch { /* recompute */ }
+  const members = (await db.prepare('SELECT * FROM members').all()).results;
+  const [rows, sess] = await db.batch([
+    db.prepare(`SELECT p.*, m.created_at, m.map, sm.session_id FROM participants p JOIN members mb ON mb.account_id = p.account_id AND mb.active = 1
+      JOIN session_matches sm ON sm.match_id = p.match_id JOIN matches m ON m.match_id = p.match_id`),
+    db.prepare('SELECT * FROM sessions ORDER BY start_at'),
+  ]);
+  let budget = 3;
+  const sessions = [];
+  for (const x of sess.results) {
+    let summary = null;
+    try { summary = x.summary_json ? JSON.parse(x.summary_json) : null; } catch { /* ignore */ }
+    if ((!summary || summary.v !== 2) && budget-- > 0) summary = await summaryOf(env, { ...x, summary_json: null }, members);
+    sessions.push({ session_id: x.session_id, start_at: x.start_at, match_count: x.match_count, summary: summary && summary.v === 2 ? summary : null });
+  }
+  const data = hallOfFame(rows.results, sessions);
+  if (budget >= 0) await putSetting(db, 'hall_cache', JSON.stringify({ key, data })); // only cache a complete picture
+  return data;
 }
 
 // ---- maps, telemetry, derived data, share images ----
@@ -342,6 +374,19 @@ export default {
         if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
+        if (path === '/hall') {
+          const [hall, members, clan] = await Promise.all([hallData(env), env.DB.prepare('SELECT * FROM members').all().then((r) => r.results), clanOf(env.DB)]);
+          return hallPage({ lang, hall, members, clan });
+        }
+        let pm;
+        if ((pm = /^\/p\/(account\.[0-9a-f]{32})$/.exec(path))) {
+          const [hall, members, clan] = await Promise.all([hallData(env), env.DB.prepare('SELECT * FROM members').all().then((r) => r.results), clanOf(env.DB)]);
+          const member = members.find((m) => m.account_id === pm[1]);
+          const p = hall.players.find((x) => x.account_id === pm[1]);
+          if (!member || !p) return notFoundPage(lang);
+          const recent = (await env.DB.prepare("SELECT session_id, start_at, match_count FROM sessions WHERE members LIKE '%' || ? || '%' ORDER BY start_at DESC LIMIT 6").bind(pm[1]).all()).results;
+          return profilePage({ lang, p, member, hall, members, recent, clan, path });
+        }
         if (path === '/api/live') {
           const st = JSON.parse((await setting(env.DB, 'poll_state')) || '{}');
           return json({ live: !!st.last_activity && Date.now() - st.last_activity < 75 * 60000, newest: st.last_activity || 0, next_poll: st.next_poll || 0 });

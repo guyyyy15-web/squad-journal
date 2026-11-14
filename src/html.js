@@ -2,8 +2,8 @@
 // dark field kit, airdrop yellow, hazard stripes, stencil type, unit patches and medals.
 // No official logos or artwork other than the map images PUBG publishes for API developers.
 import { mapName, COLORS } from './logic.js';
-import { S, AWARD_TITLES, awardText, clientStrings, MOMENT_TITLES } from './i18n.js';
-import { EMBLEMS, EMBLEM_KEYS, emblemOf, patch, medal } from './emblems.js';
+import { S, AWARD_TITLES, awardText, clientStrings, MOMENT_TITLES, RECORD_TITLES, recordText } from './i18n.js';
+import { EMBLEMS, EMBLEM_KEYS, emblemOf, patch, medal, rankInsignia } from './emblems.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -162,6 +162,18 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .livedot{width:12px;height:12px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 0 rgba(229,56,59,.7);animation:pulse 1.6s infinite}
 @keyframes pulse{70%{box-shadow:0 0 0 12px rgba(229,56,59,0)}100%{box-shadow:0 0 0 0 rgba(229,56,59,0)}}
 .toast{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.tabs{display:flex;gap:6px;margin-top:12px}
+.tabs a{flex:1;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:10px;color:var(--muted);text-decoration:none;font:15px/1 var(--stencil);background:var(--panel)}
+.tabs a.on{color:#111;background:var(--gold);border-color:var(--gold)}
+.cmd .pos{font:28px/1 var(--stencil);color:var(--dim);width:28px;text-align:center}
+.xp{margin-top:10px}.xp i{display:block;height:8px;border-radius:4px;background:var(--panel2);overflow:hidden;margin-bottom:6px}
+.xp i u{display:block;height:100%;background:repeating-linear-gradient(-45deg,var(--gold) 0 8px,var(--gold2) 8px 16px)}
+.cmd .mini{margin-top:6px}
+.recs{grid-template-columns:1fr}.rec{grid-template-columns:auto 1fr}.rec .rv{font:30px/1 var(--stencil);color:var(--gold2);min-width:56px;text-align:center;padding-top:4px}
+.rec p{grid-column:auto;margin-top:2px}
+.cabinet{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:12px}
+.cab{display:grid;justify-items:center;text-align:center;gap:2px}.cab b{font:18px/1 var(--stencil);color:var(--gold2)}.cab span{font-size:12px;color:var(--muted)}
+.rank{flex:none;vertical-align:middle;filter:drop-shadow(0 1px 1px rgba(0,0,0,.7))}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -253,7 +265,7 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
       <div class="row muted" style="margin-top:8px">${placeBadge(r.place)} ${esc(mapName(r.map))} · ${r.kills} ${esc(t.kills)} · ${Math.round(r.damage)} ${esc(t.damage)}</div></div>`;
   }).join('')}` : '';
 
-  return page(lang, t.brand, `${top(lang, '/', false, clan)}
+  return page(lang, t.brand, `${top(lang, '/', false, clan)}${nav(lang, 'sessions')}
     <div style="margin:22px 0 8px"><span class="tag">FIELD JOURNAL // ${t.season} ${new Date().getFullYear()}</span>
     ${clanBlock(clan)}
 </div>
@@ -352,6 +364,61 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
     data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=17'], script: meScript + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
+}
+
+/** Tabs under the tape: sessions | hall of fame. */
+export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a></nav>`;
+
+const xpBar = (lang, p) => `<div class="xp"><i><u style="width:${Math.round(p.progress * 100)}%"></u></i><span class="muted small num">${esc(p.next ? S[lang].xpTo(p.xp, p.next.xp, p.next[lang]) : S[lang].xpMax(p.xp))}</span></div>`;
+const recCard = (lang, r, byId, showWho = true) => `<div class="mdl rec">
+  <div class="rv">${r.value}</div><div><h3>${esc(RECORD_TITLES[r.id])}</h3>
+  ${showWho && r.holders.length ? `<div class="row" style="margin:6px 0">${r.holders.map((id) => byId.get(id)).filter(Boolean).map(who).join(' ')}</div>` : ''}
+  <p>${esc(recordText(lang, r))}${r.where?.at ? ` · ${esc(fmtDay(lang, r.where.at))}` : ''}${r.where?.map ? ` · ${esc(mapName(r.where.map))}` : ''}</p>
+  ${r.where?.session_id ? `<p><a href="/s/${esc(r.where.session_id)}${r.where.m ? `?m=${r.where.m}&t=0` : ''}">▶ ${esc(S[lang].watch)}</a></p>` : ''}</div></div>`;
+
+/** /hall — chain of command (ranks) and all-time records. */
+export function hallPage({ lang, hall, members, clan }) {
+  const t = S[lang];
+  const byId = new Map(members.map((m) => [m.account_id, m]));
+  const chain = hall.players.filter((p) => byId.has(p.account_id)).map((p, i) => {
+    const m = byId.get(p.account_id);
+    return `<a class="panel cmd" href="/p/${esc(p.account_id)}" data-acc="${esc(p.account_id)}">
+      <div class="row" style="gap:12px;flex-wrap:nowrap"><span class="pos">${i + 1}</span>${pt(m, 40)}
+        <div style="flex:1;min-width:0"><div class="row" style="gap:6px">${rankInsignia(p.level, 20)}<span class="kicker">${esc(p.rank[lang])}</span></div>
+        <div style="font:22px/1.2 var(--stencil)">${esc(m.nickname)}</div></div></div>
+      ${xpBar(lang, p)}
+      <div class="mini muted small num">${p.games} ${esc(t.st.games)} · ${p.wins} 🍗 · ${p.kills} ${esc(t.st.kills)} · K/D ${p.kd}${p.mvps ? ` · ${p.mvps} MVP` : ''}</div></a>`;
+  }).join('');
+  const recs = hall.records.map((r) => recCard(lang, r, byId)).join('');
+  return page(lang, `${t.hallTitle} · ${t.brand}`, `${top(lang, '/hall', false, clan)}${nav(lang, 'hall')}
+    <div style="margin:22px 0 8px"><span class="tag">HALL OF FAME${clan?.tag ? ` // [${esc(clan.tag)}]` : ''}</span><h1 style="margin-top:8px">${esc(t.hallTitle)}</h1>
+    <p class="muted small">${hall.games} ${esc(t.st.games)} · ${hall.sessions} ${esc(t.st.sessions)}</p></div>
+    <h2>${esc(t.chain)} <span class="tag">RANKS</span></h2>${chain}
+    <h2>${esc(t.records)} <span class="tag">RECORDS</span></h2><div class="medals recs">${recs}</div>`, { script: meScript });
+}
+
+/** /p/:id — a member's service record. */
+export function profilePage({ lang, p, member, hall, members, recent, clan, path }) {
+  const t = S[lang];
+  const byId = new Map(members.map((m) => [m.account_id, m]));
+  const stat = (v, l, gold) => `<div class="st ${gold ? 'gold' : ''}"><b>${v}</b><span>${esc(l)}</span></div>`;
+  const cabinet = Object.entries(p.medals).sort((a, b) => b[1] - a[1]).map(([id, n]) => `<div class="cab">${medal(id, 40, 'gold')}<b>×${n}</b><span>${esc(AWARD_TITLES[id])}</span></div>`).join('');
+  const held = hall.records.filter((r) => r.holders.includes(p.account_id));
+  return page(lang, `${member.nickname} · ${t.brand}`, `${top(lang, path, false, clan)}${nav(lang, 'hall')}
+    <div class="panel dossier" style="margin-top:22px"><span class="tag">SERVICE RECORD // ${esc(member.ign)}</span>
+      <div class="row" style="gap:16px;margin-top:10px;flex-wrap:nowrap">${pt(member, 84)}<div style="flex:1;min-width:0">
+        <div class="row" style="gap:8px">${rankInsignia(p.level, 28)}<span class="kicker" style="font-size:15px">${esc(p.rank[lang])}</span></div>
+        <h1 style="margin-top:4px">${esc(member.nickname)}</h1></div></div>
+      ${xpBar(lang, p)}</div>
+    <h2>${esc(t.serviceRecord)} <span class="tag">STATS</span></h2>
+    <div class="stats">${stat(p.games, t.st.games)}${stat(p.wins, t.st.wins, p.wins)}${stat(`${p.win_rate}%`, t.st.winRate)}${stat(p.mvps, t.st.mvps, p.mvps)}</div>
+    <div class="stats">${stat(p.kills, t.st.kills)}${stat(p.kd, t.st.kd)}${stat(p.avg_damage, t.st.avgDmg)}${stat(p.revives, t.st.revives)}</div>
+    <h2>${esc(t.medalCabinet)} <span class="tag">MEDALS</span></h2>
+    ${cabinet ? `<div class="panel cabinet">${cabinet}</div>` : `<p class="muted">${esc(t.noMedals)}</p>`}
+    ${held.length ? `<h2>${esc(t.recordsHeld)} <span class="tag">RECORDS</span></h2><div class="medals recs">${held.map((r) => recCard(lang, r, byId, false)).join('')}</div>` : ''}
+    <h2>${esc(t.recentSessions)} <span class="tag">LOG</span></h2>
+    ${recent.map((s) => `<a class="panel small" href="/s/${esc(s.session_id)}" style="padding:12px 16px"><div class="row sp"><b>${esc(fmtDay(lang, s.start_at))}</b><span class="muted">${esc(t.games(s.match_count))}</span></div></a>`).join('')}`,
+  { script: meScript });
 }
 
 export const notFoundPage = (lang) => page(lang, S[lang].notFound, `${top(lang, '/')}<h1 style="margin-top:40px;font-family:var(--head)">${esc(S[lang].notFound)}</h1><p><a href="/">${esc(S[lang].back)}</a></p>`);

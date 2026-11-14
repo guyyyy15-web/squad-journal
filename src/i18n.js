@@ -51,6 +51,10 @@ export const S = {
     sessionDesc: (t, mvp) => `${t.wins ? `🍗 ${t.wins > 1 ? `${t.wins} chicken dinners` : 'Chicken dinner'}` : `Best finish #${t.best_place}`} · ${t.kills} kills in ${t.games} games${mvp ? ` · ${mvp} carried the squad` : ''}`,
     siteDesc: 'Our PUBG squad journal: every session, medal and record',
     live: 'LIVE', liveText: (a) => `The squad is in the field. Last match ended ${a}. Checking PUBG every minute.`,
+    navSessions: 'Sessions', navHall: 'Hall of Fame', hallTitle: 'Hall of Fame', chain: 'Chain of command', records: 'Records',
+    serviceRecord: 'Service record', medalCabinet: 'Medal cabinet', recordsHeld: 'Records held', recentSessions: 'Recent sessions',
+    xpTo: (x, n, r) => `${x} / ${n} XP to ${r}`, xpMax: (x) => `${x} XP · top of the chain`, watch: 'Watch', noMedals: 'No medals yet. Soon.',
+    st: { games: 'Games', sessions: 'Nights', wins: 'Chicken dinners', winRate: 'Win rate', kills: 'Kills', kd: 'K/D', avgDmg: 'Avg damage', knocks: 'Knocks', revives: 'Revives', mvps: 'MVP nights' },
     squadLogs: 'Squad logs', medicLog: 'Medic log', medicSub: 'who revived whom', setupLog: 'Set-ups', setupSub: 'who assisted whose kill',
     reviver: 'reviver ↓ / revived →', assister: 'assist ↓ / killer →',
     // join
@@ -80,6 +84,10 @@ export const S = {
     sessionDesc: (t, mvp) => `${t.games} משחקים · ${t.wins ? `${t.wins} צ׳יקן דינר 🍗 · ` : `מקום הכי טוב #${t.best_place} · `}${t.kills} הריגות${mvp ? ` · ${mvp} סחב` : ''}`,
     siteDesc: 'יומן הסקוואד: כל הסשנים, המדליות והשיאים שלנו ב־PUBG',
     live: 'LIVE', liveText: (a) => `הסקוואד בשטח. המשחק האחרון נגמר ${a}. בודקים מול PUBG כל דקה.`,
+    navSessions: 'סשנים', navHall: 'היכל התהילה', hallTitle: 'היכל התהילה', chain: 'שרשרת הפיקוד', records: 'שיאים',
+    serviceRecord: 'תיק אישי', medalCabinet: 'ארון המדליות', recordsHeld: 'שיאים שלו', recentSessions: 'סשנים אחרונים',
+    xpTo: (x, n, r) => `${x} / ${n} XP עד ${r}`, xpMax: (x) => `${x} XP · ראש השרשרת`, watch: 'לצפייה', noMedals: 'עוד אין מדליות. בקרוב.',
+    st: { games: 'משחקים', sessions: 'ערבים', wins: 'צ׳יקן דינר', winRate: 'אחוז ניצחון', kills: 'הריגות', kd: 'K/D', avgDmg: 'נזק ממוצע', knocks: 'נוקים', revives: 'החייאות', mvps: 'ערבי MVP' },
     squadLogs: 'יומני הסקוואד', medicLog: 'יומן חובש', medicSub: 'מי הקים את מי', setupLog: 'הכנות', setupSub: 'מי עזר להריגה של מי',
     reviver: 'מקים ↓ / הוקם →', assister: 'עוזר ↓ / הורג →',
     joinTitle: 'מצטרפים ליומן הסקוואד', welcome: 'ברוכים הבאים לסקוואד 🪂', noPassword: 'בלי סיסמה ובלי הרשמה. רק השם שלך במשחק.',
@@ -116,5 +124,19 @@ export function clientStrings(lang) {
     longshot: '{a} hit from {d} m with the {w}', lastgasp: '{a} picked up {v} after {s}s on the ground', matchAt: 'Match {m} · {t}', none: '—',
   };
 }
+
+export const RECORD_TITLES = {
+  most_kills: 'MOST KILLS', most_damage: 'MOST DAMAGE', longest_kill: 'LONGEST KILL', most_knocks: 'MOST KNOCKS',
+  most_revives: 'MOST REVIVES', most_headshots: 'HEADHUNTER', squad_kills: 'SQUAD BODY COUNT', session_wins: 'CHICKEN NIGHT', win_streak: 'WIN STREAK',
+};
+const RECORD_TEXT = {
+  en: { most_kills: (v) => `${v} kills in one game`, most_damage: (v) => `${v} damage in one game`, longest_kill: (v) => `a kill from ${v} m`,
+    most_knocks: (v) => `${v} knocks in one game`, most_revives: (v) => `${v} revives in one game`, most_headshots: (v) => `${v} headshot kills in one game`,
+    squad_kills: (v) => `${v} kills by the squad in one game`, session_wins: (v) => `${v} chicken dinners in one night`, win_streak: (v) => `${v} chicken dinners in a row` },
+  he: { most_kills: (v) => `${v} הריגות במשחק אחד`, most_damage: (v) => `${v} נזק במשחק אחד`, longest_kill: (v) => `הריגה ממרחק ${v} מ׳`,
+    most_knocks: (v) => `${v} נוקים במשחק אחד`, most_revives: (v) => `${v} החייאות במשחק אחד`, most_headshots: (v) => `${v} הריגות בראש במשחק אחד`,
+    squad_kills: (v) => `${v} הריגות של הסקוואד במשחק אחד`, session_wins: (v) => `${v} צ׳יקן דינר בערב אחד`, win_streak: (v) => `${v} צ׳יקן דינר ברצף` },
+};
+export const recordText = (lang, r) => (RECORD_TEXT[lang][r.id] || (() => ''))(r.value);
 
 export const MOMENT_TITLES = { clutch: 'CLUTCH', wipe: 'SQUAD WIPE', rampage: 'RAMPAGE', longshot: 'LONG SHOT', lastgasp: 'LAST-GASP REVIVE' };

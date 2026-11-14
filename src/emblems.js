@@ -71,3 +71,32 @@ export function medal(id, size = 56, metal = 'gold') {
     + `<circle cx="28" cy="52" r="16.5" fill="none" stroke="${m[2]}" stroke-opacity=".55" stroke-width="1" stroke-dasharray="1.6 1.6"/>`
     + `<g transform="translate(17.2 41.2) scale(.9)" fill="#2a1a04" color="#2a1a04">${AWARD_ICONS[id] || EMBLEMS.star}</g></svg>`;
 }
+
+/** Rank insignia (US-style): chevrons and rockers for enlisted, bars/leaf/eagle/stars for officers. */
+export function rankInsignia(level, size = 22) {
+  const chev = (y) => `<path d="M3 ${y}l9 5 9-5v2.8l-9 5-9-5Z"/>`;
+  const rocker = (y) => `<path d="M3 ${y}q9 6 18 0v2.6q-9 6-18 0Z"/>`;
+  const star = (cx, cy, r) => {
+    let d = '';
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5; const rr = i % 2 ? r * 0.42 : r; d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * rr).toFixed(2)} ${(cy + Math.sin(a) * rr).toFixed(2)}`; }
+    return `<path d="${d}Z"/>`;
+  };
+  const bar = (x) => `<rect x="${x}" y="3" width="4.2" height="18" rx="1"/>`;
+  const gold = '#e9b44c'; const silver = '#d7dde4';
+  const L = [
+    [gold, '<rect x="5" y="10.5" width="14" height="3" rx="1.5" opacity=".6"/>'],
+    [gold, chev(8)],
+    [gold, chev(5) + rocker(13)],
+    [gold, chev(4) + chev(10)],
+    [gold, chev(2) + chev(8) + chev(14)],
+    [gold, chev(1) + chev(6.5) + chev(12) + rocker(17.5)],
+    [gold, chev(0) + chev(5) + chev(10) + star(12, 19, 4.2)],
+    [silver, bar(9.9)],
+    [silver, bar(6.5) + bar(13.3)],
+    [gold, '<path d="M12 2c3.5 3 6 6.4 6 10.5S15.4 20 12 22c-3.4-2-6-5.4-6-9.5S8.5 5 12 2Zm0 4.5v13"/>'],
+    [silver, EMBLEMS.wings],
+    [silver, star(6.5, 12, 5.2) + star(17.5, 12, 5.2)],
+  ];
+  const [c, body] = L[Math.max(0, Math.min(L.length - 1, level))];
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="rank" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${c}" color="${c}" aria-hidden="true">${body}</svg>`;
+}
