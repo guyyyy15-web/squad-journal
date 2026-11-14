@@ -489,6 +489,10 @@ export default {
         }
         let m;
         if ((m = /^\/s\/([\w-]{1,40})$/.exec(path))) return await session(env, m[1], url.origin, lang, path);
+        if ((m = /^\/maps\/hi\/(\w{3,30})\/([0-7])_([0-7])\.jpg$/.exec(path))) {
+          const obj = await env.DATA.get(`maps/hi/${m[1]}/${m[2]}_${m[3]}.jpg`);
+          return obj ? asset(obj.body, 'image/jpeg', 31536000) : new Response('no tile', { status: 404, headers: { 'Cache-Control': 'public, max-age=3600' } });
+        }
         if ((m = /^\/maps\/(\w{3,30})\.jpg$/.exec(path))) {
           const obj = await env.DATA.get(`maps/${m[1]}.jpg`);
           return obj ? asset(obj.body, 'image/jpeg', 31536000) : new Response('no map', { status: 404 });

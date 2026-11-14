@@ -88,3 +88,30 @@ test('battle model: HP over time, gear, and a fight summary from real telemetry'
   assert.ok(f.dealt >= 0 && f.taken >= 0 && (f.dealt + f.taken) > 0);
   for (const fn of [battleModel, hpAt, gearAt, fightOf]) assert.equal(typeof new Function(`return (${fn.toString()})`)(), 'function');
 });
+
+import { directorShot } from '../src/replay.js';
+test('directorShot: close shots for kills, duels and approaches; groups over stragglers', () => {
+  const P = (land, path, death = null) => ({ name: 'x', team: 1, land, path, death, jump: null });
+  const d = {
+    zones: [], players: {
+      A: P([400, 400, 10], [[100, 410, 400], [400, 420, 400]]),
+      B: P([405, 405, 10], [[100, 412, 404], [400, 425, 404]]),
+      C: P([800, 800, 10], [[100, 805, 800], [400, 810, 800]]), // straggler far away
+    },
+    events: [{ t: 300, k: 'kill', a: 'A', v: 'x', vp: [440, 410], ap: [415, 402], an: 'A', vn: 'x' }],
+    pp: [['A', 'A', 1], ['x', 'x', 9]],
+  };
+  const model = { pp: d.pp, dmg: [{ t: 250, a: 0, v: 1, dmg: 30, ap: [414, 402], vp: [445, 412] }] };
+  const inside = (b, p) => p[0] >= b[0] && p[0] <= b[0] + b[2] && p[1] >= b[1] && p[1] <= b[1] + b[2];
+  const kill = directorShot(d, model, ['A', 'B', 'C'], 300.2);
+  assert.equal(kill.kind, 'kill'); assert.ok(kill.box[2] <= 70 && inside(kill.box, [440, 410]));
+  const duel = directorShot(d, model, ['A', 'B', 'C'], 250.3);
+  assert.equal(duel.kind, 'duel'); assert.ok(duel.box[2] <= 110 && inside(duel.box, [445, 412]) && inside(duel.box, [414, 402]));
+  const app = directorShot(d, null, ['A', 'B', 'C'], 296);
+  assert.equal(app.kind, 'approach'); assert.ok(app.box[2] <= 130);
+  const fol = directorShot(d, null, ['A', 'B', 'C'], 150);
+  assert.equal(fol.kind, 'follow'); assert.ok(fol.box[2] <= 170, 'not zoomed out for the straggler'); assert.ok(inside(fol.box, [412, 401]) && !inside(fol.box, [806, 800]));
+  const one = directorShot(d, null, ['A', 'B', 'C'], 150, 'C');
+  assert.ok(inside(one.box, [806, 800]));
+  assert.equal(typeof new Function(`return (${directorShot.toString()})`)(), 'function');
+});

@@ -59,8 +59,8 @@
     var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     return [Math.max(0, Math.min(1000 - size, cx - size / 2)), Math.max(0, Math.min(1000 - size, cy - size / 2)), size];
   }
-  function baseLayers(match, d) {
-    var out = ['<image href="/maps/' + esc(match.map) + '.jpg" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>',
+  function baseLayers(match, d, tilesHtml) {
+    var out = ['<image href="/maps/' + esc(match.map) + '.jpg" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>', '<g class="tiles">' + (tilesHtml || '') + '</g>',
       '<rect x="0" y="0" width="1000" height="1000" fill="rgba(5,7,10,.2)"/>'];
     if (d.plane) out.push('<line x1="' + d.plane[0][0] + '" y1="' + d.plane[0][1] + '" x2="' + d.plane[1][0] + '" y2="' + d.plane[1][1] + '" stroke="#fff" stroke-opacity=".6" stroke-width="2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke"/>');
     return out;
@@ -69,9 +69,28 @@
     var d = 'M' + (x - r) + ' ' + (y - r) + 'L' + (x + r) + ' ' + (y + r) + 'M' + (x + r) + ' ' + (y - r) + 'L' + (x - r) + ' ' + (y + r);
     return '<path d="' + d + '" stroke="#000" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/><path d="' + d + '" stroke="' + esc(color) + '" stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
   }
+  // Sharp 8192 px map tiles (8×8, 125 units each) for whatever is on screen when zoomed in; the 819 px base stays below.
+  var TILE = 125, HI_ALIAS = { Erangel_Main: 'Baltic_Main' };
+  function tileMarkup(map, box) {
+    if (box[2] > 420) return '';
+    var code = HI_ALIAS[map] || map, out = [];
+    var x0 = Math.max(0, Math.floor(box[0] / TILE)), x1 = Math.min(7, Math.floor((box[0] + box[2]) / TILE));
+    var y0 = Math.max(0, Math.floor(box[1] / TILE)), y1 = Math.min(7, Math.floor((box[1] + box[2]) / TILE));
+    for (var ty = y0; ty <= y1; ty++) for (var tx = x0; tx <= x1; tx++) {
+      out.push('<image data-k="' + tx + '_' + ty + '" href="/maps/hi/' + esc(code) + '/' + tx + '_' + ty + '.jpg" x="' + (tx * TILE - 0.2) + '" y="' + (ty * TILE - 0.2) + '" width="' + (TILE + 0.4) + '" height="' + (TILE + 0.4) + '" preserveAspectRatio="none"/>');
+    }
+    return out.join('');
+  }
+  function tiles(g, map, box) {
+    if (!g) return;
+    if (box[2] > 420) { if (g.childNodes.length) g.innerHTML = ''; return; }
+    var want = tileMarkup(map, [box[0] - TILE / 2, box[1] - TILE / 2, box[2] + TILE]);
+    var key = (want.match(/data-k="[^"]+"/g) || []).join('');
+    if (g.dataset.key !== key) { g.dataset.key = key; g.innerHTML = want; }
+  }
   function staticSvg(match, d, box) {
     var ours = new Set(match.ours), u = box[2] / 100;
-    var out = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + box.join(' ') + ' ' + box[2] + '" role="img">'].concat(baseLayers(match, d));
+    var out = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + box.join(' ') + ' ' + box[2] + '" role="img">'].concat(baseLayers(match, d, tileMarkup(match.map, box)));
     if (d.final) out.push('<circle cx="' + d.final[0] + '" cy="' + d.final[1] + '" r="' + d.final[2] + '" fill="rgba(255,255,255,.06)" stroke="#fff" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
     Object.keys(d.players).forEach(function (id) {
       var p = d.players[id];
@@ -172,7 +191,7 @@
     // Director: at each firefight pause on an ENGAGEMENT card, play the fight slowly with a live battle panel,
     // then a RESULT card. Needs derived v5 (damage/HP/gear); older data falls back to the plain replay.
     var model = d.pp ? battleModel(d, match.ours) : null, director = !!model, introduced = {}, phase = null, phaseUntil = 0, curW = null, fight = null;
-    var battle = null, lastHp = {};
+    var battle = null, lastHp = {}, held = null, lastCut = 0, lastTiles = 0;
     var card = el.closest('.match');
     var ours = new Set(match.ours);
     var ids = Object.keys(d.players);
@@ -216,7 +235,7 @@
     bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + bands + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button></div><div class="cams">' + (opts.next ? '<button type="button" class="cam on nxt">⏭ ' + esc(S.next) + '</button>' : '') + '<button type="button" class="cam lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="cam clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
-    var svgEl = $('svg.mp', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
+    var svgEl = $('svg.mp', el), tileG = $('.tiles', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
     var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), sm: $('.h-sm', el) };
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
     var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
@@ -232,25 +251,38 @@
     }
     function draw(realDt) {
       // camera
-      var target = mode === 'full' ? [0, 0, 1000] : cameraTarget(d, match.ours, t, mode === 'auto' ? '' : mode);
-      if (phase === 'fight' && mode === 'auto' && model) {
-        var bx = [];
-        model.dmg.forEach(function (x) { if (x.t >= t - 5 && x.t <= t + 2) { if (x.ap[0] || x.ap[1]) bx.push(x.ap); bx.push(x.vp); } });
-        fight.us.forEach(function (i) { var p = d.players[model.pp[i][0]], pos = p && posAt(p, t); if (pos) bx.push(pos); });
-        if (bx.length) {
-          var X = bx.map(function (q) { return q[0]; }), Y = bx.map(function (q) { return q[1]; });
-          var x0 = Math.min.apply(null, X), x1 = Math.max.apply(null, X), y0 = Math.min.apply(null, Y), y1 = Math.max.apply(null, Y);
-          var sz = Math.min(1000, Math.max(90, Math.max(x1 - x0, y1 - y0) * 1.5 + 24));
-          target = [Math.max(0, Math.min(1000 - sz, (x0 + x1) / 2 - sz / 2)), Math.max(0, Math.min(1000 - sz, (y0 + y1) / 2 - sz / 2)), sz];
-        }
+      // ---- director camera: pick a shot, hold action shots briefly, cut on big jumps, ease zoom and position apart
+      var shot = mode === 'full' ? { box: [0, 0, 1000], kind: 'wide' } : directorShot(d, model, match.ours, t, mode === 'auto' ? '' : mode);
+      if (shot.kind === 'kill' || shot.kind === 'duel' || shot.kind === 'approach') { held = { shot: shot, t: t }; }
+      else if (held && t - held.t < 2.5 && t >= held.t && shot.kind === 'follow') shot = held.shot; // let the moment breathe
+      var target = shot.box, nowMs = performance.now();
+      var ccx = cur[0] + cur[2] / 2, ccy = cur[1] + cur[2] / 2, tcx = target[0] + target[2] / 2, tcy = target[1] + target[2] / 2;
+      if (!snap && Math.hypot(tcx - ccx, tcy - ccy) > Math.max(cur[2], target[2]) * 1.3 && nowMs - lastCut > 1500) {
+        snap = true; lastCut = nowMs;
+        svgEl.classList.remove('cut'); void svgEl.getBoundingClientRect(); svgEl.classList.add('cut');
       }
       if (snap) { cur = target.slice(); snap = false; } else {
-        var k = 1 - Math.exp(-(realDt || 0.016) * 2.6);
-        for (var j = 0; j < 3; j++) cur[j] += (target[j] - cur[j]) * k;
+        var dt = realDt || 0.016, kill = shot.kind === 'kill';
+        var kp = 1 - Math.exp(-dt * (kill ? 5 : 3));
+        var kz = 1 - Math.exp(-dt * (kill ? 6 : target[2] < cur[2] ? 2.2 : 1.3));
+        var ncx = ccx + (tcx - ccx) * kp, ncy = ccy + (tcy - ccy) * kp, ns = cur[2] + (target[2] - cur[2]) * kz;
+        cur = [ncx - ns / 2, ncy - ns / 2, ns];
       }
-      view = cur;
-      svgEl.setAttribute('viewBox', cur[0].toFixed(1) + ' ' + cur[1].toFixed(1) + ' ' + cur[2].toFixed(1) + ' ' + cur[2].toFixed(1));
-      var u = cur[2] / 100;
+      // a little shake when we trade hits, a punch-in on a headshot
+      var shake = 0, punch = 1;
+      if (model) for (var hi = model.dmg.length - 1; hi >= 0; hi--) {
+        var hh = model.dmg[hi];
+        if (hh.t > t) continue;
+        if (t - hh.t > 0.3) break;
+        if (model.ourIdx.has(hh.a) || model.ourIdx.has(hh.v)) { shake = Math.max(shake, cur[2] * 0.01 * (1 - (t - hh.t) / 0.3)); if (hh.head) punch = 0.94; }
+      }
+      var vs = cur[2] * punch;
+      var vx = cur[0] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2, vy = cur[1] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2;
+      view = [vx, vy, vs];
+      window.SJ.cam = shot.kind + ':' + Math.round(vs);
+      svgEl.setAttribute('viewBox', vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + vs.toFixed(1) + ' ' + vs.toFixed(1));
+      if (nowMs - lastTiles > 250) { lastTiles = nowMs; tiles(tileG, match.map, view); }
+      var u = vs / 100;
       // HUD
       hud.clock.textContent = mmss(t);
       range.value = String(Math.round(t));
@@ -268,7 +300,15 @@
       ids.forEach(function (id, i) {
         var p = d.players[id], pos = posAt(p, t);
         pm[i].style.display = pos ? '' : 'none';
-        if (pos) pm[i].setAttribute('transform', 'translate(' + pos[0].toFixed(1) + ' ' + pos[1].toFixed(1) + ') scale(' + u.toFixed(3) + ')');
+        if (pos) {
+          // fan out markers that would sit on top of each other in a close-up
+          var mx = pos[0], my = pos[1], gap = u * 4.2;
+          for (var oj = 0; oj < i; oj++) {
+            var op = posAt(d.players[ids[oj]], t);
+            if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
+          }
+          pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + u.toFixed(3) + ')');
+        }
         var pts = p.land && t >= p.land[2] ? [p.land[0] + ',' + p.land[1]] : [];
         for (var q = 0; q < p.path.length && p.path[q][0] <= t; q++) pts.push(p.path[q][1] + ',' + p.path[q][2]);
         if (pos && pts.length) pts.push(pos[0].toFixed(1) + ',' + pos[1].toFixed(1));

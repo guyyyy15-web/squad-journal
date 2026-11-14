@@ -228,3 +228,86 @@ export function fightOf(model, w) {
   const mvp = us.filter((i) => dealtBy[i]).sort((a, b) => dealtBy[b] - dealtBy[a])[0];
   return { us, them, dealt, taken, hits: hits.length, dealtBy, mainWeapon: Object.fromEntries([...us, ...them].map((i) => [i, mainWeapon(i)])), mvp: mvp === undefined ? null : mvp };
 }
+
+/**
+ * The director's shot for time t: { box: [x, y, size], kind }. Close by design (map units, 1000 = map width):
+ *  - 'kill'     a kill/knock by or on us within ~1 s → punch in on it (32–70)
+ *  - 'duel'     hits flying (±1 s) → frame only shooters and targets (40–110)
+ *  - 'approach' our next fight starts within 6 s → close in on the member heading into it (60–130)
+ *  - 'follow'   otherwise follow the biggest group of the squad, ignoring stragglers (100–170)
+ * `follow` restricts everything to one player. model is battleModel() output (hits), or null.
+ */
+export function directorShot(d, model, ours, t, follow = '') {
+  const set = new Set(ours);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const box = (cx, cy, size) => { const s = clamp(size, 20, 1000); return [clamp(cx - s / 2, 0, 1000 - s), clamp(cy - s / 2, 0, 1000 - s), s]; };
+  const mine = (id) => (follow ? id === follow : set.has(id));
+  const alive = [];
+  for (const id of Object.keys(d.players)) {
+    if (!mine(id)) continue;
+    const p = posAt(d.players[id], t);
+    if (p) alive.push([id, p]);
+  }
+  const posOf = (id) => { const a = alive.find((x) => x[0] === id); return a ? a[1] : null; };
+  const real = (p) => p && (p[0] || p[1]);
+  // 1. kill cam
+  let kc = null;
+  for (const e of d.events) {
+    if ((e.k !== 'kill' && e.k !== 'knock') || !(mine(e.a) || mine(e.v))) continue;
+    if (e.t < t - 1 || e.t > t + 0.6) continue;
+    if (!kc || Math.abs(e.t - t) < Math.abs(kc.t - t)) kc = e;
+  }
+  if (kc) {
+    const a = real(kc.ap) ? kc.ap : kc.vp; const v = kc.vp;
+    const dist = Math.hypot(a[0] - v[0], a[1] - v[1]);
+    const c = dist < 45 ? [(a[0] + v[0]) / 2, (a[1] + v[1]) / 2] : v;
+    return { box: box(c[0], c[1], clamp(Math.min(dist, 45) * 1.8 + 26, 32, 70)), kind: 'kill' };
+  }
+  // 2. duel: shooters and targets of hits around now
+  if (model) {
+    const pts = [];
+    const ids = new Set();
+    for (const x of model.dmg) {
+      if (x.t < t - 1.2 || x.t > t + 0.8) continue;
+      const ida = model.pp[x.a][0]; const idv = model.pp[x.v][0];
+      if (!(mine(ida) || mine(idv))) continue;
+      if (real(x.ap)) pts.push(x.ap);
+      if (real(x.vp)) pts.push(x.vp);
+      ids.add(ida); ids.add(idv);
+    }
+    for (const id of ids) { const p = posOf(id); if (p) pts.push(p); }
+    if (pts.length) {
+      const X = pts.map((p) => p[0]); const Y = pts.map((p) => p[1]);
+      const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
+      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.5 + 24, 40, 110)), kind: 'duel' };
+    }
+  }
+  // 3. approach: the next fight of ours within 6 s
+  let nx = null;
+  for (const e of d.events) {
+    if ((e.k !== 'kill' && e.k !== 'knock') || !(mine(e.a) || mine(e.v)) || e.t <= t || e.t > t + 6) continue;
+    if (!nx || e.t < nx.t) nx = e;
+  }
+  if (nx && alive.length) {
+    const target = nx.vp;
+    const who = posOf(nx.a) || posOf(nx.v) || alive.slice().sort((p, q) => Math.hypot(p[1][0] - target[0], p[1][1] - target[1]) - Math.hypot(q[1][0] - target[0], q[1][1] - target[1]))[0][1];
+    const dist = Math.hypot(who[0] - target[0], who[1] - target[1]);
+    if (dist < 150) return { box: box((who[0] + target[0]) / 2, (who[1] + target[1]) / 2, clamp(dist * 1.6 + 40, 60, 130)), kind: 'approach' };
+    return { box: box(who[0], who[1], 90), kind: 'approach' };
+  }
+  // 4. follow the biggest group (members within 50 units of each other), not the stragglers
+  if (alive.length) {
+    let best = null;
+    for (const [, p] of alive) {
+      const group = alive.filter(([, q]) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 50).map((x) => x[1]);
+      if (!best || group.length > best.length) best = group;
+    }
+    const X = best.map((p) => p[0]); const Y = best.map((p) => p[1]);
+    const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
+    return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.6 + 70, 100, 170)), kind: 'follow' };
+  }
+  // 5. nobody of ours left: stay on the last fall
+  const deaths = Object.keys(d.players).filter(mine).map((id) => d.players[id].death).filter(Boolean).sort((a, b) => b[2] - a[2]);
+  if (deaths.length) return { box: box(deaths[0][0], deaths[0][1], 90), kind: 'aftermath' };
+  return { box: [0, 0, 1000], kind: 'wide' };
+}

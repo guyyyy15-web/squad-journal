@@ -65,6 +65,11 @@ GitHub does **not** deploy.
   motion with a live battle panel (HP bars, DOWN/KIA), combo damage numbers, tracers, enemy markers and a combat
   camera, then a RESULT card (dealt/taken, kills, MVP). Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
   `fightOf`, tested); RPG look uses the Press Start 2P font. Grid columns must be `minmax(0,1fr)` or they overflow.
+- **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
+  (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s, a big jump is a
+  cut (flash) instead of a pan, zoom eases slower out than in, shake on hits, punch on headshots, close markers fan
+  out. Sharp close-ups come from 8192 px map tiles in R2 (`maps/hi/<code>/<x>_<y>.jpg`, 8×8 of 1024 px, from
+  pubg/api-assets LFS), loaded only for what is on screen when the view is < 420 units.
 - **Uploads from the page:** `keepalive` shares a 64 KB budget across in-flight requests; always fall back to a
   plain fetch (a page that finds an older derived version re-analyses anyway).
 - **Client scripts** in `src/client/` are bundled as text and served from `/app/`. Bump the `?v=` in the page
