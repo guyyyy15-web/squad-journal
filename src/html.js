@@ -71,10 +71,32 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .map .tools{position:absolute;bottom:10px;inset-inline-end:10px;display:flex;gap:6px}
 .map .tools button{min-height:36px;padding:6px 12px;font-size:13px;border-radius:999px;background:rgba(10,12,15,.85);color:var(--text);border:1px solid var(--line);font-weight:600}
 .map .tools button.rp{background:var(--gold);color:#111;border-color:var(--gold)}
-.map .clock{position:absolute;top:10px;inset-inline-start:10px;font:700 14px var(--mono);background:rgba(10,12,15,.85);border:1px solid var(--line);border-radius:8px;padding:4px 8px;direction:ltr}
-.rbar{display:flex;align-items:center;gap:10px;margin-top:10px}
-.rbar input[type=range]{flex:1;accent-color:var(--gold);height:44px}
-.rbar button{min-height:44px;min-width:44px;padding:0 12px;font-size:15px}
+.rbar{margin-top:10px}.rrow{display:flex;align-items:center;gap:10px}
+.rbar .trk{position:relative;flex:1;height:44px}
+.rbar input[type=range]{position:absolute;inset:0;width:100%;margin:0;accent-color:var(--gold);height:44px;background:transparent}
+.rbar .tl{position:absolute;inset:0 8px;pointer-events:none;z-index:1}
+.rbar .mk{position:absolute;top:-4px;width:22px;height:22px;min-height:0;min-width:0;padding:0;margin-inline-start:-11px;border:0;background:none;pointer-events:auto;border-radius:50%}
+.rbar .mk::before{content:"";position:absolute;inset:6px;border-radius:50%;border:2px solid #0a0c0f;background:var(--c)}
+.rbar .mk.kill::before{background:#ff4d4d}.rbar .mk.knock::before{background:#f2a900;inset:7px}
+.rbar .mk.death,.rbar .mk.revive{top:auto;bottom:-4px}
+.rbar .mk.death::before{border-radius:2px;transform:rotate(45deg)}.rbar .mk.revive::before{background:#7ee2a8}
+.rbar .pp,.rbar .spd{min-height:44px;min-width:44px;padding:0 12px;font-size:15px}
+.cams{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
+.cam{min-height:36px;padding:4px 10px;font-size:13px;font-weight:600;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;flex:none}
+.cam.on{background:rgba(242,169,0,.15);color:var(--gold2);border-color:rgba(242,169,0,.6)}
+.map .hud{position:absolute;top:8px;inset-inline-start:8px;display:flex;gap:0;direction:ltr;background:rgba(10,12,15,.88);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.map .hud>*{font:700 11px/1 var(--mono);letter-spacing:.04em;padding:6px 7px;color:var(--text);border-inline-start:1px solid var(--line)}
+.map .hud>*:first-child{border:0;color:var(--gold2);font-size:12px}.map .hud span:empty{display:none}
+.map .h-sm{position:absolute;top:8px;inset-inline-end:8px;font:800 11px/1 var(--mono);letter-spacing:.12em;background:var(--gold);color:#111;border-radius:6px;padding:6px 8px}
+.map .kf{position:absolute;bottom:54px;inset-inline-start:8px;margin:0;padding:0;list-style:none;display:grid;gap:4px;max-width:78%;justify-items:start}
+.map .kf li{font-size:12px;line-height:1.25;background:rgba(10,12,15,.84);border-inline-start:3px solid #ff4d4d;border-radius:5px;padding:4px 7px;animation:kfin .25s ease-out}
+.map .kf li.kn{border-color:#f2a900}.map .kf li.rv{border-color:#7ee2a8}.map .kf li.dd{border-color:#fff;background:rgba(80,10,10,.88)}
+.map .kf i{font-style:normal;color:var(--muted);font-size:11px}.map .kf span{color:var(--muted)}
+@keyframes kfin{from{opacity:0;transform:translateY(-4px)}}
+.match.theater{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;overflow-y:auto;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));background:#07090c}
+.match.theater .map{margin:8px auto 0;width:min(100%,calc(100vh - 190px));border:1px solid var(--line);border-radius:10px}
+.match.theater .feed,.match.theater table,.match.theater .legend,.match.theater .winner{display:none}
+html.noscroll,html.noscroll body{overflow:hidden}html.noscroll .share{display:none}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:10px}
 .feed{margin:10px 0 0;padding:0;list-style:none;font-size:13px}
 .feed li{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px dashed var(--line)}
@@ -190,7 +212,7 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
   return page(lang, t.brand, `${top(lang, '/', false, clan)}
     <div style="margin:22px 0 8px"><span class="tag">FIELD JOURNAL // ${t.season} ${new Date().getFullYear()}</span>
     ${clanBlock(clan)}
-    <h1 style="margin-top:12px">${esc(t.homeTitle)}</h1></div>
+</div>
     <div class="stats">
       <div class="st"><b>${totals.sessions}</b><span>${esc(t.sessions)}</span></div>
       <div class="st"><b>${totals.matches}</b><span>${esc(t.matches)}</span></div>
@@ -282,7 +304,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=1', '/app/session.js?v=10'], script: meScript,
+    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=14'], script: meScript,
   });
 }
 

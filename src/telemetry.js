@@ -23,7 +23,7 @@ export function extractDerived(events, ours, mapSize) {
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 2, plane: null, zones: [], final: null, players, events: [] };
+  const out = { v: 3, plane: null, zones: [], final: null, alive: [], players, events: [] };
   const jumps = [];
   let lastZone = null;
   const W = (info) => (info && info.damageCauserName ? String(info.damageCauserName).replace(/^Weap|_C$|_C_\d+$/g, '') : '');
@@ -47,7 +47,13 @@ export function extractDerived(events, ours, mapSize) {
       }
       case 'LogGameStatePeriodic': {
         const g = e.gameState;
-        if (!g || !g.safetyZoneRadius) break;
+        if (!g) break;
+        // Players / teams still alive in the whole match (for the replay HUD), only when it changes.
+        if (g.numAlivePlayers > 0) {
+          const lastA = out.alive[out.alive.length - 1];
+          if (!lastA || lastA[1] !== g.numAlivePlayers || lastA[2] !== g.numAliveTeams) out.alive.push([T(e), g.numAlivePlayers, g.numAliveTeams || 0]);
+        }
+        if (!g.safetyZoneRadius) break;
         const z = [T(e), ...P(g.safetyZonePosition), Math.round(g.safetyZoneRadius * S)];
         const w = g.poisonGasWarningRadius ? [...P(g.poisonGasWarningPosition), Math.round(g.poisonGasWarningRadius * S)] : null;
         if (!lastZone || Math.abs(lastZone[3] - z[3]) >= 2 || (w && !lastZone.w) || (w && lastZone.w && w[2] !== lastZone.w[2])) {
@@ -112,9 +118,10 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || (d.v !== 1 && d.v !== 2) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
+  if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;
   if (d.zones.length > 300 || !d.zones.every((z) => isPt(z, 4) || isPt(z, 7))) return false;
   const ids = Object.keys(d.players);
   if (ids.length > 16 || !ids.every((id) => allowedIds.has(id))) return false;

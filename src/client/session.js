@@ -19,7 +19,7 @@
   var weapon = function (w) {
     if (!w) return '';
     if (/^Player(Male|Female)/.test(w)) return S.fists;
-    return w.replace(/^(BP_|Proj|Weap)/, '').replace(/_(C|Main|\d+)$/g, '').replace(/_/g, ' ');
+    return w.replace(/^(BP_|Proj|Weap)/, '').replace(/_(C|Main|\d+)$/g, '').replace(/_[A-Z]_\d+.*$/, '').replace(/_/g, ' ');
   };
   var SHIELD = 'M16 1.2 30 5.6v11c0 9-5.8 15.2-14 18.2C7.8 31.8 2 25.6 2 16.6v-11L16 1.2Z';
   function patchSvg(key, color, size) {
@@ -124,104 +124,161 @@
   }
 
   // ---------- replay ----------
+  // Uses posAt, zoneAt, aliveAt, phaseAt, timelineMarks, actionNear, cameraTarget from /app/lib.js.
   var active = null; // one running replay at a time
-  function lerp(a, b, f) { return a + (b - a) * f; }
-  function posAt(p, t) {
-    if (p.death && t >= p.death[2]) return null;
-    if (p.land && t < p.land[2]) {
-      if (p.jump && t >= p.jump[2]) { var f = (t - p.jump[2]) / Math.max(1, p.land[2] - p.jump[2]); return [lerp(p.jump[0], p.land[0], f), lerp(p.jump[1], p.land[1], f)]; }
-      return null;
-    }
-    var pts = (p.land ? [[p.land[2], p.land[0], p.land[1]]] : []).concat(p.path);
-    if (!pts.length) return null;
-    if (t <= pts[0][0]) return [pts[0][1], pts[0][2]];
-    for (var i = 1; i < pts.length; i++) {
-      if (t <= pts[i][0]) { var g = (t - pts[i - 1][0]) / Math.max(1, pts[i][0] - pts[i - 1][0]); return [lerp(pts[i - 1][1], pts[i][1], g), lerp(pts[i - 1][2], pts[i][2], g)]; }
-    }
-    var last = pts[pts.length - 1];
-    return [last[1], last[2]];
+  var view = [0, 0, 1000];
+  function label(x, y, u, text, color) {
+    // keep the callout inside the current frame (rough width: 1.35 units per character at this size)
+    var half = Math.min(view[2] / 2, text.length * u * 0.7);
+    x = Math.max(view[0] + half + u, Math.min(view[0] + view[2] - half - u, x));
+    y = Math.max(view[1] + u * 3, y);
+    return '<text x="' + x + '" y="' + y + '" font-size="' + (u * 2.6) + '" text-anchor="middle" fill="' + color + '" stroke="#05070a" stroke-width="' + (u * 0.7) + '" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(text) + '</text>';
   }
-  function zoneAt(d, t) {
-    var z = d.zones, a = null, b = null;
-    for (var i = 0; i < z.length; i++) { if (z[i][0] <= t) a = z[i]; else { b = z[i]; break; } }
-    if (!a) return null;
-    var safe = [a[1], a[2], a[3]];
-    if (b) { var f = (t - a[0]) / Math.max(1, b[0] - a[0]); safe = [lerp(a[1], b[1], f), lerp(a[2], b[2], f), lerp(a[3], b[3], f)]; }
-    return { safe: safe, warn: a.length >= 7 ? [a[4], a[5], a[6]] : null };
-  }
+  function shortW(e) { return e.w ? ' · ' + weapon(e.w) + (e.d ? ' ' + e.d + 'm' : '') : ''; }
   function replay(match, el, d, startAt) {
-    if (active) active.stop();
+    if (active) active.stop(true);
+    var card = el.closest('.match');
     var ours = new Set(match.ours);
     var ids = Object.keys(d.players);
     var t0 = Math.min.apply(null, ids.map(function (id) { var p = d.players[id]; return (p.jump || p.land || [0, 0, 60])[2]; }).concat([60])) - 5;
     var tEnd = Math.max(match.duration || 0, d.events.reduce(function (m, e) { return Math.max(m, e.t); }, 0)) + 5;
-    var focus = bbox(d, ours);
-    var size = Math.min(1000, focus[2] * 1.5);
-    var box = [Math.max(0, Math.min(1000 - size, focus[0] - focus[2] * 0.25)), Math.max(0, Math.min(1000 - size, focus[1] - focus[2] * 0.25)), size];
-    var u = box[2] / 100;
-    var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + box.join(' ') + ' ' + box[2] + '">'].concat(baseLayers(match, d));
+    var marks = timelineMarks(d, match.ours);
+    var mode = 'auto', slowmo = true, speeds = [10, 20, 40, 80], si = 1, playing = true, t = Math.max(t0, startAt || t0), last = 0, raf = 0;
+    var cur = cameraTarget(d, match.ours, t), snap = true;
+
+    var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + cur.join(' ') + ' ' + cur[2] + '">'].concat(baseLayers(match, d));
     svg.push('<circle class="zs" fill="rgba(59,139,235,.08)" stroke="#3b8beb" stroke-width="3" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<circle class="zw" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" r="0"/>');
-    ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".7" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
-    svg.push('<g class="fx"></g>');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '">' + patchAt(id, 0, 0, u * 6) + '</g>'); });
-    svg.push('</svg>');
+    ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
+    svg.push('<g class="fx"></g><g class="pms">');
+    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 6) + '</g><text class="pmn" y="5.4" font-size="2.3" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
+    svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
-    el.innerHTML = svg.join('') + '<div class="clock">0:00</div><div class="tools"><button type="button" class="cl">✕ ' + esc(S.stop) + '</button></div>';
+    el.innerHTML = svg.join('')
+      + '<div class="hud"><b class="clock">0:00</b><span class="h-sq"></span><span class="h-left"></span><span class="h-ph"></span></div><div class="h-sm hide">SLOW-MO</div>'
+      + '<ol class="kf" aria-live="polite"></ol>'
+      + '<div class="tools"><button type="button" class="th" aria-label="' + esc(S.theater) + '">⛶</button><button type="button" class="cl">✕ ' + esc(S.stop) + '</button></div>';
+
     var bar = $('[data-rbar="' + match.id + '"]');
     bar.classList.remove('hide');
-    bar.innerHTML = '<button type="button" class="pp" aria-label="play/pause">❚❚</button><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"><button type="button" class="ghost spd" aria-label="speed">×30</button>';
-    var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar), clock = $('.clock', el);
-    var zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el);
-    var marks = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
+    // Merge marks of the same kind that would sit on top of each other (a squad wiped in one second).
+    var lastByK = {};
+    var tl = marks.map(function (m, i) {
+      if (lastByK[m.k] != null && m.t - lastByK[m.k] < (tEnd - t0) * 0.012) return '';
+      lastByK[m.k] = m.t;
+      return '<button type="button" class="mk ' + m.k + '" data-i="' + i + '" style="left:' + ((m.t - t0) / (tEnd - t0) * 100).toFixed(2) + '%;--c:' + esc(colorOf(m.k === 'death' ? m.v : m.a)) + '" aria-label="' + mmss(m.t) + '"></button>';
+    }).join('');
+    var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
+      + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
+      + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>';
+    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button></div><div class="cams">' + chips + '</div>';
+
+    var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
+    var svgEl = $('svg.mp', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
+    var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), sm: $('.h-sm', el) };
+    var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
     var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
-    var speeds = [15, 30, 60, 120], si = 1, playing = true, t = Math.max(t0, startAt || t0), last = 0, raf = 0;
-    function draw() {
-      clock.textContent = mmss(t);
+    var squadIds = ids.filter(function (id) { return ours.has(id); });
+    var kfKey = '';
+
+    function feedLine(e) {
+      var A = '<b style="color:' + esc(colorOf(e.a)) + '">' + esc(nameOf(match, e.a, e.an)) + '</b>';
+      var V = '<b style="color:' + esc(colorOf(e.v)) + '">' + esc(nameOf(match, e.v, e.vn)) + '</b>';
+      if (e.k === 'revive') return '<li class="rv">' + A + ' <span>✚</span> ' + V + '</li>';
+      var w = e.w ? '<i>' + esc(weapon(e.w)) + (e.d ? ' ' + e.d + 'm' : '') + '</i>' : '';
+      return '<li class="' + (e.k === 'kill' ? (ours.has(e.v) ? 'dd' : 'kl') : 'kn') + '">' + (e.a ? A : '') + ' <span>' + (e.k === 'kill' ? '▸' : '◐') + '</span> ' + w + ' ' + V + '</li>';
+    }
+    function draw(realDt) {
+      // camera
+      var target = mode === 'full' ? [0, 0, 1000] : cameraTarget(d, match.ours, t, mode === 'auto' ? '' : mode);
+      if (snap) { cur = target.slice(); snap = false; } else {
+        var k = 1 - Math.exp(-(realDt || 0.016) * 2.6);
+        for (var j = 0; j < 3; j++) cur[j] += (target[j] - cur[j]) * k;
+      }
+      view = cur;
+      svgEl.setAttribute('viewBox', cur[0].toFixed(1) + ' ' + cur[1].toFixed(1) + ' ' + cur[2].toFixed(1) + ' ' + cur[2].toFixed(1));
+      var u = cur[2] / 100;
+      // HUD
+      hud.clock.textContent = mmss(t);
       range.value = String(Math.round(t));
+      var aliveSquad = squadIds.filter(function (id) { var p = d.players[id]; return !(p.death && t >= p.death[2]); }).length;
+      hud.sq.textContent = 'SQD ' + aliveSquad + '/' + squadIds.length;
+      var al = aliveAt(d, t);
+      hud.left.textContent = al ? 'ALIVE ' + al[0] : '';
+      var ph = phaseAt(d, t);
+      hud.ph.textContent = ph ? 'P' + ph : '';
+      // zones
       var z = zoneAt(d, t);
       if (z) { zs.setAttribute('cx', z.safe[0]); zs.setAttribute('cy', z.safe[1]); zs.setAttribute('r', z.safe[2]); }
       if (z && z.warn) { zw.setAttribute('cx', z.warn[0]); zw.setAttribute('cy', z.warn[1]); zw.setAttribute('r', z.warn[2]); } else zw.setAttribute('r', 0);
+      // players
       ids.forEach(function (id, i) {
         var p = d.players[id], pos = posAt(p, t);
-        marks[i].style.display = pos ? '' : 'none';
-        if (pos) marks[i].setAttribute('transform', 'translate(' + pos[0] + ' ' + pos[1] + ')');
+        pm[i].style.display = pos ? '' : 'none';
+        if (pos) pm[i].setAttribute('transform', 'translate(' + pos[0].toFixed(1) + ' ' + pos[1].toFixed(1) + ') scale(' + u.toFixed(3) + ')');
         var pts = p.land && t >= p.land[2] ? [p.land[0] + ',' + p.land[1]] : [];
-        for (var k = 0; k < p.path.length && p.path[k][0] <= t; k++) pts.push(p.path[k][1] + ',' + p.path[k][2]);
-        if (pos && pts.length) pts.push(pos[0] + ',' + pos[1]);
+        for (var q = 0; q < p.path.length && p.path[q][0] <= t; q++) pts.push(p.path[q][1] + ',' + p.path[q][2]);
+        if (pos && pts.length) pts.push(pos[0].toFixed(1) + ',' + pos[1].toFixed(1));
         trails[i].setAttribute('points', pts.join(' '));
       });
-      var html = [];
+      // events: flashes + callouts on the map, kill feed in the corner
+      var fxh = [], lbh = [], recent = [];
       d.events.forEach(function (e) {
         var age = t - e.t;
         if (age < 0) return;
-        if (e.k === 'kill' && ours.has(e.v)) { html.push(cross(e.vp[0], e.vp[1], u * 2.2, colorOf(e.v))); return; }
-        if (e.k !== 'revive' && !ours.has(e.a)) return;
-        if (age > 8) {
-          if (e.k === 'kill') html.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
-          return;
+        var mine = ours.has(e.a) || ours.has(e.v);
+        if (!mine && e.k !== 'revive') return;
+        if (e.k === 'kill' && ours.has(e.v)) {
+          fxh.push(cross(e.vp[0], e.vp[1], u * 2.2, colorOf(e.v)));
+          if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + shortW(e), '#ff8a8a'));
+        } else if (age > 8) {
+          if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
+        } else {
+          var f = age / 8, col = e.k === 'revive' ? '#7ee2a8' : e.k === 'knock' ? '#f2a900' : '#ff4d4d';
+          fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * (1.2 + f * 5)) + '" fill="none" stroke="' + col + '" stroke-opacity="' + (1 - f) + '" stroke-width="3" vector-effect="non-scaling-stroke"/>');
+          fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.2) + '" fill="' + col + '"/>');
+          if (e.ap && e.k !== 'revive') fxh.push('<line x1="' + e.ap[0] + '" y1="' + e.ap[1] + '" x2="' + e.vp[0] + '" y2="' + e.vp[1] + '" stroke="' + col + '" stroke-opacity="' + (1 - f) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>');
+          var txt = e.k === 'revive' ? nameOf(match, e.a, e.an) + ' ✚ ' + nameOf(match, e.v, e.vn)
+            : nameOf(match, e.a, e.an) + (e.k === 'kill' ? ' ▸ ' : ' ◐ ') + nameOf(match, e.v, e.vn) + shortW(e);
+          lbh.push(label(e.vp[0], e.vp[1] - u * 3.4, u, txt, col === '#ff4d4d' ? '#ffb3b3' : col));
         }
-        var f = age / 8, col = e.k === 'revive' ? '#7ee2a8' : e.k === 'knock' ? '#f2a900' : '#ff4d4d';
-        html.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * (1.2 + f * 5)) + '" fill="none" stroke="' + col + '" stroke-opacity="' + (1 - f) + '" stroke-width="3" vector-effect="non-scaling-stroke"/>');
-        html.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.2) + '" fill="' + col + '"/>');
-        if (e.ap && e.k !== 'revive') html.push('<line x1="' + e.ap[0] + '" y1="' + e.ap[1] + '" x2="' + e.vp[0] + '" y2="' + e.vp[1] + '" stroke="' + col + '" stroke-opacity="' + (1 - f) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>');
+        if (age <= 14) recent.push(e);
       });
-      fx.innerHTML = html.join('');
+      fx.innerHTML = fxh.join('');
+      lb.innerHTML = lbh.join('');
+      var shown = recent.slice(-4);
+      var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
+      if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
     }
     function frame(ts) {
-      if (!last) last = ts;
-      var dt = Math.min(0.1, (ts - last) / 1000); last = ts;
-      if (playing) { t += dt * speeds[si]; if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; } }
-      draw();
+      var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;
+      var slow = slowmo && actionNear(d, match.ours, t);
+      hud.sm.classList.toggle('hide', !(slow && playing));
+      if (playing) { t += realDt * speeds[si] * (slow ? 0.25 : 1); if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; } }
+      draw(realDt);
       raf = requestAnimationFrame(frame);
     }
-    pp.onclick = function () { if (t >= tEnd) t = t0; playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
+    function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; draw(0); }
+    pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = '×' + speeds[si]; };
-    range.oninput = function () { t = Number(range.value); draw(); };
-    var ctl = { stop: function () { cancelAnimationFrame(raf); bar.classList.add('hide'); bar.innerHTML = ''; active = null; renderStatic(match, el, d); },
-      seek: function (x) { t = x; draw(); } };
-    $('.cl', el).onclick = ctl.stop;
+    range.oninput = function () { seek(Number(range.value)); };
+    bar.querySelectorAll('.mk').forEach(function (b) { b.onclick = function () { seek(marks[Number(b.dataset.i)].t - 5); }; });
+    bar.querySelectorAll('.cam').forEach(function (b) {
+      b.onclick = function () {
+        if (b.dataset.slow) { slowmo = !slowmo; b.classList.toggle('on', slowmo); return; }
+        mode = b.dataset.cam;
+        bar.querySelectorAll('.cam[data-cam]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      };
+    });
+    var setTheater = function (on) { card.classList.toggle('theater', on); document.documentElement.classList.toggle('noscroll', on); };
+    $('.th', el).onclick = function () { setTheater(!card.classList.contains('theater')); };
+    var ctl = {
+      stop: function (silent) { cancelAnimationFrame(raf); setTheater(false); bar.classList.add('hide'); bar.innerHTML = ''; active = null; renderStatic(match, el, d); },
+      seek: seek,
+    };
+    $('.cl', el).onclick = function () { ctl.stop(); };
     active = ctl;
+    draw(0);
     raf = requestAnimationFrame(frame);
     return ctl;
   }
@@ -235,7 +292,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=4');
+      var w = new Worker('/app/extract-worker.js?v=5');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -259,7 +316,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 2
+    var p = match.derived >= 3
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -270,11 +327,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 2)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 3)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 2)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 3)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

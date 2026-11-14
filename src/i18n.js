@@ -39,8 +39,7 @@ export const awardText = (lang, a) => (AWARD_TEXT[lang][a.id] || (() => ''))(a.v
 /** Strings used by the server pages and (a subset, see CLIENT_KEYS) by the browser. */
 export const S = {
   en: {
-    dir: 'ltr', brand: 'Squad Journal', allSessions: 'All sessions', otherLang: 'עברית', footer: 'Squad Journal · built on the PUBG API · not affiliated with KRAFTON',
-    homeTitle: 'Every night we spent in the field', season: 'SEASON', sessions: 'Sessions', matches: 'Matches', chickens: 'Chicken dinners', kills: 'Kills', damage: 'Damage',
+    dir: 'ltr', brand: 'Squad Journal', allSessions: 'All sessions', otherLang: 'עברית', footer: 'Squad Journal · built on the PUBG API · not affiliated with KRAFTON', season: 'SEASON', sessions: 'Sessions', matches: 'Matches', chickens: 'Chicken dinners', kills: 'Kills', damage: 'Damage',
     updated: (a) => `synced ${a}`, games: (n) => `${n} games`, best: 'Best', bestPlace: 'Best place', carriedTheNight: 'Carried the night:',
     noSessions: 'No sessions yet 🪂', noSessionsText: 'A session opens when at least two of us play on the same team. It will show up here by itself.',
     recent: 'Recent matches', avgPlace: (p) => `avg place #${p}`, streak: (n) => `${n} games in a row in the top 10 🔥`,
@@ -68,8 +67,7 @@ export const S = {
     agoNow: 'just now', agoMin: (m) => `${m} min ago`, agoHour: (h) => (h === 1 ? '1 hour ago' : `${h} hours ago`), agoDay: (d) => (d === 1 ? 'yesterday' : `${d} days ago`),
   },
   he: {
-    dir: 'rtl', brand: 'יומן הסקוואד', allSessions: 'כל הסשנים', otherLang: 'English', footer: 'יומן הסקוואד · נבנה מנתוני PUBG API · לא קשור ל־KRAFTON',
-    homeTitle: 'כל הלילות שלנו בשטח', season: 'SEASON', sessions: 'סשנים', matches: 'משחקים', chickens: 'צ׳יקנים', kills: 'הריגות', damage: 'נזק',
+    dir: 'rtl', brand: 'יומן הסקוואד', allSessions: 'כל הסשנים', otherLang: 'English', footer: 'יומן הסקוואד · נבנה מנתוני PUBG API · לא קשור ל־KRAFTON', season: 'SEASON', sessions: 'סשנים', matches: 'משחקים', chickens: 'צ׳יקנים', kills: 'הריגות', damage: 'נזק',
     updated: (a) => `עודכן ${a}`, games: (n) => `${n} משחקים`, best: 'שיא', bestPlace: 'מקום הכי טוב', carriedTheNight: 'סחב את הערב:',
     noSessions: 'עוד אין סשנים 🪂', noSessionsText: 'סשן נפתח כששניים מאיתנו לפחות משחקים באותו צוות. ברגע שזה יקרה, זה יופיע כאן לבד.',
     recent: 'משחקים אחרונים', avgPlace: (p) => `מקום ממוצע #${p}`, streak: (n) => `רצף של ${n} משחקים בטופ 10 🔥`,
@@ -100,7 +98,7 @@ export const S = {
 export function clientStrings(lang) {
   return lang === 'he' ? {
     loadOnScroll: 'המפה נטענת כשגוללים אליה', queued: 'ממתין בתור לניתוח…', downloading: 'מורידים טלמטריה…', parsing: 'מנתחים {n}MB של אירועים…',
-    retry: 'עוד ניסיון…', noTele: 'אין טלמטריה למשחק הזה 🤷', failed: 'לא הצלחנו לנתח את המשחק הזה', fullMap: 'כל המפה', zoomIn: 'זום לפעולה',
+    retry: 'עוד ניסיון…', camAuto: 'מצלמה חכמה', slowmo: 'הילוך איטי באקשן', theater: 'מסך מלא', noTele: 'אין טלמטריה למשחק הזה 🤷', failed: 'לא הצלחנו לנתח את המשחק הזה', fullMap: 'כל המפה', zoomIn: 'זום לפעולה',
     killed: '{a} חיסל את {v}', knocked: '{a} הפיל את {v}', died: '{v} נפל ל־{a}', diedAlone: '{v} נפל', revived: '{a} הקים את {v}',
     more: 'עוד {n} אירועים', fists: 'אגרופים', copied: 'הקישור הועתק', replay: 'הילוך חוזר', stop: 'סגור', analyzing: 'מנתחים משחק {i}/{n}…',
     noMoments: 'עוד לא זוהו רגעים מיוחדים בסשן הזה.',
@@ -108,7 +106,7 @@ export function clientStrings(lang) {
     longshot: '{a} פגע מ־{d} מ׳ עם {w}', lastgasp: '{a} הקים את {v} אחרי {s} שניות על הרצפה', matchAt: 'משחק {m} · {t}', none: '—',
   } : {
     loadOnScroll: 'The map loads when you scroll to it', queued: 'Queued for analysis…', downloading: 'Downloading telemetry…', parsing: 'Crunching {n}MB of events…',
-    retry: 'One more try…', noTele: 'No telemetry for this match 🤷', failed: 'Could not analyse this match', fullMap: 'Full map', zoomIn: 'Zoom to action',
+    retry: 'One more try…', camAuto: 'Auto camera', slowmo: 'Slow-mo on action', theater: 'Fullscreen', noTele: 'No telemetry for this match 🤷', failed: 'Could not analyse this match', fullMap: 'Full map', zoomIn: 'Zoom to action',
     killed: '{a} eliminated {v}', knocked: '{a} knocked {v}', died: '{v} went down to {a}', diedAlone: '{v} went down', revived: '{a} revived {v}',
     more: '{n} more events', fists: 'fists', copied: 'Link copied', replay: 'Replay', stop: 'Close', analyzing: 'Analysing match {i}/{n}…',
     noMoments: 'No special moments detected in this session yet.',

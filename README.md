@@ -5,7 +5,13 @@ One Cloudflare Worker: cron collector + API + pages. Free tier only.
 
 What a session page has: who carried (MVP), medals (rule-based awards), highlights (clutch, squad wipe,
 rampage, long shot, last-gasp revive), medic log and set-ups (who revived / assisted whom), and per match a
-map zoomed on the squad, an animated replay (zones, routes, kills, knocks, revives) and a kill feed.
+map zoomed on the squad, an animated replay and a kill feed.
+
+The replay (`src/replay.js` logic, tested; drawn by `src/client/session.js`): a director camera that follows the
+living squad and pulls out for any fight or death of ours (or follows one player, or shows the full map),
+callouts on the map (who knocked/killed whom, weapon, distance), an in-game style kill feed, a HUD (squad alive,
+players alive, zone phase), a timeline with tappable kill/knock/death/revive marks, slow-motion around action,
+and a fullscreen theater mode.
 
 Live: https://squad-journal.guyyyy15-web.workers.dev
 
@@ -30,6 +36,7 @@ src/html.js       server-rendered pages     migrations/       D1 schema
 src/i18n.js       en + he strings           src/emblems.js    unit patches + medals (SVG)
 src/summary.js    awards, carry (tested)    src/telemetry.js  browser-side extraction (tested)
 src/moments.js    highlights, matrices      src/client/       session page script (served at /app/)
+src/replay.js     camera, HUD, timeline
 test/             node --test               scripts/          dev relay, seed
 ```
 

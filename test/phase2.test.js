@@ -49,7 +49,11 @@ test('matrices: revives and set-ups (assists + knock for a teammate)', () => {
 
 test('real telemetry: v2 fields and moments run', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
-  assert.equal(d.v, 2);
+  assert.equal(d.v, 3);
+  assert.ok(d.alive.length > 10, 'alive series');
+  assert.ok(d.alive.every((a, i) => i === 0 || a[0] >= d.alive[i - 1][0]), 'in time order');
+  assert.ok(d.alive[d.alive.length - 1][1] < d.alive[0][1] / 3, 'the field thins out');
+  assert.equal(d.alive[0][1] >= 90, true);
   const kills = d.events.filter((e) => e.k === 'kill');
   assert.ok(kills.every((e) => Number.isInteger(e.vt) && Array.isArray(e.as) && typeof e.km === 'string'));
   assert.ok(Array.isArray(findMoments(d, OURS, 1)));

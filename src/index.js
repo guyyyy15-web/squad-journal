@@ -5,6 +5,7 @@ import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from 
 import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage } from './html.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
+import * as R from './replay.js';
 import { summarize } from './summary.js';
 import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
 import SESSION_JS from './client/session.js';
@@ -161,7 +162,8 @@ onmessage = async function (e) {
 // Moment/matrix helpers for the session page (same source as src/moments.js, tested there).
 const LIB_JS = `var __name = function (f) { return f; };
 var findMoments = ${findMoments.toString()};
-var squadMatrices = ${squadMatrices.toString()};`;
+var squadMatrices = ${squadMatrices.toString()};
+${Object.entries(R).map(([k, f]) => `var ${k} = ${f.toString()};`).join('\n')}`;
 
 const asset = (body, type, maxAge = 86400) => new Response(body, {
   headers: { 'Content-Type': type, 'Cache-Control': `public, max-age=${maxAge}` },

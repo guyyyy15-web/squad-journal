@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 2). Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 3: adds the `alive` series). Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (now 2).
 - **Client scripts** in `src/client/` are bundled as text and served from `/app/`. Bump the `?v=` in the page
