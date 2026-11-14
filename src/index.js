@@ -2,7 +2,10 @@
 import { tick, drain, rebuildSessions, getSettings, enqueue } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
-import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName } from './html.js';
+import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo } from './html.js';
+import { summarize } from './summary.js';
+import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
+import SESSION_JS from './client/session.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
@@ -56,39 +59,153 @@ async function status(env) {
   };
 }
 
-async function home(env) {
+// ---- sessions ----
+
+/** fnv-1a, for short cache versions. */
+function hash(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
+/** Summary of a session, computed once and cached in sessions.summary_json (cleared when the session changes). */
+async function summaryOf(env, s, members) {
+  if (s.summary_json) {
+    try { const j = JSON.parse(s.summary_json); if (j.v === 1) return j; } catch { /* recompute */ }
+  }
+  const { results } = await env.DB.prepare(`SELECT m.match_id, m.map, m.mode, m.created_at, m.duration, p.* FROM session_matches sm
+      JOIN matches m ON m.match_id = sm.match_id JOIN participants p ON p.match_id = m.match_id
+      WHERE sm.session_id = ? AND p.team_id IN (SELECT p2.team_id FROM participants p2 JOIN members mb ON mb.account_id = p2.account_id
+        AND mb.active = 1 WHERE p2.match_id = m.match_id)`).bind(s.session_id).all();
+  const sum = summarize(results, new Set(members.filter((m) => m.active).map((m) => m.account_id)));
+  await env.DB.prepare('UPDATE sessions SET summary_json = ? WHERE session_id = ?').bind(JSON.stringify(sum), s.session_id).run();
+  return sum;
+}
+
+async function home(env, origin) {
   const db = env.DB;
-  const [sessions, members, recent] = await db.batch([
-    db.prepare(`SELECT s.*, (SELECT COUNT(DISTINCT p.match_id) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
-        JOIN members mb ON mb.account_id = p.account_id WHERE sm.session_id = s.session_id AND p.place = 1) AS wins,
-      (SELECT MIN(p.place) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
-        JOIN members mb ON mb.account_id = p.account_id WHERE sm.session_id = s.session_id) AS best_place,
-      (SELECT SUM(p.kills) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
-        JOIN members mb ON mb.account_id = p.account_id WHERE sm.session_id = s.session_id) AS kills,
-      (SELECT SUM(p.damage) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
-        JOIN members mb ON mb.account_id = p.account_id WHERE sm.session_id = s.session_id) AS damage
-      FROM sessions s ORDER BY start_at DESC LIMIT 30`),
+  const [sessions, members, recent, totals] = await db.batch([
+    db.prepare('SELECT * FROM sessions ORDER BY start_at DESC LIMIT 40'),
     db.prepare('SELECT * FROM members'),
     db.prepare(`SELECT p.account_id, p.name, p.place, p.kills, p.damage, m.map, m.mode, m.created_at FROM participants p
       JOIN matches m ON m.match_id = p.match_id JOIN members mb ON mb.account_id = p.account_id
       ORDER BY m.created_at DESC LIMIT 8`),
+    db.prepare(`SELECT (SELECT COUNT(*) FROM sessions) AS sessions, (SELECT COUNT(*) FROM session_matches) AS matches,
+      (SELECT COUNT(DISTINCT sm.match_id) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
+        JOIN members mb ON mb.account_id = p.account_id WHERE p.place = 1) AS wins,
+      (SELECT COALESCE(SUM(p.kills), 0) FROM session_matches sm JOIN participants p ON p.match_id = sm.match_id
+        JOIN members mb ON mb.account_id = p.account_id) AS kills`),
   ]);
-  const st = await status(env);
-  return homePage({ sessions: sessions.results, members: members.results, recent: recent.results, status: st });
+  // Fill missing summaries a few at a time (CPU budget); the rest show without them until the next visit.
+  let budget = 4;
+  const list = [];
+  for (const s of sessions.results) {
+    let summary = null;
+    if (s.summary_json) { try { summary = JSON.parse(s.summary_json); } catch { /* ignore */ } }
+    else if (budget-- > 0) summary = await summaryOf(env, s, members.results);
+    list.push({ ...s, summary });
+  }
+  const poll = JSON.parse((await setting(db, 'poll_state')) || '{}');
+  return homePage({ sessions: list, members: members.results, recent: recent.results, totals: totals.results[0], status: poll, origin });
 }
 
-async function session(env, id) {
+async function session(env, id, origin) {
   const db = env.DB;
   const s = await db.prepare('SELECT * FROM sessions WHERE session_id = ?').bind(id).first();
-  if (!s) return page('לא נמצא', '<h1>הסשן הזה לא קיים 🤷</h1><p><a href="/">לכל הסשנים</a></p>');
-  const [rows, members] = await db.batch([
-    db.prepare(`SELECT m.match_id, m.map, m.mode, m.created_at, p.* FROM session_matches sm JOIN matches m ON m.match_id = sm.match_id
-      JOIN participants p ON p.match_id = m.match_id
-      WHERE sm.session_id = ? AND p.team_id IN (SELECT p2.team_id FROM participants p2 JOIN members mb ON mb.account_id = p2.account_id WHERE p2.match_id = m.match_id)
-      ORDER BY m.created_at, p.kills DESC`).bind(id),
-    db.prepare('SELECT * FROM members'),
+  if (!s) return page('לא נמצא', '<h1 style="margin-top:40px">הסשן הזה לא קיים 🤷</h1><p><a href="/">לכל הסשנים</a></p>');
+  const members = (await db.prepare('SELECT * FROM members').all()).results;
+  const summary = await summaryOf(env, s, members);
+  const ids = summary.matches.map((m) => m.match_id);
+  const derived = await db.prepare('SELECT match_id FROM derived WHERE match_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(ids)).all();
+  const byId = new Map(members.map((m) => [m.account_id, m]));
+  const ogVer = hash(JSON.stringify(ogInfo(s, summary, byId)));
+  const head = await env.DATA.head(`og/${s.session_id}.jpg`);
+  return sessionPage({ session: s, summary, members, origin, ogVer, ogReady: head?.customMetadata?.ver === ogVer,
+    derivedIds: new Set(derived.results.map((r) => r.match_id)) });
+}
+
+// ---- maps, telemetry, derived data, share images ----
+
+const WORKER_JS = `// Parses PUBG telemetry off the main thread. Generated from src/telemetry.js.
+// The bundler (esbuild keepNames) wraps functions in __name(); define it so the copied source runs here too.
+var __name = function (f) { return f; };
+var MAP_SIZE = ${JSON.stringify(MAP_SIZE)};
+var extractDerived = ${extractDerived.toString()};
+onmessage = async function (e) {
+  try {
+    var res = await fetch(e.data.url);
+    if (!res.ok) throw new Error(String(res.status));
+    var reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    var parts = [], n = 0, last = 0;
+    for (;;) {
+      var r = await reader.read();
+      if (r.done) break;
+      parts.push(r.value); n += r.value.length;
+      if (n - last > 1e6) { last = n; postMessage({ progress: (n / 1e6).toFixed(0) }); }
+    }
+    postMessage({ parsing: (n / 1e6).toFixed(0) });
+    var events = JSON.parse(parts.join(''));
+    parts = null;
+    postMessage({ done: extractDerived(events, e.data.ours, MAP_SIZE[e.data.map] || 816000) });
+  } catch (err) { postMessage({ error: String(err && err.message || err) }); }
+};`;
+
+const asset = (body, type, maxAge = 86400) => new Response(body, {
+  headers: { 'Content-Type': type, 'Cache-Control': `public, max-age=${maxAge}` },
+});
+
+async function telemetry(env, id) {
+  const obj = await env.DATA.get(`telemetry/${id}.json.gz`);
+  const headers = { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=31536000, immutable' };
+  // encodeBody 'manual': the stored bytes are already gzip; the browser decompresses them.
+  if (obj) return new Response(obj.body, { headers, encodeBody: 'manual' });
+  const url = await env.DB.prepare('SELECT telemetry_url FROM matches WHERE match_id = ?').bind(id).first('telemetry_url');
+  if (!url) return new Response('no telemetry', { status: 404 });
+  const res = await fetch(url, { headers: { 'Accept-Encoding': 'gzip' }, encodeResponseBody: 'manual' });
+  if (!res.ok) return new Response('no telemetry', { status: 404 });
+  return new Response(res.body, { headers: { ...headers, 'Content-Encoding': res.headers.get('content-encoding') || 'identity' }, encodeBody: 'manual' });
+}
+
+async function putDerived(env, id, req) {
+  const len = Number(req.headers.get('Content-Length') || 0);
+  if (len > 250_000) return fail('too big', 413);
+  const text = await req.text();
+  if (text.length > 250_000) return fail('too big', 413);
+  let d;
+  try { d = JSON.parse(text); } catch { return fail('bad json'); }
+  // Only players on our teams in this match may appear.
+  const { results } = await env.DB.prepare(`SELECT account_id FROM participants WHERE match_id = ?`).bind(id).all();
+  if (!results.length) return fail('unknown match', 404);
+  if (!validDerived(d, new Set(results.map((r) => r.account_id)))) return fail('invalid');
+  await env.DB.batch([
+    env.DB.prepare('INSERT OR IGNORE INTO derived (match_id, json) VALUES (?, ?)').bind(id, text),
+    env.DB.prepare('UPDATE matches SET processed_level = 2 WHERE match_id = ? AND processed_level < 2').bind(id),
   ]);
-  return sessionPage({ session: s, rows: rows.results, members: members.results });
+  return json({ ok: true });
+}
+
+async function putOg(env, id, ver, req) {
+  if (!/^[\w-]{1,40}$/.test(ver || '')) return fail('ver');
+  const s = await env.DB.prepare('SELECT * FROM sessions WHERE session_id = ?').bind(id).first();
+  if (!s) return fail('unknown session', 404);
+  const members = (await env.DB.prepare('SELECT * FROM members').all()).results;
+  const summary = await summaryOf(env, s, members);
+  const current = hash(JSON.stringify(ogInfo(s, summary, new Map(members.map((m) => [m.account_id, m])))));
+  if (ver !== current) return fail('stale', 409);
+  const head = await env.DATA.head(`og/${id}.jpg`);
+  if (head?.customMetadata?.ver === ver) return json({ ok: true, existed: true });
+  const buf = await req.arrayBuffer();
+  const b = new Uint8Array(buf);
+  if (buf.byteLength < 2000 || buf.byteLength > 400_000 || b[0] !== 0xff || b[1] !== 0xd8) return fail('not a jpeg');
+  await env.DATA.put(`og/${id}.jpg`, buf, { httpMetadata: { contentType: 'image/jpeg' }, customMetadata: { ver } });
+  return json({ ok: true });
+}
+
+async function ogImage(env, id) {
+  const obj = (await env.DATA.get(`og/${id}.jpg`)) || (await env.DATA.get('og/default.jpg'));
+  if (!obj) return new Response('no image', { status: 404 });
+  // The page links ?v=<version>, so a new version is a new URL; short cache for the bare URL.
+  return new Response(obj.body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=600' } });
 }
 
 // ---- onboarding ----
@@ -134,6 +251,7 @@ async function confirm(env, b) {
         emoji = excluded.emoji, active = 1`).bind(b.accountId, look.name, prof.nickname, prof.color, prof.emoji, Date.now()),
     db.prepare('DELETE FROM guests WHERE account_id = ?').bind(b.accountId),
     db.prepare('DELETE FROM settings WHERE key = ?').bind(`lookup:${b.accountId}`),
+    db.prepare('UPDATE sessions SET summary_json = NULL'), // a guest may have become a member
   ]);
   await enqueue(db, b.accountId, look.matchIds);
   const queued = await db.prepare('SELECT COUNT(*) AS n FROM queue WHERE account_id = ?').bind(b.accountId).first('n');
@@ -165,7 +283,10 @@ async function adminApi(env, action, b, ctx) {
       await db.prepare('UPDATE members SET nickname = ? WHERE account_id = ?').bind(b.nickname.trim().slice(0, 20), b.account_id).run();
     }
     if (b.active === 0 || b.active === 1) {
-      await db.prepare('UPDATE members SET active = ? WHERE account_id = ?').bind(b.active, b.account_id).run();
+      await db.batch([
+        db.prepare('UPDATE members SET active = ? WHERE account_id = ?').bind(b.active, b.account_id),
+        db.prepare('UPDATE sessions SET summary_json = NULL'),
+      ]);
       ctx.waitUntil(getSettings(db).then((s) => rebuildSessions(env, s)));
     }
     return json({ ok: true });
@@ -186,10 +307,22 @@ export default {
     const path = url.pathname;
     try {
       if (req.method === 'GET') {
-        if (path === '/') return await home(env);
+        if (path === '/') return await home(env, url.origin);
+        if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
+        if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
         let m;
-        if ((m = /^\/s\/([\w-]{1,40})$/.exec(path))) return await session(env, m[1]);
+        if ((m = /^\/s\/([\w-]{1,40})$/.exec(path))) return await session(env, m[1], url.origin);
+        if ((m = /^\/maps\/(\w{3,30})\.jpg$/.exec(path))) {
+          const obj = await env.DATA.get(`maps/${m[1]}.jpg`);
+          return obj ? asset(obj.body, 'image/jpeg', 31536000) : new Response('no map', { status: 404 });
+        }
+        if ((m = /^\/t\/([\w-]{10,64})$/.exec(path))) return await telemetry(env, m[1]);
+        if ((m = /^\/api\/derived\/([\w-]{10,64})$/.exec(path))) {
+          const j = await env.DB.prepare('SELECT json FROM derived WHERE match_id = ?').bind(m[1]).first('json');
+          return j ? asset(j, 'application/json; charset=utf-8', 86400) : fail('none', 404);
+        }
+        if ((m = /^\/og\/([\w-]{1,40})\.jpg$/.exec(path))) return await ogImage(env, m[1]);
         if ((m = /^\/join\/([\w-]{8,40})$/.exec(path))) {
           if (m[1] !== await inviteToken(env.DB)) return page('קישור לא בתוקף', '<h1>הקישור הזה כבר לא בתוקף 😬</h1><p class="muted">בקשו מגיא קישור חדש.</p>');
           return joinPage(m[1]);
@@ -217,6 +350,9 @@ export default {
             Location: '/admin', 'Set-Cookie': `sj_admin=${await sha(`sj-admin:${env.ADMIN_CODE}`)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`,
           } });
         }
+        let mm;
+        if ((mm = /^\/api\/derived\/([\w-]{10,64})$/.exec(path))) return await putDerived(env, mm[1], req);
+        if ((mm = /^\/api\/og\/([\w-]{1,40})$/.exec(path))) return await putOg(env, mm[1], url.searchParams.get('v'), req);
         const b = await body(req);
         if (path === '/api/join/lookup') return await lookup(env, b);
         if (path === '/api/join/confirm') return await confirm(env, b);

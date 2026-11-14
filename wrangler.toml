@@ -27,3 +27,9 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "DATA"
 bucket_name = "squad-journal-data"
+
+# Browser scripts in src/client/ are bundled as text and served from /app/.
+[[rules]]
+type = "Text"
+globs = ["**/client/*.js"]
+fallthrough = false
