@@ -2,6 +2,9 @@
 // Numbers only come from PUBG stats; nothing is invented.
 
 /** Carry score: what "who carried" ranks by. Damage is the backbone; kills, knocks, assists, revives on top. */
+/** Bump when the summary shape changes; older cached summaries are recomputed (by warm() in the background). */
+export const SUMMARY_V = 3; // 3: adds the hall-of-fame slice
+
 export const carryScore = (p) => Math.round(p.damage + p.kills * 100 + p.dbnos * 30 + p.assists * 40 + p.revives * 60);
 
 /**
@@ -78,7 +81,7 @@ export function summarize(rows, memberIds) {
   };
 
   return {
-    v: 2,
+    v: SUMMARY_V,
     team,
     carry: carry.map((p) => ({ account_id: p.account_id, score: p.carry, share: Math.round((p.carry / carryTotal) * 100),
       kills: p.kills, damage: p.damage, dbnos: p.dbnos, assists: p.assists, revives: p.revives, games: p.games })),

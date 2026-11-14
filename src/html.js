@@ -149,7 +149,7 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .panel::after,.mdl::after{content:"";position:absolute;pointer-events:none;width:75%;height:85%;inset:auto auto -30% -20%;background:${MUD} 0 0/520px;opacity:.5;
  -webkit-mask-image:radial-gradient(closest-side,#000,transparent);mask-image:radial-gradient(closest-side,#000,transparent)}
 .panel:nth-of-type(2n)::after{inset:auto -25% -35% auto}.panel:nth-of-type(3n)::after{inset:-40% -25% auto auto;opacity:.32}
-.panel>*,.mdl>*{position:relative;z-index:1}.panel>.crown,.panel>.stamp{position:absolute;z-index:2}
+.mdl,.mom{position:relative}.panel>*,.mdl>*{position:relative;z-index:1}.panel>.crown,.panel>.stamp{position:absolute;z-index:2}
 .stamp{position:relative;margin-inline-start:auto;transform:rotate(-8deg);font:18px/1 var(--stencil);letter-spacing:.06em;color:#d8433b;border:3px solid currentColor;border-radius:6px;padding:6px 9px 4px;opacity:.9;pointer-events:none;
  -webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${WORN};mask-size:240px;mix-blend-mode:screen;direction:ltr}
 .stamp.gold{color:var(--gold2)}

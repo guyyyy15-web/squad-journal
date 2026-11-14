@@ -1,14 +1,14 @@
 // Squad Journal Worker: routes + cron entry point.
-import { tick, drain, rebuildSessions, getSettings, enqueue, saveTotals } from './collector.js';
+import { tick, drain, rebuildSessions, getSettings, enqueue, saveTotals, markWarm } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
 import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
-import { hallOfFame } from './hall.js';
+import { mergeHall, hallSlice } from './hall.js';
 import { factsOf, prompt, checkNumbers, cleanRecap, isLang, NARRATOR_MODEL, DAILY_CAP } from './narrator.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
 import * as R from './replay.js';
-import { summarize } from './summary.js';
+import { summarize, SUMMARY_V } from './summary.js';
 import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
 import SESSION_JS from './client/session.js';
 
@@ -76,13 +76,16 @@ function hash(str) {
 /** Summary of a session, computed once and cached in sessions.summary_json (cleared when the session changes). */
 async function summaryOf(env, s, members) {
   if (s.summary_json) {
-    try { const j = JSON.parse(s.summary_json); if (j.v === 2) return j; } catch { /* recompute */ }
+    try { const j = JSON.parse(s.summary_json); if (j.v === SUMMARY_V) return j; } catch { /* recompute */ }
   }
   const { results } = await env.DB.prepare(`SELECT m.match_id, m.map, m.mode, m.created_at, m.duration, p.* FROM session_matches sm
       JOIN matches m ON m.match_id = sm.match_id JOIN participants p ON p.match_id = m.match_id
       WHERE sm.session_id = ? AND p.team_id IN (SELECT p2.team_id FROM participants p2 JOIN members mb ON mb.account_id = p2.account_id
         AND mb.active = 1 WHERE p2.match_id = m.match_id)`).bind(s.session_id).all();
-  const sum = summarize(results, new Set(members.filter((m) => m.active).map((m) => m.account_id)));
+  const active = new Set(members.filter((m) => m.active).map((m) => m.account_id));
+  const sum = summarize(results, active);
+  // This session's share of the hall of fame (members only), so /hall merges slices instead of scanning history.
+  sum.hall = hallSlice(results.filter((r) => active.has(r.account_id)).map((r) => ({ ...r, session_id: s.session_id })), sum);
   await env.DB.prepare('UPDATE sessions SET summary_json = ? WHERE session_id = ?').bind(JSON.stringify(sum), s.session_id).run();
   return sum;
 }
@@ -108,13 +111,14 @@ async function home(env, origin, lang) {
       JOIN matches m ON m.match_id = p.match_id JOIN members mb ON mb.account_id = p.account_id
       ORDER BY m.created_at DESC LIMIT 8`).all();
   // Fill missing summaries a few at a time (CPU budget); the rest show without them until the next visit.
-  let budget = 4;
+  let budget = 1; // warm() prepares summaries in the background; this is only a fallback
   const list = [];
   for (const s of sessions.results) {
     let summary = null;
     if (s.summary_json) { try { summary = JSON.parse(s.summary_json); } catch { /* ignore */ } }
-    if ((!summary || summary.v !== 2) && budget-- > 0) summary = await summaryOf(env, { ...s, summary_json: null }, members.results);
-    if (summary && summary.v !== 2) summary = null;
+    // An older summary still has everything a card shows; warm() upgrades it in the background.
+    if ((!summary || summary.v < 2) && budget-- > 0) summary = await summaryOf(env, { ...s, summary_json: null }, members.results);
+    if (summary && summary.v < 2) summary = null;
     list.push({ ...s, summary });
   }
   let poll = {}; let clan = null;
@@ -176,6 +180,32 @@ async function recap(env, id) {
   return text;
 }
 
+// ---- background warm-up ----
+
+/**
+ * One small job per cron minute, only while poll_state.warm is set (after sessions or members change):
+ * a missing session summary, then a missing recap, then the hall of fame cache. So the heavy work never
+ * lands on a friend opening the page, and each invocation stays well inside the free CPU budget.
+ */
+async function warm(env) {
+  const db = env.DB;
+  const st = JSON.parse((await setting(db, 'poll_state')) || '{}');
+  if (!st.warm) return null;
+  const s = await db.prepare("SELECT * FROM sessions WHERE summary_json IS NULL OR json_extract(summary_json, '$.v') <> ? ORDER BY start_at DESC LIMIT 1").bind(SUMMARY_V).first();
+  if (s) {
+    await summaryOf(env, s, (await db.prepare('SELECT * FROM members').all()).results);
+    return 'summary';
+  }
+  const r = await db.prepare("SELECT session_id FROM sessions WHERE ai_recap IS NULL ORDER BY start_at DESC LIMIT 1").first('session_id');
+  if (r && env.AI) {
+    await recap(env, r);
+    return 'recap';
+  }
+  await hallData(env);
+  await db.prepare(`UPDATE settings SET value = json_set(value, '$.warm', json('false')) WHERE key = 'poll_state'`).run();
+  return 'hall';
+}
+
 // ---- hall of fame ----
 
 /** All-time records and ranks, cached in settings until a match, summary or member changes. */
@@ -183,27 +213,24 @@ async function hallData(env) {
   const db = env.DB;
   const keyRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM session_matches) AS n, (SELECT MAX(end_at) FROM sessions) AS e,
     (SELECT COUNT(*) FROM sessions WHERE summary_json IS NOT NULL) AS s, (SELECT group_concat(account_id) FROM members WHERE active = 1) AS m`).first();
-  const key = `v2:${keyRow.n}:${keyRow.e}:${keyRow.s}:${hash(keyRow.m || '')}`;
+  const key = `v3:${SUMMARY_V}:${keyRow.n}:${keyRow.e}:${keyRow.s}:${hash(keyRow.m || '')}`;
   try {
     const c = JSON.parse((await setting(db, 'hall_cache')) || 'null');
     if (c && c.key === key) return c.data;
   } catch { /* recompute */ }
-  const members = (await db.prepare('SELECT * FROM members').all()).results;
-  const [rows, sess] = await db.batch([
-    db.prepare(`SELECT p.*, m.created_at, m.map, sm.session_id FROM participants p JOIN members mb ON mb.account_id = p.account_id AND mb.active = 1
-      JOIN session_matches sm ON sm.match_id = p.match_id JOIN matches m ON m.match_id = p.match_id`),
-    db.prepare('SELECT * FROM sessions ORDER BY start_at'),
-  ]);
-  let budget = 3;
-  const sessions = [];
-  for (const x of sess.results) {
-    let summary = null;
-    try { summary = x.summary_json ? JSON.parse(x.summary_json) : null; } catch { /* ignore */ }
-    if ((!summary || summary.v !== 2) && budget-- > 0) summary = await summaryOf(env, { ...x, summary_json: null }, members);
-    sessions.push({ session_id: x.session_id, start_at: x.start_at, match_count: x.match_count, summary: summary && summary.v === 2 ? summary : null });
-  }
-  const data = hallOfFame(rows.results, sessions);
-  if (budget >= 0) await putSetting(db, 'hall_cache', JSON.stringify({ key, data })); // only cache a complete picture
+  // Merge the per-session slices stored in each summary: cost grows with the number of sessions, not games.
+  const sess = await db.prepare(`SELECT session_id, start_at, json_extract(summary_json, '$.hall') AS hall, json_extract(summary_json, '$.v') AS v
+    FROM sessions ORDER BY start_at`).all();
+  let complete = true;
+  const slices = sess.results.map((x) => {
+    let slice = null;
+    if (x.v === SUMMARY_V && x.hall) { try { slice = JSON.parse(x.hall); } catch { /* missing */ } }
+    if (!slice) complete = false;
+    return { session_id: x.session_id, start_at: x.start_at, slice };
+  });
+  const data = mergeHall(slices);
+  if (complete) await putSetting(db, 'hall_cache', JSON.stringify({ key, data })); // only cache a complete picture
+  else await markWarm(db); // let the warm-up fill the missing summaries, then the cache
   return data;
 }
 
@@ -332,7 +359,7 @@ async function lookup(env, b) {
       const m = JSON.parse(text);
       const st = m.included.find((i) => i.type === 'participant' && i.attributes.stats.playerId === p.accountId)?.attributes.stats;
       const a = m.data.attributes;
-      if (st) latest = { text: `${mapName(a.mapName)} · ${modeName(a.gameMode)} · ${ago(bodyLang(b), Date.parse(a.createdAt))} · ${st.kills} ${t.kills} · #${st.winPlace}` };
+      if (st) latest = { text: `${mapName(a.mapName)} · ${modeName(a.gameMode)} · ${ago(bodyLang(b), Date.parse(a.createdAt))} · ${st.kills} ${t.kills.toLowerCase()} · #${st.winPlace}` };
     }
   }
   const member = await env.DB.prepare('SELECT nickname, color, emoji FROM members WHERE account_id = ?').bind(p.accountId).first();
@@ -356,6 +383,7 @@ async function confirm(env, b) {
     db.prepare('DELETE FROM settings WHERE key = ?').bind(`lookup:${b.accountId}`),
     db.prepare('UPDATE sessions SET summary_json = NULL'), // a guest may have become a member
   ]);
+  await markWarm(db);
   await enqueue(db, b.accountId, look.matchIds);
   const queued = await db.prepare('SELECT COUNT(*) AS n FROM queue WHERE account_id = ?').bind(b.accountId).first('n');
   return json({ ok: true, queued });
@@ -390,7 +418,8 @@ async function adminApi(env, action, b, ctx) {
         db.prepare('UPDATE members SET active = ? WHERE account_id = ?').bind(b.active, b.account_id),
         db.prepare('UPDATE sessions SET summary_json = NULL'),
       ]);
-      ctx.waitUntil(getSettings(db).then((s) => rebuildSessions(env, s)));
+      await markWarm(db);
+      ctx.waitUntil(getSettings(db).then((s) => rebuildSessions(env, s, { full: true })));
     }
     return json({ ok: true });
   }
@@ -398,7 +427,7 @@ async function adminApi(env, action, b, ctx) {
     const stmts = Object.keys(DEFAULT_SETTINGS).filter((k) => typeof b[k] === 'string')
       .map((k) => db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(k, b[k].trim()));
     if (stmts.length) await db.batch(stmts);
-    await rebuildSessions(env, await getSettings(db));
+    await rebuildSessions(env, await getSettings(db), { full: true });
     return json({ ok: true, settings: await getSettings(db) });
   }
   return fail('unknown', 404);
@@ -518,6 +547,12 @@ export default {
   },
 
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(tick(env).catch((e) => console.error('collector', e?.message)));
+    ctx.waitUntil((async () => {
+      const info = await tick(env).catch((e) => { console.error('collector', e?.message); return { error: true }; });
+      // Warm-up only in minutes where the collector did no heavy work.
+      if (!info || !(info.stored || info.telemetry || info.sessions !== undefined || info.error)) {
+        await warm(env).catch((e) => console.error('warm', e?.message));
+      }
+    })());
   },
 };

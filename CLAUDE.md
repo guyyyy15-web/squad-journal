@@ -43,10 +43,21 @@ GitHub does **not** deploy.
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
 - **Telemetry data versions:** `derived.json.v` (now 3: adds the `alive` series). Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
-  Session summaries are cached in `sessions.summary_json` with their own `v` (now 2).
+  Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
   (its Hebrew was stilted; Gemma 4 reasons and returns no text). Fact sheet only; `checkNumbers` rejects any number
   not in the facts; cached in `sessions.ai_recap` per fact-sheet hash; `DAILY_CAP` recaps a day.
+- **Keep the CPU flat as history grows** (measured: pages 1–11 ms, idle cron 1 ms):
+  - `rebuildSessions` only rebuilds the last 16 days (PUBG has nothing older); `{ full: true }` for settings or
+    membership changes.
+  - Heavy one-off work runs in the background: `warm()` (index.js) does one job per cron minute while
+    `poll_state.warm` is set (`markWarm`): missing summary → missing recap → hall cache.
+  - The hall is a merge of per-session slices stored in each summary (`summary.hall`, `hallSlice`/`mergeHall`),
+    never a scan of every game. Home reads precomputed `settings.totals` (`saveTotals`).
+  - Summary version `SUMMARY_V` (summary.js, now 3). Bump it when the summary shape changes; warm() upgrades.
+  - Reuse `Intl.DateTimeFormat` instances (html.js `fmt`); building them per call cost ~10 ms a page.
+- **RTL check:** absolutely positioned decorations need a positioned parent (`.mdl` mud once made Hebrew pages
+  scroll sideways). Before releasing UI, check `scrollWidth <= clientWidth` on every page in `he` and `en`.
 - **Client scripts** in `src/client/` are bundled as text and served from `/app/`. Bump the `?v=` in the page
   when they change. Functions shipped to the browser via `toString()` must be self-contained.
 

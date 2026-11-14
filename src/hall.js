@@ -45,58 +45,40 @@ function matchNumbers(rows) {
   return n;
 }
 
-export function hallOfFame(rows, sessions) {
+const RECORD_METRICS = [
+  ['most_kills', (r) => r.kills, 3], ['most_damage', (r) => Math.round(r.damage), 300], ['longest_kill', (r) => Math.round(r.longest_kill), 100],
+  ['most_knocks', (r) => r.dbnos, 3], ['most_revives', (r) => r.revives, 2], ['most_headshots', (r) => r.headshots, 2],
+];
+const SUM_FIELDS = ['games', 'wins', 'kills', 'deaths', 'dbnos', 'assists', 'revives', 'damage', 'headshots', 'top10', 'xp', 'carry', 'mvps'];
+
+/**
+ * The hall-of-fame contribution of ONE session (members' rows of that session + its summary). Stored inside the
+ * session summary, so the hall is a cheap merge of slices instead of a scan of every game ever played.
+ */
+export function hallSlice(rows, summary) {
   const num = matchNumbers(rows);
   const where = (r) => ({ session_id: r.session_id, m: num.get(r.match_id), at: r.created_at, map: r.map });
-
-  // ---- service records
-  const P = new Map();
+  const players = {};
   for (const r of rows) {
-    if (!P.has(r.account_id)) P.set(r.account_id, { account_id: r.account_id, games: 0, wins: 0, kills: 0, deaths: 0, dbnos: 0, assists: 0, revives: 0, damage: 0, headshots: 0, top10: 0, xp: 0, carry: 0, mvps: 0, medals: {}, sessions: new Set() });
-    const p = P.get(r.account_id);
+    const p = (players[r.account_id] ||= { games: 0, wins: 0, kills: 0, deaths: 0, dbnos: 0, assists: 0, revives: 0, damage: 0, headshots: 0, top10: 0, xp: 0, carry: 0, mvps: 0, medals: {} });
     p.games++; p.kills += r.kills; p.dbnos += r.dbnos; p.assists += r.assists; p.revives += r.revives; p.damage += r.damage; p.headshots += r.headshots;
     if (r.place === 1) p.wins++;
     if (r.place <= 10) p.top10++;
     if (r.death_type && r.death_type !== 'alive') p.deaths++;
     p.xp += xpOf(r); p.carry += carryScore(r);
-    p.sessions.add(r.session_id);
   }
-  for (const s of sessions) {
-    const sum = s.summary;
-    if (!sum) continue;
-    const mvp = sum.carry?.[0]?.account_id;
-    if (mvp && P.has(mvp)) { P.get(mvp).mvps++; P.get(mvp).xp += 20; }
-    for (const a of sum.awards || []) for (const h of a.holders) if (P.has(h)) P.get(h).medals[a.id] = (P.get(h).medals[a.id] || 0) + 1;
+  if (summary) {
+    const mvp = summary.carry?.[0]?.account_id;
+    if (mvp && players[mvp]) { players[mvp].mvps++; players[mvp].xp += 20; }
+    for (const a of summary.awards || []) for (const h of a.holders) if (players[h]) players[h].medals[a.id] = (players[h].medals[a.id] || 0) + 1;
   }
-  const players = [...P.values()].map((p) => ({
-    ...p, sessions: p.sessions.size, damage: Math.round(p.damage),
-    kd: Math.round((p.kills / Math.max(1, p.deaths)) * 100) / 100,
-    avg_damage: Math.round(p.damage / Math.max(1, p.games)),
-    win_rate: Math.round((p.wins / Math.max(1, p.games)) * 100),
-    medal_count: Object.values(p.medals).reduce((a, b) => a + b, 0),
-    ...rankOf(p.xp),
-  })).sort((a, b) => b.xp - a.xp);
-
-  // ---- single-game records (members only)
-  const best = (metric, min = 1) => {
-    let v = -Infinity; let hs = [];
-    for (const r of rows) {
-      const x = metric(r);
-      if (x > v) { v = x; hs = [r]; } else if (x === v) hs.push(r);
-    }
-    if (!hs.length || v < min) return null;
-    return { value: v, holders: [...new Set(hs.map((r) => r.account_id))], where: where(hs[0]) };
-  };
+  // best of each single-game metric in this session (ties keep every holder)
   const records = [];
-  const push = (id, rec) => { if (rec) records.push({ id, ...rec }); };
-  push('most_kills', best((r) => r.kills, 3));
-  push('most_damage', best((r) => Math.round(r.damage), 300));
-  push('longest_kill', best((r) => Math.round(r.longest_kill), 100));
-  push('most_knocks', best((r) => r.dbnos, 3));
-  push('most_revives', best((r) => r.revives, 2));
-  push('most_headshots', best((r) => r.headshots, 2));
-
-  // squad kills in one game (our members on the same team)
+  for (const [id, metric, min] of RECORD_METRICS) {
+    let v = -Infinity; let hs = [];
+    for (const r of rows) { const x = metric(r); if (x > v) { v = x; hs = [r]; } else if (x === v) hs.push(r); }
+    if (hs.length && v >= min) records.push({ id, value: v, holders: [...new Set(hs.map((r) => r.account_id))], where: where(hs[0]) });
+  }
   const team = new Map();
   for (const r of rows) {
     const k = `${r.match_id}|${r.team_id}`;
@@ -106,57 +88,100 @@ export function hallOfFame(rows, sessions) {
   let tb = null;
   for (const t of team.values()) if (!tb || t.kills > tb.kills) tb = t;
   if (tb && tb.kills >= 5) records.push({ id: 'squad_kills', value: tb.kills, holders: tb.ids, where: where(tb.r) });
+  // games (our best placement per match) for chicken nights and win streaks across sessions
+  const g = new Map();
+  for (const r of rows) { const x = g.get(r.match_id); if (!x || r.place < x.place) g.set(r.match_id, { at: r.created_at, place: r.place, where: where(r) }); }
+  const games = [...g.values()].sort((x, y) => x.at - y.at);
+  return { players, records, games, pairs: pairAcc(rows), ids: [...new Set(rows.map((r) => r.account_id))] };
+}
 
-  // per session: most chicken dinners, and the longest win streak across all squad games
-  const games = new Map(); // match → {at, place, session}
-  for (const r of rows) {
-    const g = games.get(r.match_id);
-    if (!g || r.place < g.place) games.set(r.match_id, { at: r.created_at, place: r.place, r });
+/** Merge per-session slices into the hall: [{session_id, start_at, slice}] → {players, records, pairs, games, sessions}. */
+export function mergeHall(slices) {
+  const P = new Map();
+  const best = new Map();
+  const pairs = new Map();
+  const games = [];
+  let chicken = null;
+  for (const { session_id, start_at, slice } of slices) {
+    if (!slice) continue;
+    for (const [id, x] of Object.entries(slice.players)) {
+      if (!P.has(id)) P.set(id, { account_id: id, sessions: 0, medals: {}, ...Object.fromEntries(SUM_FIELDS.map((f) => [f, 0])) });
+      const p = P.get(id);
+      p.sessions++;
+      for (const f of SUM_FIELDS) p[f] += x[f] || 0;
+      for (const [m, n] of Object.entries(x.medals || {})) p.medals[m] = (p.medals[m] || 0) + n;
+    }
+    for (const r of slice.records) {
+      const b = best.get(r.id);
+      if (!b || r.value > b.value) best.set(r.id, { ...r, holders: [...r.holders] });
+      else if (r.value === b.value) b.holders = [...new Set([...b.holders, ...r.holders])];
+    }
+    for (const [k, x] of Object.entries(slice.pairs)) {
+      const q = pairs.get(k);
+      if (!q) pairs.set(k, { ...x }); else for (const f of ['games', 'wins', 'place', 'ka', 'kb', 'kills_a', 'kills_b']) q[f] += x[f];
+    }
+    games.push(...slice.games);
+    const wins = slice.games.filter((x) => x.place === 1).length;
+    if (wins >= 2 && (!chicken || wins > chicken.value)) chicken = { id: 'session_wins', value: wins, holders: slice.ids, where: { session_id, at: start_at } };
   }
-  const winsBySession = new Map();
-  for (const g of games.values()) if (g.place === 1) winsBySession.set(g.r.session_id, (winsBySession.get(g.r.session_id) || 0) + 1);
-  let ws = null;
-  for (const [sid, n] of winsBySession) if (!ws || n > ws.n) ws = { sid, n };
-  if (ws && ws.n >= 2) {
-    const s = sessions.find((x) => x.session_id === ws.sid);
-    records.push({ id: 'session_wins', value: ws.n, holders: [...new Set(rows.filter((r) => r.session_id === ws.sid).map((r) => r.account_id))], where: { session_id: ws.sid, at: s?.start_at } });
-  }
-  const ordered = [...games.values()].sort((a, b) => a.at - b.at);
+  const players = [...P.values()].map((p) => ({
+    ...p, damage: Math.round(p.damage),
+    kd: Math.round((p.kills / Math.max(1, p.deaths)) * 100) / 100,
+    avg_damage: Math.round(p.damage / Math.max(1, p.games)),
+    win_rate: Math.round((p.wins / Math.max(1, p.games)) * 100),
+    medal_count: Object.values(p.medals).reduce((a, b) => a + b, 0),
+    ...rankOf(p.xp),
+  })).sort((a, b) => b.xp - a.xp);
+  const records = RECORD_METRICS.map(([id]) => best.get(id)).filter(Boolean);
+  if (best.get('squad_kills')) records.push(best.get('squad_kills'));
+  if (chicken) records.push(chicken);
+  games.sort((a, b) => a.at - b.at);
   let run = 0; let bestRun = 0; let runStart = null; let bestStart = null;
-  for (const g of ordered) {
-    if (g.place === 1) { if (!run) runStart = g; run++; if (run > bestRun) { bestRun = run; bestStart = runStart; } } else run = 0;
+  for (const x of games) {
+    if (x.place === 1) { if (!run) runStart = x; run++; if (run > bestRun) { bestRun = run; bestStart = runStart; } } else run = 0;
   }
-  if (bestRun >= 2) records.push({ id: 'win_streak', value: bestRun, holders: [], where: where(bestStart.r) });
+  if (bestRun >= 2) records.push({ id: 'win_streak', value: bestRun, holders: [], where: bestStart.where });
+  return { players, records, pairs: finishPairs(pairs), games: games.length, sessions: slices.length };
+}
 
-  return { players, records, pairs: pairsOf(rows), games: games.size, sessions: sessions.length };
+/** Compatibility/reference: the hall straight from all rows (used by tests; production merges stored slices). */
+export function hallOfFame(rows, sessions) {
+  const bySession = new Map();
+  for (const r of rows) { if (!bySession.has(r.session_id)) bySession.set(r.session_id, []); bySession.get(r.session_id).push(r); }
+  return mergeHall(sessions.map((s) => ({ session_id: s.session_id, start_at: s.start_at, slice: hallSlice(bySession.get(s.session_id) || [], s.summary) })));
 }
 
 /**
  * Every two members who played on the same team: games and wins together, and head-to-head
  * (in how many shared games each one got more kills). a < b by account id, so each pair appears once.
  */
-export function pairsOf(rows) {
+function pairAcc(rows) {
   const teams = new Map();
   for (const r of rows) {
     const k = `${r.match_id}|${r.team_id}`;
     if (!teams.has(k)) teams.set(k, []);
     teams.get(k).push(r);
   }
-  const P = new Map();
+  const P = {};
   for (const team of teams.values()) {
     for (let i = 0; i < team.length; i++) {
       for (let j = i + 1; j < team.length; j++) {
         let [x, y] = [team[i], team[j]];
         if (x.account_id > y.account_id) [x, y] = [y, x];
         const k = `${x.account_id}|${y.account_id}`;
-        if (!P.has(k)) P.set(k, { a: x.account_id, b: y.account_id, games: 0, wins: 0, place: 0, ka: 0, kb: 0, kills_a: 0, kills_b: 0 });
-        const p = P.get(k);
+        const p = (P[k] ||= { a: x.account_id, b: y.account_id, games: 0, wins: 0, place: 0, ka: 0, kb: 0, kills_a: 0, kills_b: 0 });
         p.games++; p.place += x.place; if (x.place === 1) p.wins++;
         p.kills_a += x.kills; p.kills_b += y.kills;
         if (x.kills > y.kills) p.ka++; else if (y.kills > x.kills) p.kb++;
       }
     }
   }
-  return [...P.values()].map((p) => ({ ...p, win_rate: Math.round((p.wins / p.games) * 100), avg_place: Math.round((p.place / p.games) * 10) / 10 }))
+  return P;
+}
+function finishPairs(map) {
+  return [...map.values()].map((p) => ({ ...p, win_rate: Math.round((p.wins / p.games) * 100), avg_place: Math.round((p.place / p.games) * 10) / 10 }))
     .sort((x, y) => y.games - x.games);
+}
+export function pairsOf(rows) {
+  return finishPairs(new Map(Object.entries(pairAcc(rows))));
 }

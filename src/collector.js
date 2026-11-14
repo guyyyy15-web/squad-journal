@@ -161,17 +161,31 @@ export async function archiveTelemetry(env, settings, limit) {
 }
 
 /** Recompute sessions from stored matches; writes only what changed. */
-export async function rebuildSessions(env, settings) {
+/**
+ * Only the recent past can change: PUBG returns at most 14 days of history (new matches, a new member's
+ * backfill). So by default only sessions from the last WINDOW are rebuilt, plus any session that reaches into
+ * it (taken whole), which keeps the cost flat as history grows. `full` rebuilds everything (settings or
+ * membership changes).
+ */
+const WINDOW = 16 * DAY;
+export async function rebuildSessions(env, settings, { full = false } = {}) {
   const db = env.DB;
+  let cutoff = 0;
+  if (!full) {
+    const recent = Date.now() - WINDOW;
+    const first = await db.prepare('SELECT MIN(start_at) AS s FROM sessions WHERE end_at >= ?').bind(recent).first('s');
+    cutoff = Math.min(first ?? recent, recent);
+  }
   const [matches, together, prev, old] = await db.batch([
-    db.prepare('SELECT match_id, created_at, duration, mode, is_custom FROM matches'),
+    db.prepare('SELECT match_id, created_at, duration, mode, is_custom FROM matches WHERE created_at >= ?').bind(cutoff),
     // members per (match, team) — recomputed so a guest who later joins counts retroactively
     db.prepare(
       `SELECT p.match_id, p.team_id, json_group_array(p.account_id) AS ids FROM participants p
-       JOIN members mb ON mb.account_id = p.account_id AND mb.active = 1 GROUP BY p.match_id, p.team_id`,
-    ),
-    db.prepare('SELECT match_id, session_id FROM session_matches'),
-    db.prepare('SELECT session_id, start_at, end_at, match_count, members FROM sessions'),
+       JOIN members mb ON mb.account_id = p.account_id AND mb.active = 1
+       WHERE p.match_id IN (SELECT match_id FROM matches WHERE created_at >= ?) GROUP BY p.match_id, p.team_id`,
+    ).bind(cutoff),
+    db.prepare('SELECT sm.match_id, sm.session_id FROM session_matches sm JOIN matches m ON m.match_id = sm.match_id WHERE m.created_at >= ?').bind(cutoff),
+    db.prepare('SELECT session_id, start_at, end_at, match_count, members FROM sessions WHERE start_at >= ?').bind(cutoff),
   ]);
   const byMatch = new Map();
   for (const t of together.results) {
@@ -197,7 +211,7 @@ export async function rebuildSessions(env, settings) {
     stmts.push(db.prepare(
       `INSERT INTO sessions (session_id, start_at, end_at, match_count, members) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET start_at = excluded.start_at, end_at = excluded.end_at,
-         match_count = excluded.match_count, members = excluded.members, summary_json = NULL`,
+         match_count = excluded.match_count, members = excluded.members, summary_json = NULL, ai_recap = NULL`,
     ).bind(s.session_id, s.start_at, s.end_at, s.match_count, members));
     stmts.push(db.prepare('DELETE FROM session_matches WHERE session_id = ?').bind(s.session_id));
     for (const id of s.match_ids) {
@@ -217,8 +231,15 @@ export async function rebuildSessions(env, settings) {
   if (stmts.length) {
     await db.batch(stmts);
     await saveTotals(db);
+    await markWarm(db);
   }
   return { sessions: sessions.length, changed: stmts.length };
+}
+
+/** Ask the background warm-up (index.js warm()) to prepare summaries, recaps and the hall of fame. */
+export async function markWarm(db) {
+  await db.prepare(`INSERT INTO settings (key, value) VALUES ('poll_state', '{"warm":true}')
+    ON CONFLICT(key) DO UPDATE SET value = json_set(value, '$.warm', json('true'))`).run();
 }
 
 /** Season totals for the home page, recomputed only when sessions change (home then reads one row). */
@@ -294,6 +315,7 @@ export async function collect(env, kind, doPoll, st) {
     if (next.dirty && !d.stored && q.results[0].n <= 2) {
       info.sessions = (await rebuildSessions(env, settings)).sessions;
       next.dirty = false;
+      next.warm = true; // rebuildSessions set it in the DB; keep it in the state we are about to write
     }
     if (next.dirty) next.pending++;
     if (doPoll) {
