@@ -56,6 +56,7 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .mdl{background:linear-gradient(180deg,#1b2019,#13171a);border:1px solid #2b3326;border-radius:12px;padding:12px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start}
 .mdl .medal{grid-row:span 3}.mdl h3{font:15px/1.2 var(--stencil);color:var(--gold2);letter-spacing:.02em;margin-top:2px}
 .mdl p{margin:0;font-size:13px;color:var(--muted);grid-column:2}.mdl .row{gap:4px}
+.mdl{min-width:0}.mdl>*{min-width:0}.mdl .who{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .moments{display:grid;gap:10px}
 .mom{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:linear-gradient(90deg,rgba(242,169,0,.10),transparent 60%),var(--panel);border:1px solid rgba(242,169,0,.3);border-radius:12px;padding:12px;cursor:pointer;color:inherit;text-align:start;font:inherit;width:100%;min-height:auto;font-weight:400}
 .mom .mt{font:16px/1 var(--stencil);color:var(--gold2);letter-spacing:.04em}.mom .md{font-size:14px;margin-top:4px}.mom .mw{font:12px var(--mono);color:var(--dim);margin-top:4px}
