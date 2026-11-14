@@ -180,7 +180,7 @@
     var half = Math.min(view[2] / 2, text.length * u * 0.7);
     x = Math.max(view[0] + half + u, Math.min(view[0] + view[2] - half - u, x));
     y = Math.max(view[1] + u * 3, y);
-    return '<text x="' + x + '" y="' + y + '" font-size="' + (u * 2.6) + '" text-anchor="middle" fill="' + color + '" stroke="#05070a" stroke-width="' + (u * 0.7) + '" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(text) + '</text>';
+    return '<text x="' + x + '" y="' + y + '" font-size="' + (u * 1.9) + '" text-anchor="middle" fill="' + color + '" stroke="#05070a" stroke-width="' + (u * 0.7) + '" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(text) + '</text>';
   }
   function shortW(e) { return e.w ? ' · ' + weapon(e.w) + (e.d ? ' ' + e.d + 'm' : '') : ''; }
   // opts: { clip: [s, e], label, next: fn } — clip mode loops the window (or moves on to `next`).
@@ -206,13 +206,13 @@
     svg.push('<circle class="zw" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" r="0"/>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 6) + '</g><text class="pmn" y="5.4" font-size="2.3" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
+    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 6) + '</g><text class="pmn" y="5" font-size="1.75" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
       + '<div class="hud"><b class="clock">0:00</b><span class="h-sq"></span><span class="h-left"></span><span class="h-ph"></span></div><div class="h-sm hide">SLOW-MO</div>'
       + '<ol class="kf" aria-live="polite"></ol>'
-      + '<div class="tools"><button type="button" class="th" aria-label="' + esc(S.theater) + '">⛶</button><button type="button" class="cl">✕ ' + esc(S.stop) + '</button></div>';
+      + '<div class="tools"><button type="button" class="th" aria-label="' + esc(S.theater) + '">⛶</button><button type="button" class="cl" aria-label="' + esc(S.stop) + '">✕</button></div>';
 
     var bar = $('[data-rbar="' + match.id + '"]');
     bar.classList.remove('hide');
@@ -375,7 +375,7 @@
       }
       fx.innerHTML = fxh.join('');
       lb.innerHTML = lbh.join('');
-      var shown = recent.slice(-4);
+      var shown = recent.slice(-2);
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
       if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
     }
@@ -426,21 +426,21 @@
         lastHp[i] = val;
       });
     }
-    function endFight() { phase = null; curW = null; fight = null; hideCard(); if (battle) battle.classList.add('hide'); }
+    function endFight() { phase = null; curW = null; fight = null; hideCard(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
     var lastBattle = 0;
     function frame(ts) {
       var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;
       if (director && model && playing) {
         if (phase === 'intro' || phase === 'result') {
           if (ts < phaseUntil) { draw(realDt); raf = requestAnimationFrame(frame); return; }
-          if (phase === 'intro') { phase = 'fight'; hideCard(); showBattle(); } else endFight();
+          if (phase === 'intro') { phase = 'fight'; hideCard(); showBattle(); el.classList.add('fighting'); } else endFight();
         }
         var cw = windows.filter(function (x) { return t >= x.s && t <= x.e; })[0];
         if (cw && !introduced[cw.s] && phase !== 'fight') {
-          introduced[cw.s] = 1; curW = cw; fight = fightOf(model, cw); phase = 'intro'; phaseUntil = ts + 2800; showCard('intro');
+          introduced[cw.s] = 1; curW = cw; fight = fightOf(model, cw); phase = 'intro'; phaseUntil = ts + 2200; showCard('intro');
           draw(realDt); raf = requestAnimationFrame(frame); return;
         }
-        if (phase === 'fight' && curW && t >= curW.e) { phase = 'result'; phaseUntil = ts + 2800; if (battle) battle.classList.add('hide'); showCard('result'); draw(realDt); raf = requestAnimationFrame(frame); return; }
+        if (phase === 'fight' && curW && t >= curW.e) { phase = 'result'; phaseUntil = ts + 2200; if (battle) battle.classList.add('hide'); showCard('result'); draw(realDt); raf = requestAnimationFrame(frame); return; }
         if (phase === 'fight' && ts - lastBattle > 120) { lastBattle = ts; updateBattle(); }
       }
       var slow = slowmo && actionNear(d, match.ours, t);
