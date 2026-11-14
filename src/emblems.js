@@ -28,7 +28,7 @@ export function patch(key, color = '#9aa3b5', size = 28, title = '') {
   const c = String(color).replace(/[^#\w(),.% ]/g, '');
   return `<svg xmlns="http://www.w3.org/2000/svg" class="patch" width="${size}" height="${Math.round(size * 1.12)}" viewBox="0 0 32 36" aria-hidden="${title ? 'false' : 'true'}"${title ? ` role="img" aria-label="${title.replace(/"/g, '')}"` : ''}>`
     + `<path d="M16 1.2 30 5.6v11c0 9-5.8 15.2-14 18.2C7.8 31.8 2 25.6 2 16.6v-11L16 1.2Z" fill="#161b14" stroke="${c}" stroke-width="2.2"/>`
-    + `<path d="M16 4.4 27 7.9v8.7c0 7.2-4.6 12.3-11 14.9C9.6 28.9 5 23.8 5 16.6V7.9l11-3.5Z" fill="none" stroke="${c}" stroke-opacity=".35" stroke-width=".8"/>`
+    + `<path class="stitch" d="M16 4.4 27 7.9v8.7c0 7.2-4.6 12.3-11 14.9C9.6 28.9 5 23.8 5 16.6V7.9l11-3.5Z" fill="none" stroke="${c}" stroke-opacity=".55" stroke-width=".8" stroke-dasharray="1.3 .9"/>`
     + `<g transform="translate(6.4 7.2) scale(.8)" fill="${c}" color="${c}">${EMBLEMS[key] || EMBLEMS.star}</g></svg>`;
 }
 

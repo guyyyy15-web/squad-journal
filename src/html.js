@@ -7,6 +7,18 @@ import { EMBLEMS, EMBLEM_KEYS, emblemOf, patch, medal } from './emblems.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+// ---- Grit: procedural textures (SVG feTurbulence → data URLs), no image files. ----
+const svgUrl = (svg) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+const turb = (w, freq, oct, matrix, seed = 3) => svgUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${w}"><filter id="n" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${oct}" seed="${seed}" stitchTiles="stitch"/><feColorMatrix values="${matrix}"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>`);
+/** fine light grain */
+export const GRAIN = turb(180, 0.9, 2, '0 0 0 0 1 0 0 0 0 1 0 0 0 0 .95 1.4 0 0 0 -.78');
+/** dark specks / dust */
+export const DUST = turb(220, 0.65, 2, '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.6 0 -.95', 7);
+/** brown mud blotches */
+export const MUD = turb(520, 0.011, 4, '0 0 0 0 .34 0 0 0 0 .25 0 0 0 0 .14 3.4 0 0 0 -1.62', 11);
+/** worn mask: mostly opaque with chipped holes (for stencil text, tape, stamps) */
+export const WORN = turb(240, 0.45, 2, '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -12 0 0 0 8.4', 5);
+
 const CSS = `
 :root{--bg:#0a0c0f;--panel:#12161c;--panel2:#1a1f27;--line:#262d37;--text:#eef1f5;--muted:#8d97a5;--dim:#5d6672;
  --gold:#f2a900;--gold2:#ffcf4d;--green:#4caf6a;--red:#e5383b;--blue:#3b8beb;--khaki:#b9a77a;--olive:#4b5320;--r:14px;
@@ -123,6 +135,28 @@ input:focus{outline:2px solid var(--gold);outline-offset:1px}
 .share{position:sticky;bottom:max(12px,env(safe-area-inset-bottom));display:flex;gap:8px;margin-top:20px;z-index:2}
 .share .btn{flex:1;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .foot{margin-top:36px;text-align:center;font-size:12px;color:var(--dim)}
+
+/* ---- grit pass: worn stencil, mud, tape, stamps ---- */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background:${GRAIN};opacity:.07}
+body::after{content:"";position:fixed;inset:auto 0 0 0;height:45vh;pointer-events:none;z-index:0;background:${MUD} 0 0/520px;opacity:.22;-webkit-mask-image:linear-gradient(to top,#000,transparent);mask-image:linear-gradient(to top,#000,transparent)}
+main{position:relative;z-index:1}
+h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${WORN};mask-size:240px}
+.hz{height:12px;border-radius:1px;transform:rotate(-.7deg);margin:2px -6px 0;box-shadow:0 3px 8px rgba(0,0,0,.45);
+ background:repeating-linear-gradient(-45deg,#e9a300 0 12px,#141619 12px 24px);-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${WORN};mask-size:240px}
+.panel,.mdl,.mom{background-image:${DUST},linear-gradient(180deg,var(--panel2),var(--panel));overflow:hidden}
+.mdl{background-image:${DUST},linear-gradient(180deg,#1b2019,#13171a)}
+.mom{background-image:${DUST},linear-gradient(90deg,rgba(242,169,0,.10),transparent 60%),linear-gradient(var(--panel),var(--panel))}
+.panel::after,.mdl::after{content:"";position:absolute;pointer-events:none;width:75%;height:85%;inset:auto auto -30% -20%;background:${MUD} 0 0/520px;opacity:.5;
+ -webkit-mask-image:radial-gradient(closest-side,#000,transparent);mask-image:radial-gradient(closest-side,#000,transparent)}
+.panel:nth-of-type(2n)::after{inset:auto -25% -35% auto}.panel:nth-of-type(3n)::after{inset:-40% -25% auto auto;opacity:.32}
+.panel>*,.mdl>*{position:relative;z-index:1}.panel>.crown,.panel>.stamp{position:absolute;z-index:2}
+.stamp{position:relative;margin-inline-start:auto;transform:rotate(-8deg);font:18px/1 var(--stencil);letter-spacing:.06em;color:#d8433b;border:3px solid currentColor;border-radius:6px;padding:6px 9px 4px;opacity:.9;pointer-events:none;
+ -webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${WORN};mask-size:240px;mix-blend-mode:screen;direction:ltr}
+.stamp.gold{color:var(--gold2)}
+.crown{font:15px/1 var(--stencil);letter-spacing:.08em;background:none;color:#d8433b;border:3px solid currentColor;transform:rotate(-6deg);top:-6px;padding:5px 9px 3px;
+ -webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${WORN};mask-size:240px}
+.st{background-image:${DUST};background-color:rgba(0,0,0,.28)}
+.patch .stitch{stroke-dasharray:1.3 .9}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -186,14 +220,15 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
     const mvp = sum?.carry?.[0] && byId.get(sum.carry[0].account_id);
     const tm = sum?.team;
     const maps = sum ? [...new Set(sum.matches.map((m) => mapName(m.map)))] : [];
+    const stamp = tm?.wins ? `<span class="stamp">CHICKEN DINNER${tm.wins > 1 ? ` ×${tm.wins}` : ''}</span>` : '';
     return `<a class="panel" href="/s/${esc(s.session_id)}">
       <div class="row sp"><span class="tag">DEBRIEF ${fmtDate(s.start_at)}</span><span class="muted small num" dir="ltr">${fmtTime(s.start_at)}–${fmtTime(s.end_at)}</span></div>
       <h3 style="font-size:24px;margin-top:6px">${esc(fmtDay(lang, s.start_at))}</h3>
       <div class="muted small">${esc(t.games(s.match_count))} · ${dur(s.end_at - s.start_at)}</div>
-      ${sum ? `<div class="row" style="margin-top:12px;gap:6px">${sum.matches.map((m) => placeBadge(m.place)).join('')}</div>` : ''}
+      ${sum ? `<div class="row" style="margin-top:12px;gap:6px">${sum.matches.map((m) => placeBadge(m.place)).join('')}${stamp}</div>` : ''}
       <div class="row" style="margin-top:12px">${ppl.map(who).join('')}</div>
       ${tm ? `<div class="stats">
-        <div class="st ${tm.wins ? 'gold' : ''}"><b>${tm.wins ? '🍗'.repeat(Math.min(tm.wins, 3)) : '0'}</b><span>${esc(t.chickens)}</span></div>
+        <div class="st ${tm.wins ? 'gold' : ''}"><b>${tm.wins ? `🍗${tm.wins > 1 ? `×${tm.wins}` : ''}` : '0'}</b><span>${esc(t.chickens)}</span></div>
         <div class="st"><b>#${tm.best_place}</b><span>${esc(t.best)}</span></div>
         <div class="st"><b>${tm.kills}</b><span>${esc(t.kills)}</span></div>
         <div class="st"><b>${tm.damage.toLocaleString('en')}</b><span>${esc(t.damage)}</span></div></div>` : ''}
@@ -229,10 +264,11 @@ const METAL = { killer: 'gold', sniper: 'gold', angel: 'gold', headshot: 'gold',
 /** What the share image shows (always English: link previews are fetched without a language cookie). */
 export function ogInfo(session, summary, byId, clan) {
   const mvp = byId.get(summary.carry[0]?.account_id);
-  return { date: fmtDay('en', session.start_at), time: `${fmtTime(session.start_at)}–${fmtTime(session.end_at)}`, team: summary.team,
-    places: summary.matches.map((m) => m.place), clan: clan?.name ? { tag: clan.tag, name: clan.name } : null,
-    mvp: mvp ? { nick: mvp.nickname, emblem: emblemOf(mvp), color: mvp.color } : null,
-    awards: summary.awards.slice(0, 3).map((a) => ({ id: a.id, title: AWARD_TITLES[a.id], who: a.holders.map((id) => byId.get(id)?.nickname).filter(Boolean).join(' + ') })) };
+  const t = summary.team;
+  const short = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' }).format(session.start_at).replace(',', '').toUpperCase();
+  return { design: 2, short, games: t.games, kills: t.kills, wins: t.wins, best: t.best_place,
+    clan: clan?.name ? { tag: clan.tag, name: clan.name } : null,
+    mvp: mvp ? { nick: mvp.nickname, emblem: emblemOf(mvp), color: mvp.color } : null };
 }
 
 /** Session page: hero, highlights, who carried, medals, squad logs, engagements with maps + replay. */
@@ -247,9 +283,9 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   const hero = `<div style="margin:22px 0 4px"><span class="tag">MISSION DEBRIEF // ${fmtDate(session.start_at)}${clan?.tag ? ` // [${esc(clan.tag)}]` : ''}</span>
     <h1 style="margin-top:8px;font-family:var(--head)">${esc(day)}</h1>
     <div class="muted num"><span dir="ltr">${fmtTime(session.start_at)}–${fmtTime(session.end_at)}</span> · ${esc(t.games(tm.games))} · ${dur(session.end_at - session.start_at)}</div>
-    <div class="row" style="margin-top:12px;gap:6px">${summary.matches.map((m) => placeBadge(m.place)).join('')}</div></div>
+    <div class="row" style="margin-top:12px;gap:6px">${summary.matches.map((m) => placeBadge(m.place)).join('')}${tm.wins ? `<span class="stamp" style="font-size:20px">CHICKEN DINNER${tm.wins > 1 ? ` ×${tm.wins}` : ''}</span>` : ''}</div></div>
     <div class="stats">
-      <div class="st ${tm.wins ? 'gold' : ''}"><b>${tm.wins ? '🍗'.repeat(Math.min(tm.wins, 3)) : '0'}</b><span>${esc(t.chickens)}</span></div>
+      <div class="st ${tm.wins ? 'gold' : ''}"><b>${tm.wins ? `🍗${tm.wins > 1 ? `×${tm.wins}` : ''}` : '0'}</b><span>${esc(t.chickens)}</span></div>
       <div class="st"><b>#${tm.best_place}</b><span>${esc(t.bestPlace)}</span></div>
       <div class="st"><b>${tm.kills}</b><span>${esc(t.kills)}</span></div>
       <div class="st"><b>${tm.damage.toLocaleString('en')}</b><span>${esc(t.damage)}</span></div></div>
@@ -297,14 +333,14 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     matches: summary.matches.map((m) => ({ id: m.match_id, map: m.map, place: m.place, duration: m.duration, derived: derivedIds.get(m.match_id) || 0,
       ours: m.teams.flatMap((x) => x.players.map((p) => p.account_id)), names: Object.fromEntries(m.teams.flatMap((x) => x.players.map((p) => [p.account_id, p.name]))) })),
     og: ogInfo(session, summary, byId, clan),
-    ogArt: { mvp: mvp ? patch(emblemOf(mvp), mvp.color, 150) : '', medals: summary.awards.slice(0, 3).map((a) => medal(a.id, 70, METAL[a.id] || 'bronze')) },
+    ogArt: { mvp: mvp ? patch(emblemOf(mvp), mvp.color, 250) : '' },
     labels: { medicLog: t.medicLog, medicSub: t.medicSub, setupLog: t.setupLog, setupSub: t.setupSub, reviver: t.reviver, assister: t.assister, matchN: t.matchN(0).replace('0', '{n}') },
   };
   const ogDesc = S.en.sessionDesc(tm, mvp?.nickname);
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=14'], script: meScript,
+    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=16'], script: meScript,
   });
 }
 

@@ -398,7 +398,14 @@
     else if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { shareBtn.textContent = '✅ ' + S.copied; });
   };
 
-  // ---------- share image (OG): always English, left to right ----------
+  // ---------- share image (OG): always English, one story, a bit of mud ----------
+  // Less is more: date, one big stamp (chicken dinners or best finish), the MVP's patch. Grit is drawn
+  // procedurally with a PRNG seeded by the session id, so each card gets its own (stable) dirt.
+  function rng(seed) {
+    var h = 2166136261;
+    for (var i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return function () { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return (h >>> 0) / 4294967296; };
+  }
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
@@ -411,76 +418,111 @@
       i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     });
   }
+  /** Draw something on its own layer, wear it (irregular chips + scratches), then put it on the card. */
+  function worn(main, w, h, R, chips, paint, ox, oy, rot) {
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var x = c.getContext('2d');
+    paint(x);
+    x.globalCompositeOperation = 'destination-out';
+    for (var i = 0; i < chips; i++) {
+      var cx = R() * w, cy = R() * h, r = R() < 0.85 ? 0.8 + R() * 1.6 : 2.5 + R() * 3.5, n = 3 + (R() * 3 | 0);
+      x.globalAlpha = 0.6 + R() * 0.4; x.beginPath();
+      for (var k = 0; k < n; k++) { var a = k / n * 6.283 + R(); var rr = r * (0.5 + R()); x[k ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+      x.fill();
+    }
+    x.lineCap = 'round';
+    for (var j = 0; j < chips / 30; j++) { // scratches
+      var sx = R() * w, sy = R() * h, ang = -0.4 + R() * 0.8 + (R() < 0.5 ? 0 : 3.14), len = 12 + R() * 50;
+      x.globalAlpha = 0.5 + R() * 0.4; x.lineWidth = 0.6 + R() * 1.2;
+      x.beginPath(); x.moveTo(sx, sy); x.lineTo(sx + Math.cos(ang) * len, sy + Math.sin(ang) * len); x.stroke();
+    }
+    main.save(); main.translate(ox, oy); if (rot) main.rotate(rot); main.drawImage(c, 0, 0); main.restore();
+  }
+  /** A mud splat: irregular dark blob with spikes, then droplets flung in one direction. */
+  function mud(x, R, cx, cy, r, dirA) {
+    x.save();
+    for (var layer = 0; layer < 3; layer++) {
+      var rr0 = r * (1 - layer * 0.25), n = 22;
+      x.fillStyle = ['rgba(44,35,24,.92)', 'rgba(58,46,31,.85)', 'rgba(33,26,18,.9)'][layer];
+      x.beginPath();
+      for (var i = 0; i < n; i++) {
+        var a = i / n * 6.283, k = 0.62 + R() * 0.5; if (R() < 0.22) k *= 1.45;
+        var px = cx + Math.cos(a) * rr0 * k + (R() - 0.5) * r * 0.2, py = cy + Math.sin(a) * rr0 * k * 0.8;
+        x[i ? 'lineTo' : 'moveTo'](px, py);
+      }
+      x.closePath(); x.fill();
+    }
+    for (var j = 0; j < 60; j++) {
+      var b = dirA + (R() - 0.5) * 1.6, d = r * (0.8 + R() * 1.8), q = 1 + R() * (d < r * 1.4 ? 7 : 3.5);
+      x.fillStyle = 'rgba(' + (40 + R() * 22 | 0) + ',' + (32 + R() * 16 | 0) + ',' + (22 + R() * 10 | 0) + ',' + (0.75 + R() * 0.25) + ')';
+      x.beginPath(); x.ellipse(cx + Math.cos(b) * d, cy + Math.sin(b) * d * 0.8, q, q * (0.6 + R() * 0.4), b, 0, 6.283); x.fill();
+    }
+    x.restore();
+  }
   function drawOg(art) {
-    var o = SJ.og, W = 1200, H = 630, L = 64;
+    var o = SJ.og, W = 1200, H = 630, R = rng(SJ.session_id + o.short);
     var c = document.createElement('canvas'); c.width = W; c.height = H;
     var x = c.getContext('2d');
-    x.direction = 'ltr';
-    x.fillStyle = '#0a0c0f'; x.fillRect(0, 0, W, H);
-    var g = x.createRadialGradient(W * 0.2, -60, 10, W * 0.2, -60, 760);
-    g.addColorStop(0, 'rgba(242,169,0,.28)'); g.addColorStop(1, 'rgba(242,169,0,0)');
+    x.direction = 'ltr'; x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+    // ground: dark olive-black, warm light from the top left, vignette
+    x.fillStyle = '#0e100d'; x.fillRect(0, 0, W, H);
+    var g = x.createRadialGradient(300, 80, 20, 300, 80, 900);
+    g.addColorStop(0, 'rgba(242,169,0,.20)'); g.addColorStop(1, 'rgba(242,169,0,0)');
     x.fillStyle = g; x.fillRect(0, 0, W, H);
-    [[0, 14], [H - 14, 14]].forEach(function (b) {
-      x.save(); x.beginPath(); x.rect(0, b[0], W, b[1]); x.clip();
-      x.fillStyle = '#15181d'; x.fillRect(0, b[0], W, b[1]); x.fillStyle = '#f2a900';
-      for (var i = -40; i < W + 40; i += 28) { x.beginPath(); x.moveTo(i, b[0] + b[1]); x.lineTo(i + 14, b[0]); x.lineTo(i + 28, b[0]); x.lineTo(i + 14, b[0] + b[1]); x.fill(); }
-      x.restore();
-    });
-    x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+    var v = x.createRadialGradient(W / 2, H / 2, 260, W / 2, H / 2, 760);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.6)');
+    x.fillStyle = v; x.fillRect(0, 0, W, H);
+    mud(x, R, -10 + R() * 60, H + 30, 150, -0.75);
+    mud(x, R, W + 20, H - 40 - R() * 80, 110, 3.6);
+    for (var i = 0; i < 9000; i++) { x.fillStyle = R() < 0.5 ? 'rgba(255,255,255,' + (R() * 0.07) + ')' : 'rgba(0,0,0,' + (R() * 0.25) + ')'; x.fillRect(R() * W, R() * H, 1 + R() * 1.5, 1 + R() * 1.5); }
+    // brand
     var tag = (o.clan && o.clan.tag) || 'SQUAD';
-    x.font = '800 20px ui-monospace, Menlo, monospace';
-    var tw = x.measureText(tag).width + 28;
-    x.fillStyle = '#f2a900'; roundRect(x, L, 46, tw, 40, 8); x.fill();
-    x.fillStyle = '#111'; x.fillText(tag, L + 14, 74);
-    x.font = '30px "Black Ops One", sans-serif'; x.fillStyle = '#eef1f5';
-    x.fillText('SQUAD JOURNAL' + (o.clan ? '  ·  ' + o.clan.name : ''), L + tw + 16, 77);
-    x.font = '700 18px ui-monospace, Menlo, monospace'; x.fillStyle = '#5d6672'; x.fillText('MISSION DEBRIEF', L, 132);
-    x.font = '60px "Black Ops One", sans-serif'; x.fillStyle = '#fff'; x.fillText(o.date, L, 196);
-    x.font = '26px Rubik, sans-serif'; x.fillStyle = '#8d97a5'; x.fillText(o.time + '  ·  ' + o.team.games + ' games', L, 238);
-    var bx = L;
-    x.font = '700 24px ui-monospace, Menlo, monospace';
-    o.places.slice(0, 9).forEach(function (p) {
-      var t = '#' + p, w = Math.max(64, x.measureText(t).width + 28);
-      roundRect(x, bx, 262, w, 44, 10);
-      x.fillStyle = p === 1 ? '#f2a900' : '#1a1f27'; x.fill();
-      x.strokeStyle = p === 1 ? '#f2a900' : p <= 10 ? 'rgba(76,175,106,.8)' : '#2a313b'; x.lineWidth = 2; x.stroke();
-      x.fillStyle = p === 1 ? '#111' : p <= 10 ? '#9fe3b2' : '#8d97a5'; x.textAlign = 'center'; x.fillText(t, bx + w / 2, 292); x.textAlign = 'left';
-      bx += w + 10;
-    });
-    var stats = [[o.team.wins ? '🍗×' + o.team.wins : '0', 'CHICKEN DINNERS', !!o.team.wins], ['#' + o.team.best_place, 'BEST PLACE'], [String(o.team.kills), 'KILLS'], [o.team.damage.toLocaleString('en'), 'DAMAGE']];
-    stats.forEach(function (s, i) {
-      var w = 172, sx = L + i * (w + 14);
-      roundRect(x, sx, 330, w, 104, 14); x.fillStyle = s[2] ? 'rgba(242,169,0,.12)' : 'rgba(255,255,255,.04)'; x.fill();
-      x.strokeStyle = s[2] ? 'rgba(242,169,0,.6)' : '#262d37'; x.lineWidth = 2; x.stroke();
-      x.textAlign = 'center'; x.fillStyle = s[2] ? '#ffcf4d' : '#fff'; x.font = '44px "Secular One", sans-serif'; x.fillText(s[0], sx + w / 2, 388);
-      x.fillStyle = '#8d97a5'; x.font = '700 14px ui-monospace, Menlo, monospace'; x.fillText(s[1], sx + w / 2, 418); x.textAlign = 'left';
-    });
-    if (o.mvp) {
-      if (art.mvp) x.drawImage(art.mvp, 905, 120, 190, 213);
-      x.textAlign = 'center';
-      x.font = '700 16px ui-monospace, Menlo, monospace'; x.fillStyle = '#f2a900'; x.fillText('CARRIED THE SQUAD', 1000, 368);
-      x.font = '34px "Black Ops One", sans-serif'; x.fillStyle = '#fff'; x.fillText(o.mvp.nick, 1000, 410); x.textAlign = 'left';
+    x.font = '800 22px ui-monospace, Menlo, monospace';
+    var tw = x.measureText(tag).width + 26;
+    x.fillStyle = '#b9a77a'; roundRect(x, 64, 52, tw, 40, 6); x.fill();
+    x.fillStyle = '#111'; x.fillText(tag, 77, 80);
+    x.font = '28px "Black Ops One", sans-serif'; x.fillStyle = '#d9dccf';
+    x.fillText(o.clan ? o.clan.name.toUpperCase() : 'SQUAD JOURNAL', 64 + tw + 14, 82);
+    // the date, big and worn
+    worn(x, 760, 150, R, 700, function (t) {
+      t.font = '118px "Black Ops One", sans-serif'; t.fillStyle = '#f4f1e8'; t.textBaseline = 'alphabetic';
+      var size = 118; while (t.measureText(o.short).width > 740 && size > 70) { size -= 4; t.font = size + 'px "Black Ops One", sans-serif'; }
+      t.fillText(o.short, 4, 120);
+    }, 60, 112, 0);
+    x.font = '700 30px ui-monospace, Menlo, monospace'; x.fillStyle = '#b9a77a';
+    x.fillText(o.games + ' GAMES  ·  ' + o.kills + ' KILLS', 66, 300);
+    // the stamp: the one thing the night is remembered for
+    var win = o.wins > 0;
+    var line1 = win ? 'WINNER WINNER' : 'BEST FINISH', line2 = win ? 'CHICKEN DINNER' + (o.wins > 1 ? ' ×' + o.wins : '') : '#' + o.best;
+    worn(x, 640, 190, R, 900, function (t) {
+      var col = win ? '#e0453c' : '#d9c48a';
+      t.strokeStyle = col; t.fillStyle = col; t.lineWidth = 7; roundRect(t, 6, 6, 628, 178, 14); t.stroke();
+      t.lineWidth = 2.5; roundRect(t, 18, 18, 604, 154, 9); t.stroke();
+      t.textAlign = 'center';
+      t.font = '700 26px ui-monospace, Menlo, monospace'; t.fillText(line1, 320, 62);
+      var s2 = 64; t.font = s2 + 'px "Black Ops One", sans-serif';
+      while (t.measureText(line2).width > 560 && s2 > 30) { s2 -= 2; t.font = s2 + 'px "Black Ops One", sans-serif'; }
+      t.fillText(line2, 320, 140);
+    }, 70, 350, -0.07);
+    // MVP patch, slapped on at an angle, with a strip of masking tape and the name
+    if (o.mvp && art.mvp) {
+      x.save(); x.translate(980, 250); x.rotate(0.12);
+      x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = 24; x.shadowOffsetY = 10;
+      x.drawImage(art.mvp, -125, -140, 250, 280); x.restore();
+      worn(x, 200, 46, R, 60, function (t) { t.fillStyle = 'rgba(222,208,170,.92)'; t.fillRect(0, 0, 200, 46); t.fillStyle = '#3a3226'; t.font = '700 20px ui-monospace, Menlo, monospace'; t.textAlign = 'center'; t.fillText('CARRIED BY', 100, 30); }, 884, 104, -0.1);
+      x.textAlign = 'center'; x.font = '44px "Black Ops One", sans-serif'; x.fillStyle = '#fff';
+      var nick = o.mvp.nick; while (x.measureText(nick).width > 330 && nick.length > 3) nick = nick.slice(0, -1);
+      x.shadowColor = 'rgba(0,0,0,.8)'; x.shadowBlur = 8; x.fillText(nick, 985, 448); x.shadowBlur = 0; x.textAlign = 'left';
     }
-    var mx0 = L;
-    o.awards.forEach(function (a, i) {
-      if (art.medals[i]) x.drawImage(art.medals[i], mx0, 466, 52, 70);
-      x.font = '21px "Black Ops One", sans-serif'; x.fillStyle = '#ffcf4d'; x.fillText(a.title, mx0 + 62, 498);
-      x.font = '22px Rubik, sans-serif'; x.fillStyle = '#c9d0da';
-      var who = a.who; while (x.measureText(who).width > 290 && who.length > 4) who = who.slice(0, -2);
-      x.fillText(who, mx0 + 62, 530);
-      mx0 += 362;
-    });
     return c;
   }
   function makeOg() {
-    var art = SJ.ogArt || { mvp: '', medals: [] };
-    return Promise.all([img(art.mvp)].concat(art.medals.map(img))).then(function (imgs) {
-      return drawOg({ mvp: imgs[0], medals: imgs.slice(1) });
-    });
+    var art = SJ.ogArt || { mvp: '' };
+    return img(art.mvp).then(function (m) { return drawOg({ mvp: m }); });
   }
   function uploadOg() {
     if (SJ.ogReady || !document.fonts) return;
-    Promise.all([document.fonts.load('60px "Black Ops One"'), document.fonts.load('44px "Secular One"'), document.fonts.load('22px Rubik')]).then(makeOg).then(function (c) {
+    Promise.all([document.fonts.load('60px "Black Ops One"')]).then(makeOg).then(function (c) {
       c.toBlob(function (b) {
         if (!b) return;
         fetch('/api/og/' + encodeURIComponent(SJ.session_id) + '?v=' + encodeURIComponent(SJ.ogVer), { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: b })

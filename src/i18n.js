@@ -48,7 +48,7 @@ export const S = {
     legend: ['Landing', 'Death', 'Our kill', 'Final circle', 'Flight path'],
     share: 'Share with the squad', copied: 'Link copied', notFound: 'This session does not exist 🤷', back: 'Back to all sessions',
     kd: (k, d, kn, r) => `${k} kills · ${d} damage · ${kn} knocks · ${r} revives`,
-    sessionDesc: (t, mvp) => `${t.games} games · ${t.wins ? `${t.wins} chicken dinner${t.wins > 1 ? 's' : ''} 🍗 · ` : `best #${t.best_place} · `}${t.kills} kills${mvp ? ` · ${mvp} carried` : ''}`,
+    sessionDesc: (t, mvp) => `${t.wins ? `🍗 ${t.wins > 1 ? `${t.wins} chicken dinners` : 'Chicken dinner'}` : `Best finish #${t.best_place}`} · ${t.kills} kills in ${t.games} games${mvp ? ` · ${mvp} carried the squad` : ''}`,
     siteDesc: 'Our PUBG squad journal: every session, medal and record',
     squadLogs: 'Squad logs', medicLog: 'Medic log', medicSub: 'who revived whom', setupLog: 'Set-ups', setupSub: 'who assisted whose kill',
     reviver: 'reviver ↓ / revived →', assister: 'assist ↓ / killer →',
