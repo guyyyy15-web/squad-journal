@@ -65,3 +65,26 @@ test('actionWindows chains nearby action into firefights and skips lone events',
   assert.deepEqual([w[1].deaths, w[1].kills, w[1].teams], [1, 1, [4]]);
   assert.equal(typeof new Function(`return (${actionWindows.toString()})`)(), 'function');
 });
+
+import { battleModel, hpAt, gearAt, fightOf } from '../src/replay.js';
+test('battle model: HP over time, gear, and a fight summary from real telemetry', () => {
+  const tele = JSON.parse(readFileSync(new URL('./fixtures/telemetry-squad.json', import.meta.url)));
+  const OURS = ['account.f4aed77befae474187ef476ca3715ac3', 'account.4076bb8d31b84d9dbabf382401b33766', 'account.f3d6b4266a824ab99e9c90ef2e60003f'];
+  const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
+  const m = battleModel(d, OURS);
+  assert.equal(m.ourIdx.size, 3);
+  // someone of ours took damage: HP drops below 100, then a knock → DOWN, then KIA
+  const victim = d.dmg.find((x) => m.ourIdx.has(x[2]))[2];
+  const first = m.dmg.find((x) => x.v === victim);
+  assert.equal(hpAt(m, victim, first.t - 0.1).hp, 100);
+  assert.equal(hpAt(m, victim, first.t).hp, first.hp);
+  const death = d.events.find((e) => e.k === 'kill' && e.v === d.pp[victim][0]);
+  if (death) assert.equal(hpAt(m, victim, death.t + 1).state, 2);
+  const g = gearAt(m, victim, 1500);
+  assert.ok(g.helmet >= 0 && g.vest >= 0 && Array.isArray(g.guns));
+  const w = actionWindows(d, OURS)[0] || { s: 0, e: 2000 };
+  const f = fightOf(m, w);
+  assert.ok(f.us.length >= 1 && f.them.length <= 4);
+  assert.ok(f.dealt >= 0 && f.taken >= 0 && (f.dealt + f.taken) > 0);
+  for (const fn of [battleModel, hpAt, gearAt, fightOf]) assert.equal(typeof new Function(`return (${fn.toString()})`)(), 'function');
+});

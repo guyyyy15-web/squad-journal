@@ -47,9 +47,16 @@ test('matrices: revives and set-ups (assists + knock for a teammate)', () => {
   assert.deepEqual(m.setups, { A: { B: 1 }, C: { B: 1 } });
 });
 
-test('real telemetry: v4 fields (enemy squads) and moments run', () => {
+test('real telemetry: v5 fields (enemies, damage, HP, gear) and moments run', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
-  assert.equal(d.v, 4);
+  assert.equal(d.v, 5);
+  // director data: damage with HP after the hit (never negative), heals and gear for the fighters
+  assert.ok(d.dmg.length > 10 && d.dmg.every((x) => x[5] >= 0 && x[5] <= 100 && x[3] > 0));
+  assert.ok(d.dmg.some((x) => x[5] < 100));
+  assert.ok(d.heal.length > 0 && d.gear.length > 0);
+  assert.ok(d.gear.some((g) => g[2] === 1 && g[3] >= 1), 'vest levels');
+  const ourIdx = new Set(d.pp.map((p, i) => (OURS.includes(p[0]) ? i : -1)).filter((i) => i >= 0));
+  assert.ok(d.dmg.every((x) => ourIdx.has(x[1]) || ourIdx.has(x[2])), 'only fights involving us');
   // enemy squads: names, damage both ways, our kills match the kill events by team
   assert.ok(d.enemies.length >= 1);
   const ourKillsByTeam = {};

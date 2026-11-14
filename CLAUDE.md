@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 4: v3 added the `alive` series, v4 enemy squads + attacker team `at`). Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 5: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3). Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
@@ -61,6 +61,10 @@ GitHub does **not** deploy.
 - **Highlights are clips:** `actionWindows` (replay.js) chains our kills/knocks/deaths/revives ≤ 12 s apart into
   FIREFIGHT windows (score ≥ 5); moments inside a window become its tags. Cards open the replay in clip mode
   (loop, ⏭ next); the reel plays the top clips in order; "Action only" skips quiet stretches in a full replay.
+- **Director** (replay): at each firefight an ENGAGEMENT card (HP, helmet/vest, guns per fighter), the fight in slow
+  motion with a live battle panel (HP bars, DOWN/KIA), combo damage numbers, tracers, enemy markers and a combat
+  camera, then a RESULT card (dealt/taken, kills, MVP). Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
+  `fightOf`, tested); RPG look uses the Press Start 2P font. Grid columns must be `minmax(0,1fr)` or they overflow.
 - **Uploads from the page:** `keepalive` shares a 64 KB budget across in-flight requests; always fall back to a
   plain fetch (a page that finds an older derived version re-analyses anyway).
 - **Client scripts** in `src/client/` are bundled as text and served from `/app/`. Bump the `?v=` in the page

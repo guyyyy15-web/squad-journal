@@ -108,7 +108,7 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .match.theater{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;overflow-y:auto;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));background:#07090c}
 .match.theater .map{margin:8px auto 0;width:min(100%,calc(100vh - 190px));border:1px solid var(--line);border-radius:10px}
 .match.theater .feed,.match.theater table,.match.theater .legend,.match.theater .winner{display:none}
-html.noscroll,html.noscroll body{overflow:hidden}html.noscroll .share{display:none}
+html.noscroll,html.noscroll body{overflow:hidden}html.noscroll .share,html.replaying .share{display:none}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:10px}
 .feed{margin:10px 0 0;padding:0;list-style:none;font-size:13px}
 .feed li{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px dashed var(--line)}
@@ -195,11 +195,38 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .enemies .ek{color:#ff8a8a}.enemies .ed{color:#fff;background:rgba(229,56,59,.35);border-radius:4px;padding:0 5px}
 .enemies .dmg{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--panel2);margin:6px 0 3px}
 .enemies .dmg u{display:block;background:var(--gold)}.enemies .dmg s{display:block;background:#e5383b;text-decoration:none}
+.map .vs{position:absolute;inset:0;display:none;place-items:center;padding:10px;background:rgba(4,6,9,.72);z-index:3;cursor:pointer}
+.map .vs.on{display:grid;animation:vsIn .25s ease-out}
+@keyframes vsIn{from{opacity:0;transform:scale(1.04)}}
+.vsb{width:100%;max-width:440px;background:#0b0d12;border:3px solid #eef1f5;box-shadow:0 0 0 3px #0b0d12,0 0 0 6px var(--gold),0 12px 30px rgba(0,0,0,.6);padding:10px 10px 8px;image-rendering:pixelated}
+.vt{font:14px/1.2 "Press Start 2P",monospace;color:var(--gold2);text-align:center;letter-spacing:.06em}
+.vsub{font:9px/1.4 "Press Start 2P",monospace;color:var(--muted);text-align:center;margin:4px 0 8px;direction:ltr}
+.vg{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center}.vg .side{min-width:0}
+.vmid{font:16px/1 "Press Start 2P",monospace;color:#ff6b6b;text-shadow:2px 2px 0 #000}
+.vhint{font:8px/1 "Press Start 2P",monospace;color:var(--dim);text-align:center;margin-top:8px}
+.vres{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}.vres div{text-align:center;border:2px solid var(--line);padding:6px}
+.vres b{display:block;font:20px/1.2 "Press Start 2P",monospace}.vres span{font:9px "Press Start 2P",monospace;color:var(--muted)}
+.vres .pg{color:var(--gold2)}.vres .pr{color:#ff6b6b}
+.vline{font-size:13px;text-align:center;color:var(--text)}.vmvp{font-size:13px;text-align:center;margin-top:6px;color:var(--gold2)}
+.fr{display:flex;gap:6px;align-items:center;padding:4px 0;direction:ltr}
+.fr .foe{width:22px;height:25px;display:grid;place-items:center;color:#ff6b6b;font-size:16px}
+.fr .fn{flex:1;min-width:0}.fr .nm{font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fr .hpn{font:9px/1 "Press Start 2P",monospace;margin-inline-start:4px}.fr .kia{color:var(--dim)}.fr .dn{color:#ff6b6b;animation:blink .6s steps(2) infinite}
+@keyframes blink{50%{opacity:.2}}
+.fr .hpb{height:7px;background:#000;border:1px solid #444;margin-top:2px}
+.fr .hpb u{display:block;height:100%;transition:width .25s steps(5);background-image:repeating-linear-gradient(90deg,transparent 0 5px,rgba(0,0,0,.35) 5px 6px)}
+.fr .hpb u.g{background-color:#3ddc97}.fr .hpb u.y{background-color:#ffcf4d}.fr .hpb u.r{background-color:#ff4d4d}
+.fr .gr{font:8px/1.4 "Press Start 2P",monospace;color:var(--khaki);margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.fr.out{opacity:.55}.fr.hit{animation:hit .3s steps(3)}
+@keyframes hit{0%{transform:translateX(-3px);background:rgba(229,56,59,.35)}50%{transform:translateX(3px)}100%{transform:none;background:none}}
+.battle{margin:8px 0 0;background:#0b0d12;border:3px solid #eef1f5;box-shadow:0 0 0 3px #0b0d12,0 0 0 5px var(--gold);padding:6px 8px}
+.battle .bh{display:flex;justify-content:space-between;font:9px/1 "Press Start 2P",monospace;color:var(--muted);margin-bottom:4px;direction:ltr}
+.battle .vsm{color:#ff6b6b}.battle .bg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.battle .side{min-width:0}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
 const FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-  + '<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rubik:wght@400;500;700&family=Secular+One&display=swap" rel="stylesheet">';
+  + '<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Press+Start+2P&family=Rubik:wght@400;500;700&family=Secular+One&display=swap" rel="stylesheet">';
 
 export function page(lang, title, body, { script = '', scripts = [], og = {}, data = null } = {}) {
   const t = S[lang];
@@ -390,7 +417,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=3', '/app/session.js?v=22'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=4', '/app/session.js?v=29'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

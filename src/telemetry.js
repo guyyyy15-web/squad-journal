@@ -23,7 +23,23 @@ export function extractDerived(events, ours, mapSize) {
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 4, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [] };
+  const out = { v: 5, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [] };
+  // v5 — the director's battle data. pp: [accountId, name, team] index; dmg: [t10, a, v, damage, weapon, hpAfter, head];
+  // heal: [t10, p, amount]  (dmg also carries attacker and victim positions: …, ax, ay, vx, vy); gear: [t, p, slot, value] (slot 0 helmet lvl, 1 vest lvl, 2 weapon equipped, 3 weapon dropped).
+  const ppIdx = new Map();
+  const pIdx = (c) => {
+    if (!ppIdx.has(c.accountId)) { ppIdx.set(c.accountId, out.pp.length); out.pp.push([c.accountId, String(c.name || '?').slice(0, 40), c.teamId || 0]); }
+    return ppIdx.get(c.accountId);
+  };
+  const wpIdx = new Map();
+  const wIdx = (name) => {
+    if (!wpIdx.has(name)) { wpIdx.set(name, out.wp.length); out.wp.push(name); }
+    return wpIdx.get(name);
+  };
+  const T10 = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 100));
+  const healBuf = []; const gearBuf = [];
+  const lvl = (id) => { const m = /_Lv(\d)/.exec(id); return m ? Math.min(3, Number(m[1])) : 1; };
+  const gun = (id) => String(id).replace(/^Item_Weapon_|_C$/g, '').replace(/_.*$/, '');
   // Enemy squads we traded with (v4): names, damage both ways, kills/knocks both ways, first/last contact.
   const E = {};
   const enemy = (c, t) => {
@@ -71,8 +87,33 @@ export function extractDerived(events, ours, mapSize) {
         out.final = z.slice(1);
         break;
       }
+      case 'LogHeal': {
+        const c = e.character;
+        if (c && e.healAmount > 0) healBuf.push([T10(e), c.accountId, Math.min(100, Math.round(e.healAmount))]);
+        break;
+      }
+      case 'LogItemEquip': case 'LogItemUnequip': {
+        const c = e.character; const id = e.item && e.item.itemId;
+        if (!c || !id) break;
+        const on = e._T === 'LogItemEquip';
+        if (/^Item_Head_/.test(id)) gearBuf.push([T(e), c.accountId, 0, on ? lvl(id) : 0]);
+        else if (/^Item_Armor_/.test(id)) gearBuf.push([T(e), c.accountId, 1, on ? lvl(id) : 0]);
+        else if (/^Item_Weapon_/.test(id) && !/Grenade|SmokeBomb|FlashBang|Molotov|C4|StickyBomb|BluezoneGrenade|DecoyGrenade/.test(id)) gearBuf.push([T(e), c.accountId, on ? 2 : 3, gun(id)]);
+        break;
+      }
+      case 'LogArmorDestroy': {
+        const v = e.victim; const id = e.item && e.item.itemId;
+        if (v && id) gearBuf.push([T(e), v.accountId, /^Item_Head_/.test(id) ? 0 : 1, 0]);
+        break;
+      }
       case 'LogPlayerTakeDamage': {
         const a = e.attacker; const v = e.victim;
+        if (a && v && (set.has(a.accountId) || set.has(v.accountId)) && e.damage > 0 && a.accountId !== v.accountId) {
+          // Some modes/events give more than 100 HP; the director shows a 0–100 bar.
+          const hp = Math.min(100, Math.max(0, Math.round((v.health || 0) - e.damage)));
+          const ap = a.location ? P(a.location) : [0, 0]; const vp = v.location ? P(v.location) : [0, 0];
+          out.dmg.push([T10(e), pIdx(a), pIdx(v), Math.min(1000, Math.round(e.damage)), wIdx(W({ damageCauserName: e.damageCauserName }) || '?'), hp, e.damageReason === 'HeadShot' ? 1 : 0, ap[0], ap[1], vp[0], vp[1]]);
+        }
         if (!a || !v || !a.teamId || !v.teamId || a.teamId === v.teamId || !(e.damage > 0)) break;
         if (set.has(a.accountId) && !set.has(v.accountId)) enemy(v, T(e)).dd += e.damage;
         else if (set.has(v.accountId) && !set.has(a.accountId)) enemy(a, T(e)).dt += e.damage;
@@ -118,6 +159,13 @@ export function extractDerived(events, ours, mapSize) {
       default:
     }
   }
+  // keep heals and gear only for the players in the battle index (everyone who traded damage with us)
+  for (const id of set) if (players[id]) pIdx({ accountId: id, name: players[id].name, teamId: players[id].team });
+  for (const h of healBuf) if (ppIdx.has(h[1])) out.heal.push([h[0], ppIdx.get(h[1]), h[2]]);
+  for (const g of gearBuf) if (ppIdx.has(g[1])) out.gear.push([g[0], ppIdx.get(g[1]), g[2], g[2] >= 2 ? wIdx(g[3]) : g[3]]);
+  if (out.dmg.length > 2500) out.dmg = out.dmg.slice(0, 2500);
+  if (out.heal.length > 1500) out.heal = out.heal.slice(0, 1500);
+  if (out.gear.length > 1500) out.gear = out.gear.slice(0, 1500);
   out.enemies = Object.values(E)
     .map((x) => ({ t: x.t, n: Object.entries(x.n), dd: Math.round(x.dd), dt: Math.round(x.dt), k: x.k, kn: x.kn, d: x.d, dn: x.dn, f: x.f, l: x.l }))
     .filter((x) => x.dd + x.dt >= 1 || x.k + x.kn + x.d + x.dn > 0)
@@ -146,7 +194,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || ![1, 2, 3, 4].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3, 4, 5].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;
@@ -160,6 +208,15 @@ export function validDerived(d, allowedIds) {
     if (!Array.isArray(p.path) || p.path.length > 400 || !p.path.every((x) => isPt(x, 3))) return false;
   }
   if (d.events.length > 400) return false;
+  if (d.v >= 5) {
+    if (!Array.isArray(d.pp) || d.pp.length > 120 || !d.pp.every((p) => Array.isArray(p) && p.length === 3 && str(p[0]) && str(p[1]) && isInt(p[2], 0, 100000))) return false;
+    if (!Array.isArray(d.wp) || d.wp.length > 200 || !d.wp.every((w) => str(w, 40))) return false;
+    const P = d.pp.length; const Wn = d.wp.length;
+    const ok = (a, n, fn) => Array.isArray(a) && a.length <= n && a.every((x) => Array.isArray(x) && fn(x));
+    if (!ok(d.dmg, 2500, (x) => x.length === 11 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, P - 1) && isInt(x[3], 0, 1000) && isInt(x[4], 0, Wn - 1) && isInt(x[5], 0, 100) && (x[6] === 0 || x[6] === 1) && isInt(x[7]) && isInt(x[8]) && isInt(x[9]) && isInt(x[10]))) return false;
+    if (!ok(d.heal, 1500, (x) => x.length === 3 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 100))) return false;
+    if (!ok(d.gear, 1500, (x) => x.length === 4 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 3) && isInt(x[3], 0, x[2] >= 2 ? Wn - 1 : 3))) return false;
+  }
   if (d.enemies !== undefined) {
     if (!Array.isArray(d.enemies) || d.enemies.length > 30) return false;
     for (const x of d.enemies) {

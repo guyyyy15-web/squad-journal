@@ -169,6 +169,10 @@
     opts = opts || {};
     if (active) active.stop(true);
     var clip = opts.clip || null, windows = actionWindows(d, match.ours), actionOnly = false;
+    // Director: at each firefight pause on an ENGAGEMENT card, play the fight slowly with a live battle panel,
+    // then a RESULT card. Needs derived v5 (damage/HP/gear); older data falls back to the plain replay.
+    var model = d.pp ? battleModel(d, match.ours) : null, director = !!model, introduced = {}, phase = null, phaseUntil = 0, curW = null, fight = null;
+    var battle = null, lastHp = {};
     var card = el.closest('.match');
     var ours = new Set(match.ours);
     var ids = Object.keys(d.players);
@@ -203,7 +207,8 @@
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
       + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>'
-      + (windows.length && !clip ? '<button type="button" class="cam" data-act="1">⚡ ' + esc(S.actionOnly) + '</button>' : '');
+      + (windows.length && !clip ? '<button type="button" class="cam" data-act="1">⚡ ' + esc(S.actionOnly) + '</button>' : '')
+      + (model ? '<button type="button" class="cam on" data-dir="1">🎬 ' + esc(S.director) + '</button>' : '');
     // action stretches as bands on the timeline; the current clip highlighted
     var pct = function (x) { return Math.max(0, Math.min(100, (x - t0) / (tEnd - t0) * 100)).toFixed(2); };
     var bands = windows.map(function (w) { return '<i class="band' + (clip && w.s <= clip[0] + 1 && w.e >= clip[1] - 1 ? ' cur' : '') + '" style="left:' + pct(w.s) + '%;width:' + (pct(w.e) - pct(w.s)).toFixed(2) + '%"></i>'; }).join('')
@@ -228,6 +233,17 @@
     function draw(realDt) {
       // camera
       var target = mode === 'full' ? [0, 0, 1000] : cameraTarget(d, match.ours, t, mode === 'auto' ? '' : mode);
+      if (phase === 'fight' && mode === 'auto' && model) {
+        var bx = [];
+        model.dmg.forEach(function (x) { if (x.t >= t - 5 && x.t <= t + 2) { if (x.ap[0] || x.ap[1]) bx.push(x.ap); bx.push(x.vp); } });
+        fight.us.forEach(function (i) { var p = d.players[model.pp[i][0]], pos = p && posAt(p, t); if (pos) bx.push(pos); });
+        if (bx.length) {
+          var X = bx.map(function (q) { return q[0]; }), Y = bx.map(function (q) { return q[1]; });
+          var x0 = Math.min.apply(null, X), x1 = Math.max.apply(null, X), y0 = Math.min.apply(null, Y), y1 = Math.max.apply(null, Y);
+          var sz = Math.min(1000, Math.max(90, Math.max(x1 - x0, y1 - y0) * 1.5 + 24));
+          target = [Math.max(0, Math.min(1000 - sz, (x0 + x1) / 2 - sz / 2)), Math.max(0, Math.min(1000 - sz, (y0 + y1) / 2 - sz / 2)), sz];
+        }
+      }
       if (snap) { cur = target.slice(); snap = false; } else {
         var k = 1 - Math.exp(-(realDt || 0.016) * 2.6);
         for (var j = 0; j < 3; j++) cur[j] += (target[j] - cur[j]) * k;
@@ -281,19 +297,118 @@
         }
         if (age <= 14) recent.push(e);
       });
+      if (model) {
+        // tracers and floating damage numbers (RPG style), and enemies seen in the last 8 s with their HP
+        var seen = {};
+        var combos = {}, shown = [];
+        for (var di = 0; di < model.dmg.length; di++) {
+          var hx = model.dmg[di];
+          if (hx.t > t) break;
+          if (!model.ourIdx.has(hx.v)) seen[hx.v] = di;
+          if (!model.ourIdx.has(hx.a)) seen[hx.a] = di;
+          var hcol = model.ourIdx.has(hx.a) ? '#ffcf4d' : '#ff6b6b';
+          var hage = t - hx.t;
+          if (hage < 0.4 && (hx.ap[0] || hx.ap[1])) fxh.push('<line x1="' + hx.ap[0] + '" y1="' + hx.ap[1] + '" x2="' + hx.vp[0] + '" y2="' + hx.vp[1] + '" stroke="' + hcol + '" stroke-opacity="' + (1 - hage / 0.4).toFixed(2) + '" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
+          if (hage > 2.2) continue;
+          // a burst on the same target (hits < 0.5 s apart) shows as one combo number
+          var c = combos[hx.v];
+          if (c && hx.t - c.last < 0.5) { c.sum += hx.dmg; c.last = hx.t; c.n++; c.head = c.head || hx.head; c.vp = hx.vp; }
+          else { c = combos[hx.v] = { sum: hx.dmg, last: hx.t, n: 1, head: hx.head, vp: hx.vp, col: hcol }; shown.push(c); }
+        }
+        shown.forEach(function (c) {
+          var age = t - c.last;
+          if (age > 1.6) return;
+          var big = c.n > 1 || c.head, fy = c.vp[1] - u * (3.5 + age * 5), op = (1 - age / 1.6).toFixed(2);
+          fxh.push('<text x="' + c.vp[0] + '" y="' + fy + '" font-size="' + (u * (big ? 4.2 : 3.4)) + '" text-anchor="middle" fill="' + c.col + '" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.8) + '" paint-order="stroke" font-family="Press Start 2P, monospace">-' + c.sum + '</text>');
+          if ((c.head || c.n > 2) && age < 1) fxh.push('<text x="' + c.vp[0] + '" y="' + (fy - u * 4.4) + '" font-size="' + (u * 2) + '" text-anchor="middle" fill="#fff" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.6) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + (c.head ? 'HEADSHOT' : 'x' + c.n) + '</text>');
+        });
+        Object.keys(seen).forEach(function (i) {
+          var lx = model.dmg[seen[i]];
+          if (t - lx.t > 8) return;
+          var hh = hpAt(model, i, t);
+          if (hh.state === 2) return;
+          var pos = lx.a == i ? lx.ap : lx.vp, r = u * 1.6;
+          if (!pos[0] && !pos[1]) return;
+          fxh.push('<path d="M' + pos[0] + ' ' + (pos[1] - r) + 'L' + (pos[0] + r) + ' ' + pos[1] + 'L' + pos[0] + ' ' + (pos[1] + r) + 'L' + (pos[0] - r) + ' ' + pos[1] + 'Z" fill="#e5383b" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
+          fxh.push('<rect x="' + (pos[0] - u * 2.5) + '" y="' + (pos[1] + r + u * 0.6) + '" width="' + (u * 5) + '" height="' + (u * 0.8) + '" fill="#000"/><rect x="' + (pos[0] - u * 2.5) + '" y="' + (pos[1] + r + u * 0.6) + '" width="' + (u * 5 * (hh.state ? 0.15 : hh.hp / 100)) + '" height="' + (u * 0.8) + '" fill="' + (hh.state === 1 ? '#e5383b' : '#ff8a8a') + '"/>');
+        });
+      }
       fx.innerHTML = fxh.join('');
       lb.innerHTML = lbh.join('');
       var shown = recent.slice(-4);
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
       if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
     }
+    function name(i) { var p = model.pp[i]; return member(p[0]) ? member(p[0]).nick : p[1]; }
+    function fighterRow(i, at, ours) {
+      var h = hpAt(model, i, at), g = gearAt(model, i, at), p = model.pp[i], m = member(p[0]);
+      var icon = ours ? (m ? patchSvg(m.emblem, m.color, 22) : patchSvg('chevrons', GUEST, 22)) : '<span class="foe">☠</span>';
+      var gun = fight && fight.mainWeapon[i] ? weapon(fight.mainWeapon[i]) : g.guns.map(function (gi) { return weapon((d.wp || [])[gi] || ''); }).join(' / ');
+      var st = h.state === 2 ? '<b class="kia">KIA</b>' : h.state === 1 ? '<b class="dn">DOWN</b>' : '<b>' + h.hp + '</b>';
+      return '<div class="fr' + (h.state ? ' out' : '') + '" data-i="' + i + '">' + icon + '<div class="fn"><div class="row sp" style="flex-wrap:nowrap"><span class="nm">' + esc(name(i)) + '</span><span class="hpn">' + st + '</span></div>'
+        + '<div class="hpb"><u style="width:' + (h.state ? 0 : h.hp) + '%" class="' + (h.hp > 50 ? 'g' : h.hp > 25 ? 'y' : 'r') + '"></u></div>'
+        + '<div class="gr">' + (g.helmet ? 'H' + g.helmet + ' ' : '') + (g.vest ? 'V' + g.vest + ' ' : '') + esc(gun || '') + '</div></div></div>';
+    }
+    function showCard(kind) {
+      var ov = $('.vs', el);
+      if (!ov) { ov = document.createElement('div'); el.appendChild(ov); }
+      var tt = mmss(curW ? curW.t0 : t);
+      if (kind === 'intro') {
+        ov.innerHTML = '<div class="vsb"><div class="vt">ENGAGEMENT</div><div class="vsub">' + esc(fmt(S.matchAt, { m: match.n, t: tt })) + '</div><div class="vg"><div class="side">'
+          + fight.us.map(function (i) { return fighterRow(i, curW.s, true); }).join('') + '</div><div class="vmid">VS</div><div class="side">'
+          + (fight.them.length ? fight.them.map(function (i) { return fighterRow(i, curW.s, false); }).join('') : '<div class="muted small">?</div>') + '</div></div><div class="vhint">' + esc(S.tapSkip) + '</div></div>';
+      } else {
+        var w = curW, mv = fight.mvp;
+        var mm = mv !== null ? member(model.pp[mv][0]) : null;
+        ov.innerHTML = '<div class="vsb"><div class="vt">RESULT</div><div class="vsub">' + esc(fmt(S.matchAt, { m: match.n, t: tt })) + '</div>'
+          + '<div class="vres"><div><b class="pg">' + fight.dealt + '</b><span>' + esc(S.dealt) + '</span></div><div><b class="pr">' + fight.taken + '</b><span>' + esc(S.taken) + '</span></div></div>'
+          + '<div class="vline">' + [w.kills ? plural('ffKills', w.kills) : '', w.knocks ? plural('ffKnocks', w.knocks) : '', w.deaths ? plural('ffDown', w.deaths) : ''].filter(Boolean).map(esc).join(' · ') + '</div>'
+          + (mv !== null ? '<div class="vmvp">MVP ' + (mm ? patchSvg(mm.emblem, mm.color, 20) : '') + ' <b>' + esc(name(mv)) + '</b> · ' + fight.dealtBy[mv] + ' dmg</div>' : '')
+          + '<div class="vhint">' + esc(S.tapSkip) + '</div></div>';
+      }
+      ov.className = 'vs on';
+      ov.onclick = function () { phaseUntil = 0; };
+    }
+    function hideCard() { var ov = $('.vs', el); if (ov) ov.className = 'vs'; }
+    function showBattle() {
+      if (!battle) { battle = document.createElement('div'); battle.className = 'battle'; el.parentNode.insertBefore(battle, el.nextSibling); }
+      battle.innerHTML = '<div class="bh"><span>' + esc(S.squad) + '</span><span class="vsm">VS</span><span>' + esc(S.enemy) + '</span></div><div class="bg"><div class="side us"></div><div class="side them"></div></div>';
+      battle.classList.remove('hide');
+      lastHp = {};
+    }
+    function updateBattle() {
+      if (!battle || !fight) return;
+      $('.us', battle).innerHTML = fight.us.map(function (i) { return fighterRow(i, t, true); }).join('');
+      $('.them', battle).innerHTML = fight.them.map(function (i) { return fighterRow(i, t, false); }).join('');
+      battle.querySelectorAll('.fr').forEach(function (r) {
+        var i = r.dataset.i, h = hpAt(model, i, t), val = h.state ? -1 : h.hp;
+        if (lastHp[i] !== undefined && val < lastHp[i]) r.classList.add('hit');
+        lastHp[i] = val;
+      });
+    }
+    function endFight() { phase = null; curW = null; fight = null; hideCard(); if (battle) battle.classList.add('hide'); }
+    var lastBattle = 0;
     function frame(ts) {
       var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;
+      if (director && model && playing) {
+        if (phase === 'intro' || phase === 'result') {
+          if (ts < phaseUntil) { draw(realDt); raf = requestAnimationFrame(frame); return; }
+          if (phase === 'intro') { phase = 'fight'; hideCard(); showBattle(); } else endFight();
+        }
+        var cw = windows.filter(function (x) { return t >= x.s && t <= x.e; })[0];
+        if (cw && !introduced[cw.s] && phase !== 'fight') {
+          introduced[cw.s] = 1; curW = cw; fight = fightOf(model, cw); phase = 'intro'; phaseUntil = ts + 2800; showCard('intro');
+          draw(realDt); raf = requestAnimationFrame(frame); return;
+        }
+        if (phase === 'fight' && curW && t >= curW.e) { phase = 'result'; phaseUntil = ts + 2800; if (battle) battle.classList.add('hide'); showCard('result'); draw(realDt); raf = requestAnimationFrame(frame); return; }
+        if (phase === 'fight' && ts - lastBattle > 120) { lastBattle = ts; updateBattle(); }
+      }
       var slow = slowmo && actionNear(d, match.ours, t);
       hud.sm.classList.toggle('hide', !(slow && playing));
       if (playing) {
-        t += realDt * speeds[si] * (slow ? 0.25 : 1);
-        if (clip && t >= clip[1]) {
+        t += phase === 'fight' ? realDt * Math.min(4, speeds[si] * 0.4) : realDt * speeds[si] * (slow ? 0.25 : 1);
+        if (clip && t >= clip[1] && phase !== 'fight' && phase !== 'result') {
+          introduced = {};
           if (opts.next && opts.auto) { opts.next(); return; } // reel: on to the next clip
           t = clip[0]; snap = true;                             // single clip: loop
         } else if (actionOnly) {
@@ -308,7 +423,7 @@
       draw(realDt);
       raf = requestAnimationFrame(frame);
     }
-    function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; draw(0); }
+    function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = '×' + speeds[si]; };
     if (CLIP_ENABLED) $('.clp', bar).onclick = function () { playing = false; pp.textContent = '▶'; clipDialog(match, d, t); };
@@ -321,10 +436,11 @@
     };
     range.oninput = function () { seek(Number(range.value)); };
     bar.querySelectorAll('.mk').forEach(function (b) { b.onclick = function () { seek(marks[Number(b.dataset.i)].t - 5); }; });
-    bar.querySelectorAll('.cam[data-cam], .cam[data-slow], .cam[data-act]').forEach(function (b) {
+    bar.querySelectorAll('.cam[data-cam], .cam[data-slow], .cam[data-act], .cam[data-dir]').forEach(function (b) {
       b.onclick = function () {
         if (b.dataset.slow) { slowmo = !slowmo; b.classList.toggle('on', slowmo); return; }
         if (b.dataset.act) { actionOnly = !actionOnly; b.classList.toggle('on', actionOnly); return; }
+        if (b.dataset.dir) { director = !director; b.classList.toggle('on', director); endFight(); return; }
         mode = b.dataset.cam;
         bar.querySelectorAll('.cam[data-cam]').forEach(function (x) { x.classList.toggle('on', x === b); });
       };
@@ -332,13 +448,14 @@
     var setTheater = function (on) { card.classList.toggle('theater', on); document.documentElement.classList.toggle('noscroll', on); };
     $('.th', el).onclick = function () { setTheater(!card.classList.contains('theater')); };
     var ctl = {
-      stop: function (silent) { cancelAnimationFrame(raf); setTheater(false); bar.classList.add('hide'); bar.innerHTML = ''; active = null; renderStatic(match, el, d); },
+      stop: function (silent) { cancelAnimationFrame(raf); setTheater(false); if (battle) battle.remove(); document.documentElement.classList.remove('replaying'); bar.classList.add('hide'); bar.innerHTML = ''; active = null; renderStatic(match, el, d); },
       seek: seek,
     };
     $('.cl', el).onclick = function () { ctl.stop(); };
     if (opts.next) $('.nxt', bar).onclick = function () { opts.next(); };
     if (opts.label) { var tag = document.createElement('div'); tag.className = 'cliptag'; tag.textContent = opts.label; el.appendChild(tag); }
     active = ctl;
+    document.documentElement.classList.add('replaying');
     draw(0);
     raf = requestAnimationFrame(frame);
     return ctl;
@@ -479,7 +596,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=6');
+      var w = new Worker('/app/extract-worker.js?v=8');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -505,7 +622,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 4
+    var p = match.derived >= 5
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -516,11 +633,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 4)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 5)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 4)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 5)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

@@ -143,3 +143,88 @@ export function actionWindows(d, ours, gap = 12, minScore = 5) {
   close();
   return out;
 }
+
+/**
+ * Battle model for the director (derived v5). HP timeline per fighter (index into d.pp):
+ * damage sets HP to the value PUBG reports after the hit, heals add (cap 100), a knock → DOWN,
+ * a revive → alive with 10 HP, a kill → KIA. Gear timeline: helmet/vest level and guns in hand.
+ */
+export function battleModel(d, ours) {
+  const set = new Set(ours);
+  const pp = d.pp || [];
+  const idx = new Map(pp.map((p, i) => [p[0], i]));
+  const raw = {};
+  const push = (i, t, kind, val) => { (raw[i] ||= []).push([t, kind, val]); };
+  for (const x of d.dmg || []) push(x[2], x[0] / 10, 'hp', x[5]);
+  for (const x of d.heal || []) push(x[1], x[0] / 10, 'heal', x[2]);
+  for (const e of d.events) {
+    const v = idx.get(e.v);
+    if (v === undefined) continue;
+    if (e.k === 'knock') push(v, e.t, 'down', 0);
+    else if (e.k === 'kill') push(v, e.t, 'dead', 0);
+    else if (e.k === 'revive') push(v, e.t, 'up', 10);
+  }
+  const tl = {};
+  for (const i of Object.keys(raw)) {
+    const evs = raw[i].sort((a, b) => a[0] - b[0]);
+    let hp = 100; let st = 0;
+    tl[i] = [];
+    for (const [t, kind, val] of evs) {
+      if (st === 2) break;
+      if (kind === 'hp' && st === 0) hp = val;
+      else if (kind === 'heal' && st === 0) hp = Math.min(100, hp + val);
+      else if (kind === 'down') { st = 1; hp = 0; } else if (kind === 'up') { st = 0; hp = val; } else if (kind === 'dead') { st = 2; hp = 0; }
+      tl[i].push([t, hp, st]);
+    }
+  }
+  const gear = {};
+  for (const g of d.gear || []) (gear[g[1]] ||= []).push(g);
+  for (const k of Object.keys(gear)) gear[k].sort((a, b) => a[0] - b[0]);
+  const dmg = (d.dmg || []).map((x) => ({ t: x[0] / 10, a: x[1], v: x[2], dmg: x[3], w: (d.wp || [])[x[4]] || '', hp: x[5], head: !!x[6], ap: [x[7], x[8]], vp: [x[9], x[10]] }));
+  const ourIdx = new Set(pp.map((p, i) => (set.has(p[0]) ? i : -1)).filter((i) => i >= 0));
+  return { pp, idx, tl, gear, dmg, ourIdx };
+}
+
+/** {hp, state} of fighter i at time t (state 0 alive, 1 DOWN, 2 KIA). */
+export function hpAt(model, i, t) {
+  const tl = model.tl[i];
+  let r = { hp: 100, state: 0 };
+  if (!tl) return r;
+  for (const x of tl) { if (x[0] > t) break; r = { hp: x[1], state: x[2] }; }
+  return r;
+}
+
+/** {helmet, vest, guns} of fighter i at time t (guns: the last two picked up and not dropped). */
+export function gearAt(model, i, t) {
+  let helmet = 0; let vest = 0; let guns = [];
+  for (const g of model.gear[i] || []) {
+    if (g[0] > t) break;
+    if (g[2] === 0) helmet = g[3];
+    else if (g[2] === 1) vest = g[3];
+    else if (g[2] === 2) guns = guns.filter((x) => x !== g[3]).concat(g[3]).slice(-2);
+    else guns = guns.filter((x) => x !== g[3]);
+  }
+  return { helmet, vest, guns };
+}
+
+/**
+ * One firefight window w → who fought (us / them, max 4 enemies by damage traded), damage dealt/taken,
+ * shots that landed per fighter and their main weapon, and the fight's MVP (most damage dealt by us).
+ */
+export function fightOf(model, w) {
+  const hits = model.dmg.filter((x) => x.t >= w.s && x.t <= w.e);
+  const traded = {}; const dealtBy = {}; const weap = {};
+  let dealt = 0; let taken = 0;
+  for (const x of hits) {
+    const ourA = model.ourIdx.has(x.a); const ourV = model.ourIdx.has(x.v);
+    if (ourA && !ourV) { dealt += x.dmg; traded[x.v] = (traded[x.v] || 0) + x.dmg; }
+    if (ourV && !ourA) { taken += x.dmg; traded[x.a] = (traded[x.a] || 0) + x.dmg; }
+    dealtBy[x.a] = (dealtBy[x.a] || 0) + x.dmg;
+    (weap[x.a] ||= {})[x.w] = (weap[x.a][x.w] || 0) + x.dmg;
+  }
+  const them = Object.keys(traded).map(Number).sort((a, b) => traded[b] - traded[a]).slice(0, 4);
+  const us = [...model.ourIdx].filter((i) => hits.some((x) => x.a === i || x.v === i) || hpAt(model, i, w.s).state < 2);
+  const mainWeapon = (i) => { const m = weap[i]; return m ? Object.keys(m).sort((a, b) => m[b] - m[a])[0] : ''; };
+  const mvp = us.filter((i) => dealtBy[i]).sort((a, b) => dealtBy[b] - dealtBy[a])[0];
+  return { us, them, dealt, taken, hits: hits.length, dealtBy, mainWeapon: Object.fromEntries([...us, ...them].map((i) => [i, mainWeapon(i)])), mvp: mvp === undefined ? null : mvp };
+}
