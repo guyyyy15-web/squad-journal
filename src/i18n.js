@@ -114,7 +114,7 @@ export const S = {
 export function clientStrings(lang) {
   return lang === 'he' ? {
     loadOnScroll: 'המפה נטענת כשגוללים אליה', queued: 'ממתין בתור לניתוח…', downloading: 'מורידים טלמטריה…', parsing: 'מנתחים {n}MB של אירועים…',
-    retry: 'עוד ניסיון…', shareMoment: 'לשתף את הרגע', newMatch: 'משחק חדש נכנס · לרענון', camAuto: 'מצלמה חכמה', slowmo: 'הילוך איטי באקשן', theater: 'מסך מלא', noTele: 'אין טלמטריה למשחק הזה 🤷', failed: 'לא הצלחנו לנתח את המשחק הזה', fullMap: 'כל המפה', zoomIn: 'זום לפעולה',
+    retry: 'עוד ניסיון…', clip: 'קליפ מהרגע', clipMaking: 'חותכים קליפ… {n}%', clipShare: 'לשתף קליפ', clipSave: 'לשמור', clipNoSupport: 'הדפדפן הזה לא יודע להקליט וידאו', shareMoment: 'לשתף את הרגע', newMatch: 'משחק חדש נכנס · לרענון', camAuto: 'מצלמה חכמה', slowmo: 'הילוך איטי באקשן', theater: 'מסך מלא', noTele: 'אין טלמטריה למשחק הזה 🤷', failed: 'לא הצלחנו לנתח את המשחק הזה', fullMap: 'כל המפה', zoomIn: 'זום לפעולה',
     killed: '{a} חיסל את {v}', knocked: '{a} הפיל את {v}', died: '{v} נפל ל־{a}', diedAlone: '{v} נפל', revived: '{a} הקים את {v}',
     more: 'עוד {n} אירועים', fists: 'אגרופים', copied: 'הקישור הועתק', replay: 'הילוך חוזר', stop: 'סגור', analyzing: 'מנתחים משחק {i}/{n}…',
     noMoments: 'עוד לא זוהו רגעים מיוחדים בסשן הזה.',
@@ -122,7 +122,7 @@ export function clientStrings(lang) {
     longshot: '{a} פגע מ־{d} מ׳ עם {w}', lastgasp: '{a} הקים את {v} אחרי {s} שניות על הרצפה', matchAt: 'משחק {m} · {t}', none: '—',
   } : {
     loadOnScroll: 'The map loads when you scroll to it', queued: 'Queued for analysis…', downloading: 'Downloading telemetry…', parsing: 'Crunching {n}MB of events…',
-    retry: 'One more try…', shareMoment: 'Share this moment', newMatch: 'New match in · tap to refresh', camAuto: 'Auto camera', slowmo: 'Slow-mo on action', theater: 'Fullscreen', noTele: 'No telemetry for this match 🤷', failed: 'Could not analyse this match', fullMap: 'Full map', zoomIn: 'Zoom to action',
+    retry: 'One more try…', clip: 'Clip this moment', clipMaking: 'Cutting your clip… {n}%', clipShare: 'Share clip', clipSave: 'Save', clipNoSupport: 'This browser cannot record video', shareMoment: 'Share this moment', newMatch: 'New match in · tap to refresh', camAuto: 'Auto camera', slowmo: 'Slow-mo on action', theater: 'Fullscreen', noTele: 'No telemetry for this match 🤷', failed: 'Could not analyse this match', fullMap: 'Full map', zoomIn: 'Zoom to action',
     killed: '{a} eliminated {v}', knocked: '{a} knocked {v}', died: '{v} went down to {a}', diedAlone: '{v} went down', revived: '{a} revived {v}',
     more: '{n} more events', fists: 'fists', copied: 'Link copied', replay: 'Replay', stop: 'Close', analyzing: 'Analysing match {i}/{n}…',
     noMoments: 'No special moments detected in this session yet.',

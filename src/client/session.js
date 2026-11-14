@@ -171,7 +171,7 @@
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
       + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>';
-    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button><button type="button" class="ghost lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button></div><div class="cams">' + chips + '</div>';
+    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button><button type="button" class="ghost lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button><button type="button" class="ghost clp" aria-label="' + esc(S.clip) + '">🎬</button></div><div class="cams">' + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
     var svgEl = $('svg.mp', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
@@ -261,6 +261,7 @@
     function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = '×' + speeds[si]; };
+    $('.clp', bar).onclick = function () { playing = false; pp.textContent = '▶'; clipDialog(match, d, t); };
     var lnk = $('.lnk', bar);
     lnk.onclick = function () {
       // A link straight to this second of this match (opens the replay there).
@@ -288,6 +289,132 @@
     draw(0);
     raf = requestAnimationFrame(frame);
     return ctl;
+  }
+
+  // ---------- video clip of a moment (recorded in the browser, nothing uploaded) ----------
+  function loadImg(src) {
+    return new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = src; });
+  }
+  function clipMime() {
+    if (!window.MediaRecorder) return null;
+    var c = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+    for (var i = 0; i < c.length; i++) if (MediaRecorder.isTypeSupported(c[i])) return c[i];
+    return null;
+  }
+  /** Records ~9 s of the replay around game time tc into a square video. Resolves to a Blob. */
+  function makeClip(match, d, tc, onProgress) {
+    var mime = clipMime();
+    if (!mime) return Promise.reject(new Error('unsupported'));
+    var W = 720, REAL = 9, t0 = Math.max(0, tc - 10), t1 = tc + 8;
+    var ours = new Set(match.ours), ids = Object.keys(d.players);
+    return Promise.all([loadImg('/maps/' + match.map + '.jpg'), document.fonts ? document.fonts.load('40px "Black Ops One"') : null]
+      .concat(ids.map(function (id) { var m = member(id); return img(patchSvg(m ? m.emblem : 'chevrons', colorOf(id), 64)); })))
+      .then(function (res) {
+        var mapImg = res[0], patches = res.slice(2);
+        var c = document.createElement('canvas'); c.width = W; c.height = W;
+        var x = c.getContext('2d');
+        // static grain, drawn over every frame
+        var grain = document.createElement('canvas'); grain.width = W; grain.height = W;
+        var gx = grain.getContext('2d');
+        for (var i = 0; i < 6000; i++) { gx.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.18)'; gx.fillRect(Math.random() * W, Math.random() * W, 1.5, 1.5); }
+        var ms = mapImg.naturalWidth / 1000;
+        var cam = cameraTarget(d, match.ours, t0);
+        var marks = timelineMarks(d, match.ours).filter(function (m) { return m.t >= t0 && m.t <= t1; });
+        var title = (moments.filter(function (m) { return m.match === match && Math.abs(m.t - tc) < 15; })[0] || {}).type;
+        function P(v, o) { return (v - cam[o]) / cam[2] * W; }
+        function frame(t, dt) {
+          var tg = cameraTarget(d, match.ours, t), k = 1 - Math.exp(-dt * 2.6);
+          for (var j = 0; j < 3; j++) cam[j] += (tg[j] - cam[j]) * k;
+          x.drawImage(mapImg, cam[0] * ms, cam[1] * ms, cam[2] * ms, cam[2] * ms, 0, 0, W, W);
+          x.fillStyle = 'rgba(5,7,10,.25)'; x.fillRect(0, 0, W, W);
+          var z = zoneAt(d, t);
+          x.lineWidth = 3;
+          if (z) { x.strokeStyle = '#3b8beb'; x.beginPath(); x.arc(P(z.safe[0], 0), P(z.safe[1], 1), z.safe[2] / cam[2] * W, 0, 6.283); x.stroke(); }
+          if (z && z.warn) { x.setLineDash([10, 7]); x.strokeStyle = '#fff'; x.beginPath(); x.arc(P(z.warn[0], 0), P(z.warn[1], 1), z.warn[2] / cam[2] * W, 0, 6.283); x.stroke(); x.setLineDash([]); }
+          ids.forEach(function (id) {
+            var p = d.players[id], pts = p.land && t >= p.land[2] ? [[0, p.land[0], p.land[1]]] : [];
+            for (var q = 0; q < p.path.length && p.path[q][0] <= t; q++) pts.push(p.path[q]);
+            var pos = posAt(p, t); if (pos && pts.length) pts.push([t, pos[0], pos[1]]);
+            if (pts.length > 1) { x.strokeStyle = colorOf(id); x.globalAlpha = 0.75; x.lineWidth = 3; x.beginPath(); pts.forEach(function (q, n) { x[n ? 'lineTo' : 'moveTo'](P(q[1], 0), P(q[2], 1)); }); x.stroke(); x.globalAlpha = 1; }
+          });
+          x.font = '700 18px Rubik, sans-serif'; x.textAlign = 'center'; x.lineJoin = 'round';
+          var feedLines = [];
+          d.events.forEach(function (e) {
+            var age = t - e.t;
+            if (age < 0 || !(ours.has(e.a) || ours.has(e.v) || e.k === 'revive')) return;
+            var vx = P(e.vp[0], 0), vy = P(e.vp[1], 1);
+            if (e.k === 'kill' && ours.has(e.v)) {
+              x.strokeStyle = '#000'; x.lineWidth = 9; x.beginPath(); x.moveTo(vx - 12, vy - 12); x.lineTo(vx + 12, vy + 12); x.moveTo(vx + 12, vy - 12); x.lineTo(vx - 12, vy + 12); x.stroke();
+              x.strokeStyle = colorOf(e.v); x.lineWidth = 5; x.stroke();
+            }
+            if (age <= 8) {
+              var f = age / 8, col = e.k === 'revive' ? '#7ee2a8' : e.k === 'knock' ? '#f2a900' : '#ff4d4d';
+              x.globalAlpha = 1 - f; x.strokeStyle = col; x.lineWidth = 4; x.beginPath(); x.arc(vx, vy, 8 + f * 40, 0, 6.283); x.stroke();
+              if (e.ap && e.k !== 'revive') { x.lineWidth = 2; x.beginPath(); x.moveTo(P(e.ap[0], 0), P(e.ap[1], 1)); x.lineTo(vx, vy); x.stroke(); }
+              x.globalAlpha = 1;
+              var txt = e.k === 'revive' ? nameOf(match, e.a, e.an) + ' ✚ ' + nameOf(match, e.v, e.vn) : nameOf(match, e.a, e.an) + (e.k === 'kill' ? ' ▸ ' : ' ◐ ') + nameOf(match, e.v, e.vn);
+              x.strokeStyle = '#05070a'; x.lineWidth = 5; x.strokeText(txt, vx, vy - 18); x.fillStyle = col === '#ff4d4d' ? '#ffb3b3' : col; x.fillText(txt, vx, vy - 18);
+            }
+            if (age <= 12) feedLines.push(e);
+          });
+          ids.forEach(function (id, n) {
+            var pos = posAt(d.players[id], t);
+            if (!pos || !patches[n]) return;
+            var px = P(pos[0], 0), py = P(pos[1], 1);
+            x.drawImage(patches[n], px - 18, py - 22, 36, 40);
+            x.font = '700 15px Rubik, sans-serif'; x.strokeStyle = '#05070a'; x.lineWidth = 4; x.strokeText(nameOf(match, id), px, py + 32); x.fillStyle = '#fff'; x.fillText(nameOf(match, id), px, py + 32);
+          });
+          // HUD: clock, moment title, kill feed, watermark
+          x.textAlign = 'left';
+          x.fillStyle = 'rgba(10,12,15,.85)'; x.fillRect(16, 16, 92, 38); x.fillStyle = '#ffcf4d'; x.font = '700 22px ui-monospace, Menlo, monospace'; x.fillText(mmss(t), 26, 43);
+          if (title) { x.font = '30px "Black Ops One", sans-serif'; var tw = x.measureText(SJ.mt[title]).width; x.fillStyle = '#f2a900'; x.fillRect(W - tw - 44, 16, tw + 28, 44); x.fillStyle = '#111'; x.fillText(SJ.mt[title], W - tw - 30, 49); }
+          feedLines.slice(-3).forEach(function (e, n) {
+            var line = (e.a ? nameOf(match, e.a, e.an) : '') + (e.k === 'revive' ? '  ✚  ' : e.k === 'kill' ? '  ▸  ' : '  ◐  ') + nameOf(match, e.v, e.vn) + (e.w ? '   ' + weapon(e.w) + (e.d ? ' ' + e.d + 'm' : '') : '');
+            x.font = '600 17px Rubik, sans-serif'; var lw = x.measureText(line).width;
+            var y = W - 120 + n * 32;
+            x.fillStyle = 'rgba(10,12,15,.85)'; x.fillRect(16, y - 22, lw + 22, 30);
+            x.fillStyle = e.k === 'revive' ? '#7ee2a8' : e.k === 'knock' ? '#f2a900' : ours.has(e.v) ? '#fff' : '#ff4d4d'; x.fillRect(16, y - 22, 4, 30);
+            x.fillStyle = '#eef1f5'; x.fillText(line, 28, y);
+          });
+          var wm = ((SJ.og && SJ.og.clan && SJ.og.clan.tag) ? '[' + SJ.og.clan.tag + '] ' : '') + 'SQUAD JOURNAL';
+          x.font = '20px "Black Ops One", sans-serif'; x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.75)'; x.fillText(wm, W - 18, W - 18);
+          x.drawImage(grain, 0, 0);
+        }
+        return new Promise(function (resolve, reject) {
+          var stream = c.captureStream(30), chunks = [];
+          var rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 3500000 });
+          rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+          rec.onstop = function () { resolve(new Blob(chunks, { type: mime.split(';')[0] })); };
+          rec.onerror = function (e) { reject(e.error || e); };
+          frame(t0, 0.016);
+          rec.start(250);
+          var start = performance.now(), last = start;
+          (function loop(now) {
+            var e = (now - start) / 1000, dt = Math.min(0.1, (now - last) / 1000); last = now;
+            frame(t0 + (t1 - t0) * Math.min(1, e / REAL), dt);
+            if (onProgress) onProgress(Math.min(99, Math.round(e / REAL * 100)));
+            if (e < REAL) requestAnimationFrame(loop); else rec.stop();
+          })(start);
+        });
+      });
+  }
+  function clipDialog(match, d, t) {
+    var box = document.createElement('div');
+    box.className = 'clipbox';
+    box.innerHTML = '<div class="panel"><div class="row sp"><b style="font:20px/1 var(--stencil)">🎬 ' + esc(S.clip) + '</b><button type="button" class="ghost x" style="min-height:40px;padding:4px 12px">✕</button></div><div class="cl-body muted small" style="margin-top:10px">' + esc(fmt(S.clipMaking, { n: 0 })) + '</div></div>';
+    document.body.appendChild(box);
+    var body = $('.cl-body', box);
+    $('.x', box).onclick = function () { box.remove(); };
+    makeClip(match, d, t, function (n) { body.textContent = fmt(S.clipMaking, { n: n }); }).then(function (blob) {
+      var ext = /mp4/.test(blob.type) ? 'mp4' : 'webm';
+      var file = new File([blob], 'squad-moment-' + match.n + '-' + mmss(t).replace(':', '') + '.' + ext, { type: blob.type });
+      var url = URL.createObjectURL(blob);
+      body.innerHTML = '<video src="' + url + '" controls playsinline autoplay muted loop style="width:100%;border-radius:10px;background:#000"></video><div class="row" style="margin-top:10px"><button type="button" class="btn sh" style="flex:1">📤 ' + esc(S.clipShare) + '</button><a class="btn ghost" download="' + esc(file.name) + '" href="' + url + '">⬇ ' + esc(S.clipSave) + '</a></div>';
+      var sh = $('.sh', body);
+      if (navigator.canShare && navigator.canShare({ files: [file] })) sh.onclick = function () { navigator.share({ files: [file], title: document.title }).catch(function () {}); };
+      else sh.remove();
+      window.SJ.lastClip = blob;
+    }).catch(function (e) { body.textContent = e && e.message === 'unsupported' ? S.clipNoSupport : S.failed; });
   }
 
   // ---------- loading: derived data for every match ----------

@@ -27,6 +27,11 @@ Live: https://squad-journal.guyyyy15-web.workers.dev
 - Sessions are rebuilt from stored matches (≥ `min_members` on one team, gap ≤ `session_gap_min`).
   Session ids are readable (`YYMMDD-HHMM`, Israel time) and survive backfills.
 
+Also: a share card per session (WhatsApp preview), deep links to a replay second (`?m=<match>&t=<s>`), a 9 s
+video clip of any moment recorded in the browser (MediaRecorder, MP4 where supported), LIVE mode while the squad
+plays, a Hall of Fame (ranks Recruit→General from XP, records, duos, head-to-head), service records per player
+(`/p/<accountId>`), per-map drop/death heatmaps (`/maps`), and an AI war-correspondent recap per session.
+
 ## Layout
 
 ```
@@ -36,7 +41,8 @@ src/html.js       server-rendered pages     migrations/       D1 schema
 src/i18n.js       en + he strings           src/emblems.js    unit patches + medals (SVG)
 src/summary.js    awards, carry (tested)    src/telemetry.js  browser-side extraction (tested)
 src/moments.js    highlights, matrices      src/client/       session page script (served at /app/)
-src/replay.js     camera, HUD, timeline
+src/replay.js     camera, HUD, timeline      src/hall.js       ranks, records, pairs
+src/narrator.js   AI recap + number guard
 test/             node --test               scripts/          dev relay, seed
 ```
 
