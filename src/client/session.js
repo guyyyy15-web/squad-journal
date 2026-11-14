@@ -90,7 +90,7 @@
   }
   function staticSvg(match, d, box) {
     var ours = new Set(match.ours), u = box[2] / 100;
-    var out = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + box.join(' ') + ' ' + box[2] + '" role="img">'].concat(baseLayers(match, d, tileMarkup(match.map, box)));
+    var out = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + box.join(' ') + ' ' + box[2] + '" role="img">'].concat(baseLayers(match, d)); // static maps stay light; sharp tiles only in the replay
     if (d.final) out.push('<circle cx="' + d.final[0] + '" cy="' + d.final[1] + '" r="' + d.final[2] + '" fill="rgba(255,255,255,.06)" stroke="#fff" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
     Object.keys(d.players).forEach(function (id) {
       var p = d.players[id];
