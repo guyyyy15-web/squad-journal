@@ -216,10 +216,13 @@ const top = (lang, path, back = false, clan = null) => {
 };
 
 const TZ = 'Asia/Jerusalem';
+// Intl formatters are expensive to build (~0.3 ms each); build each one once per isolate.
+const FMT = new Map();
+const fmt = (loc, opts) => { const k = loc + JSON.stringify(opts); if (!FMT.has(k)) FMT.set(k, new Intl.DateTimeFormat(loc, { timeZone: TZ, ...opts })); return FMT.get(k); };
 const locale = (lang) => (lang === 'he' ? 'he-IL' : 'en-GB');
-export const fmtDay = (lang, ms) => new Intl.DateTimeFormat(locale(lang), { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' }).format(ms);
-export const fmtTime = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
-const fmtDate = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', year: '2-digit' }).format(ms).replace(/\//g, '.');
+export const fmtDay = (lang, ms) => fmt(locale(lang), { weekday: 'long', day: 'numeric', month: 'long' }).format(ms);
+export const fmtTime = (ms) => fmt('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
+const fmtDate = (ms) => fmt('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }).format(ms).replace(/\//g, '.');
 export function ago(lang, ms, now = Date.now()) {
   const t = S[lang];
   const m = Math.round((now - ms) / 60000);
@@ -298,7 +301,7 @@ const METAL = { killer: 'gold', sniper: 'gold', angel: 'gold', headshot: 'gold',
 export function ogInfo(session, summary, byId, clan) {
   const mvp = byId.get(summary.carry[0]?.account_id);
   const t = summary.team;
-  const short = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' }).format(session.start_at).replace(',', '').toUpperCase();
+  const short = fmt('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).format(session.start_at).replace(',', '').toUpperCase();
   return { design: 2, short, games: t.games, kills: t.kills, wins: t.wins, best: t.best_place,
     clan: clan?.name ? { tag: clan.tag, name: clan.name } : null,
     mvp: mvp ? { nick: mvp.nickname, emblem: emblemOf(mvp), color: mvp.color } : null };
@@ -377,7 +380,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=18'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=19'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

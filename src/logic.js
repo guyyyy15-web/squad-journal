@@ -89,11 +89,13 @@ export function isSquadMatch(m, settings) {
 }
 
 /** Readable, sortable id from the start time in Israel time, e.g. 261113-2156. */
+let ID_FMT = null;
 export function sessionIdFor(ms) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+  ID_FMT ||= new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Jerusalem', year: '2-digit', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  });
+  const p = Object.fromEntries(ID_FMT.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
   return `${p.year}${p.month}${p.day}-${p.hour}${p.minute}`;
 }
 

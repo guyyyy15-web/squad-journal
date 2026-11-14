@@ -36,6 +36,8 @@
     return m ? m.nick : (match.names && match.names[id]) || fallback || '?';
   }
 
+  // Video clips are hidden until they work the way Guy wants (the recorder below stays in place).
+  var CLIP_ENABLED = /[?&]clip=1/.test(location.search);
   var data = {}; // match id → derived
   SJ.matches.forEach(function (m, i) { m.n = i + 1; });
 
@@ -171,7 +173,7 @@
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
       + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>';
-    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button><button type="button" class="ghost lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button><button type="button" class="ghost clp" aria-label="' + esc(S.clip) + '">🎬</button></div><div class="cams">' + chips + '</div>';
+    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button><button type="button" class="ghost lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="ghost clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + '</div><div class="cams">' + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
     var svgEl = $('svg.mp', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
@@ -261,7 +263,7 @@
     function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = '×' + speeds[si]; };
-    $('.clp', bar).onclick = function () { playing = false; pp.textContent = '▶'; clipDialog(match, d, t); };
+    if (CLIP_ENABLED) $('.clp', bar).onclick = function () { playing = false; pp.textContent = '▶'; clipDialog(match, d, t); };
     var lnk = $('.lnk', bar);
     lnk.onclick = function () {
       // A link straight to this second of this match (opens the replay there).
