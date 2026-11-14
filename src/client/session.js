@@ -115,6 +115,33 @@
     if (more) more.onclick = function () { ul.innerHTML = html.join(''); };
   }
 
+  function enemiesPanel(match, d) {
+    var ul = $('[data-feed="' + match.id + '"]');
+    if (!ul || !d.enemies || !d.enemies.length) return;
+    var old = ul.parentNode.querySelector('.enemies[data-m="' + match.id + '"]');
+    if (old) old.remove();
+    var list = d.enemies.filter(function (x) { return x.k + x.kn + x.d + x.dn > 0 || x.dd + x.dt >= 100; });
+    if (!list.length) return;
+    var MAX = 4;
+    var row = function (x) {
+      var tot = Math.max(1, x.dd + x.dt), names = x.n.map(function (p) { return p[1]; });
+      var tags = [];
+      if (x.k) tags.push('<b class="ek">' + esc(plural('ffKills', x.k)) + '</b>');
+      if (x.kn) tags.push('<span>' + esc(plural('ffKnocks', x.kn)) + '</span>');
+      if (x.d) tags.push('<b class="ed">' + esc(plural('theyKilled', x.d)) + '</b>');
+      return '<div class="erow"><div class="row sp" style="flex-wrap:nowrap;gap:8px"><span class="en" dir="ltr">' + esc(names.join(', ')) + '</span><span class="muted small" dir="ltr" style="white-space:nowrap">' + mmss(x.f) + '–' + mmss(x.l) + '</span></div>'
+        + '<div class="row small" style="gap:8px;margin-top:4px">' + tags.join(' ') + '</div>'
+        + '<div class="dmg" dir="ltr"><u style="width:' + Math.round(x.dd / tot * 100) + '%"></u><s style="width:' + Math.round(x.dt / tot * 100) + '%"></s></div>'
+        + '<div class="row sp small muted" dir="ltr"><span>' + esc(S.dealt) + ' ' + x.dd + '</span><span>' + x.dt + ' ' + esc(S.taken) + '</span></div></div>';
+    };
+    var box = document.createElement('div');
+    box.className = 'enemies'; box.dataset.m = match.id;
+    box.innerHTML = '<div class="kicker" style="margin:12px 0 4px">⚔ ' + esc(S.enemies) + '</div>' + list.slice(0, MAX).map(row).join('')
+      + (list.length > MAX ? '<button type="button" class="ghost" style="min-height:36px;padding:4px 12px;font-size:14px;margin-top:6px">' + esc(fmt(S.moreSquads, { n: list.length - MAX })) + '</button>' : '');
+    ul.parentNode.insertBefore(box, ul.nextSibling);
+    var more = $('button', box);
+    if (more) more.onclick = function () { more.remove(); box.insertAdjacentHTML('beforeend', list.slice(MAX).map(row).join('')); };
+  }
   function renderStatic(match, el, d) {
     var focus = bbox(d, new Set(match.ours));
     var zoomed = el.dataset.zoom !== 'full';
@@ -137,15 +164,18 @@
     return '<text x="' + x + '" y="' + y + '" font-size="' + (u * 2.6) + '" text-anchor="middle" fill="' + color + '" stroke="#05070a" stroke-width="' + (u * 0.7) + '" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(text) + '</text>';
   }
   function shortW(e) { return e.w ? ' · ' + weapon(e.w) + (e.d ? ' ' + e.d + 'm' : '') : ''; }
-  function replay(match, el, d, startAt) {
+  // opts: { clip: [s, e], label, next: fn } — clip mode loops the window (or moves on to `next`).
+  function replay(match, el, d, startAt, opts) {
+    opts = opts || {};
     if (active) active.stop(true);
+    var clip = opts.clip || null, windows = actionWindows(d, match.ours), actionOnly = false;
     var card = el.closest('.match');
     var ours = new Set(match.ours);
     var ids = Object.keys(d.players);
     var t0 = Math.min.apply(null, ids.map(function (id) { var p = d.players[id]; return (p.jump || p.land || [0, 0, 60])[2]; }).concat([60])) - 5;
     var tEnd = Math.max(match.duration || 0, d.events.reduce(function (m, e) { return Math.max(m, e.t); }, 0)) + 5;
     var marks = timelineMarks(d, match.ours);
-    var mode = 'auto', slowmo = true, speeds = [10, 20, 40, 80], si = 1, playing = true, t = Math.max(t0, startAt || t0), last = 0, raf = 0;
+    var mode = 'auto', slowmo = true, speeds = [10, 20, 40, 80], si = clip ? 0 : 1, playing = true, t = Math.max(t0, clip ? clip[0] : startAt || t0), last = 0, raf = 0;
     var cur = cameraTarget(d, match.ours, t), snap = true;
 
     var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + cur.join(' ') + ' ' + cur[2] + '">'].concat(baseLayers(match, d));
@@ -172,8 +202,13 @@
     }).join('');
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
-      + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>';
-    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button><button type="button" class="ghost lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="ghost clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + '</div><div class="cams">' + chips + '</div>';
+      + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>'
+      + (windows.length && !clip ? '<button type="button" class="cam" data-act="1">⚡ ' + esc(S.actionOnly) + '</button>' : '');
+    // action stretches as bands on the timeline; the current clip highlighted
+    var pct = function (x) { return Math.max(0, Math.min(100, (x - t0) / (tEnd - t0) * 100)).toFixed(2); };
+    var bands = windows.map(function (w) { return '<i class="band' + (clip && w.s <= clip[0] + 1 && w.e >= clip[1] - 1 ? ' cur' : '') + '" style="left:' + pct(w.s) + '%;width:' + (pct(w.e) - pct(w.s)).toFixed(2) + '%"></i>'; }).join('')
+      + (clip ? '<i class="band cur" style="left:' + pct(clip[0]) + '%;width:' + (pct(clip[1]) - pct(clip[0])).toFixed(2) + '%"></i>' : '');
+    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + bands + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button></div><div class="cams">' + (opts.next ? '<button type="button" class="cam on nxt">⏭ ' + esc(S.next) + '</button>' : '') + '<button type="button" class="cam lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="cam clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
     var svgEl = $('svg.mp', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
@@ -256,7 +291,20 @@
       var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;
       var slow = slowmo && actionNear(d, match.ours, t);
       hud.sm.classList.toggle('hide', !(slow && playing));
-      if (playing) { t += realDt * speeds[si] * (slow ? 0.25 : 1); if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; } }
+      if (playing) {
+        t += realDt * speeds[si] * (slow ? 0.25 : 1);
+        if (clip && t >= clip[1]) {
+          if (opts.next && opts.auto) { opts.next(); return; } // reel: on to the next clip
+          t = clip[0]; snap = true;                             // single clip: loop
+        } else if (actionOnly) {
+          var inside = windows.some(function (w) { return t >= w.s && t <= w.e; });
+          if (!inside) {
+            var nx = windows.filter(function (w) { return w.s > t; })[0];
+            if (nx) { t = nx.s; snap = true; } else { t = tEnd; playing = false; pp.textContent = '▶'; }
+          }
+        }
+        if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; }
+      }
       draw(realDt);
       raf = requestAnimationFrame(frame);
     }
@@ -269,13 +317,14 @@
       // A link straight to this second of this match (opens the replay there).
       var url = location.origin + location.pathname + '?m=' + match.n + '&t=' + Math.max(0, Math.round(t) - 3);
       if (navigator.share) navigator.share({ title: document.title, url: url }).catch(function () {});
-      else if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { lnk.textContent = '✅'; setTimeout(function () { lnk.textContent = '🔗'; }, 1500); });
+      else if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { lnk.textContent = '✅ ' + S.copied; setTimeout(function () { lnk.textContent = '🔗'; }, 1500); });
     };
     range.oninput = function () { seek(Number(range.value)); };
     bar.querySelectorAll('.mk').forEach(function (b) { b.onclick = function () { seek(marks[Number(b.dataset.i)].t - 5); }; });
-    bar.querySelectorAll('.cam').forEach(function (b) {
+    bar.querySelectorAll('.cam[data-cam], .cam[data-slow], .cam[data-act]').forEach(function (b) {
       b.onclick = function () {
         if (b.dataset.slow) { slowmo = !slowmo; b.classList.toggle('on', slowmo); return; }
+        if (b.dataset.act) { actionOnly = !actionOnly; b.classList.toggle('on', actionOnly); return; }
         mode = b.dataset.cam;
         bar.querySelectorAll('.cam[data-cam]').forEach(function (x) { x.classList.toggle('on', x === b); });
       };
@@ -287,6 +336,8 @@
       seek: seek,
     };
     $('.cl', el).onclick = function () { ctl.stop(); };
+    if (opts.next) $('.nxt', bar).onclick = function () { opts.next(); };
+    if (opts.label) { var tag = document.createElement('div'); tag.className = 'cliptag'; tag.textContent = opts.label; el.appendChild(tag); }
     active = ctl;
     draw(0);
     raf = requestAnimationFrame(frame);
@@ -322,7 +373,7 @@
         var ms = mapImg.naturalWidth / 1000;
         var cam = cameraTarget(d, match.ours, t0);
         var marks = timelineMarks(d, match.ours).filter(function (m) { return m.t >= t0 && m.t <= t1; });
-        var title = (moments.filter(function (m) { return m.match === match && Math.abs(m.t - tc) < 15; })[0] || {}).type;
+        var title = (clips.filter(function (m) { return m.match === match && Math.abs(m.t - tc) < 15; })[0] || {}).type;
         function P(v, o) { return (v - cam[o]) / cam[2] * W; }
         function frame(t, dt) {
           var tg = cameraTarget(d, match.ours, t), k = 1 - Math.exp(-dt * 2.6);
@@ -428,7 +479,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=5');
+      var w = new Worker('/app/extract-worker.js?v=6');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -443,7 +494,9 @@
           w.terminate();
           var body = JSON.stringify(m.done);
           // keepalive: the upload survives the friend closing the tab right after (limit 64 KB).
-          fetch('/api/derived/' + encodeURIComponent(match.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: body.length < 60000 }).catch(function () {});
+          // keepalive has a 64 KB budget shared by all in-flight requests; if it is refused, send normally.
+          var send = function (keep) { return fetch('/api/derived/' + encodeURIComponent(match.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: keep }); };
+          send(body.length < 60000).then(function (r) { if (!r.ok && r.status >= 500) return send(false); }).catch(function () { return send(false).catch(function () {}); });
           resolve(m.done);
         }
       };
@@ -452,53 +505,95 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 3
+    var p = match.derived >= 4
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
-      if (d) { data[match.id] = d; renderStatic(match, el, d); feed(match, d); }
+      if (d) { data[match.id] = d; renderStatic(match, el, d); feed(match, d); enemiesPanel(match, d); }
       return d;
     });
   }
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 3)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 4)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 3)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 4)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();
   }
 
-  // ---------- highlights & squad logs ----------
-  var moments = [];
-  function renderMoments() {
-    var box = $('#moments');
+  // ---------- highlights: firefights (action windows) + moments, as clips ----------
+  var clips = [];
+  function enemyNames(d, team, match) {
+    var x = (d.enemies || []).filter(function (e) { return e.t === team; })[0];
+    if (x) return x.n.map(function (p) { return p[1]; });
+    var names = {};
+    d.events.forEach(function (e) { if (e.vt === team && !match.ours.includes(e.v)) names[e.vn] = 1; if (e.at === team && !match.ours.includes(e.a)) names[e.an] = 1; });
+    return Object.keys(names);
+  }
+  var MOMENT_SCORE = { clutch: 30, wipe: 20, rampage: 15, lastgasp: 10, longshot: 8 };
+  function buildClips() {
     SJ.matches.forEach(function (m) {
       var d = data[m.id];
-      if (d) findMoments(d, m.ours, m.place).forEach(function (x) { x.match = m; moments.push(x); });
+      if (!d) return;
+      var ff = actionWindows(d, m.ours).map(function (w) { return { kind: 'firefight', type: 'firefight', match: m, s: w.s, e: w.e, t: w.t0, w: w, tags: [], score: w.score }; });
+      findMoments(d, m.ours, m.place).forEach(function (x) {
+        var host = ff.filter(function (f) { return x.t >= f.s && x.t <= f.e; })[0];
+        if (host) { if (host.tags.indexOf(x.type) < 0) host.tags.push(x.type); host.score += MOMENT_SCORE[x.type] || 0; host.moment = host.moment || x; }
+        else clips.push({ kind: 'moment', type: x.type, match: m, s: Math.max(0, x.t - 12), e: x.t + 6, t: x.t, x: x, score: MOMENT_SCORE[x.type] || 5 });
+      });
+      clips.push.apply(clips, ff);
     });
-    var rank = { clutch: 0, wipe: 1, rampage: 2, lastgasp: 3, longshot: 4 };
-    moments.sort(function (a, b) { return rank[a.type] - rank[b.type] || a.match.n - b.match.n || a.t - b.t; });
-    if (!moments.length) { box.innerHTML = '<div class="muted small">' + esc(S.noMoments) + '</div>'; return; }
-    box.innerHTML = moments.slice(0, 8).map(function (x, i) {
-      var nm = function (id) { return nameOf(x.match, id); };
-      var who = x.who ? x.who.map(nm).join(' + ') : nm(x.a);
-      var text = fmt(S[x.type], { a: who, v: x.v ? nm(x.v) : '', n: x.n, s: x.s, d: x.d, w: weapon(x.w) });
-      var m = member(x.a || (x.who && x.who[0]));
-      return '<button type="button" class="mom" data-i="' + i + '">' + (m ? patchSvg(m.emblem, m.color, 36) : patchSvg('chevrons', GUEST, 36))
-        + '<div><div class="mt">' + esc(SJ.mt[x.type]) + '</div><div class="md">' + esc(text) + '</div><div class="mw">' + esc(fmt(S.matchAt, { m: x.match.n, t: mmss(x.t) })) + ' ▶</div></div></button>';
-    }).join('');
-    box.querySelectorAll('.mom').forEach(function (b) {
-      b.onclick = function () {
-        var x = moments[Number(b.dataset.i)], el = $('.map[data-match="' + x.match.id + '"]');
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        replay(x.match, el, data[x.match.id], x.t - 12);
-      };
-    });
+  }
+  // "1 kill" vs "3 kills": the *1 keys are the singular forms.
+  function plural(key, n) { return fmt(n === 1 && S[key + '1'] ? S[key + '1'] : S[key], { n: n }); }
+  function clipLabel(c) { return (c.kind === 'firefight' ? SJ.mt.firefight : SJ.mt[c.type]) + ' · ' + fmt(S.matchAt, { m: c.match.n, t: mmss(c.t) }); }
+  function playClip(list, i, auto) {
+    var c = list[i], el = $('.map[data-match="' + c.match.id + '"]');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    var hasNext = i + 1 < list.length;
+    replay(c.match, el, data[c.match.id], c.s, { clip: [c.s, c.e], label: (auto ? (i + 1) + '/' + list.length + ' · ' : '') + clipLabel(c), auto: auto,
+      next: hasNext ? function () { playClip(list, i + 1, auto); } : null });
+  }
+  function renderMoments() {
+    var box = $('#moments');
+    buildClips();
+    if (!clips.length) { box.innerHTML = '<div class="muted small">' + esc(S.noMoments) + '</div>'; return; }
+    var shown = clips.slice().sort(function (a, b) { return b.score - a.score; }).slice(0, 10);
+    var reel = shown.slice().sort(function (a, b) { return a.match.n - b.match.n || a.s - b.s; });
+    var nm = function (c, id) { return nameOf(c.match, id); };
+    var card = function (c, i) {
+      var d = data[c.match.id], lead, title, text;
+      if (c.kind === 'firefight') {
+        var w = c.w, parts = [];
+        if (w.kills) parts.push(plural('ffKills', w.kills));
+        if (w.knocks) parts.push(plural('ffKnocks', w.knocks));
+        if (w.revives) parts.push(plural('ffRevives', w.revives));
+        if (w.deaths) parts.push(plural('ffDown', w.deaths));
+        var foes = [];
+        w.teams.forEach(function (tm) { foes = foes.concat(enemyNames(d, tm, c.match).slice(0, 2)); });
+        text = parts.join(' · ') + (foes.length ? ' — ' + fmt(S.vs, { names: foes.slice(0, 3).join(', ') }) : '');
+        title = SJ.mt.firefight + (c.tags.length ? ' <span class="mtags">' + c.tags.map(function (x) { return esc(SJ.mt[x]); }).join(' · ') + '</span>' : '');
+        var killers = {};
+        d.events.forEach(function (e) { if (e.t >= c.s && e.t <= c.e && c.match.ours.includes(e.a) && e.k === 'kill' && !c.match.ours.includes(e.v)) killers[e.a] = (killers[e.a] || 0) + 1; });
+        lead = Object.keys(killers).sort(function (a, b) { return killers[b] - killers[a]; })[0];
+      } else {
+        var x = c.x, who = x.who ? x.who.map(function (id) { return nm(c, id); }).join(' + ') : nm(c, x.a);
+        text = fmt(S[x.type], { a: who, v: x.v ? nm(c, x.v) : '', n: x.n, s: x.s, d: x.d, w: weapon(x.w) });
+        title = esc(SJ.mt[x.type]);
+        lead = x.a || (x.who && x.who[0]);
+      }
+      var m = member(lead);
+      return '<button type="button" class="mom" data-i="' + i + '">' + (m ? patchSvg(m.emblem, m.color, 36) : patchSvg('crosshair', '#f2a900', 36))
+        + '<div><div class="mt">' + title + '</div><div class="md">' + esc(text) + '</div><div class="mw">' + esc(fmt(S.matchAt, { m: c.match.n, t: mmss(c.t) })) + ' · ' + Math.round(c.e - c.s) + 's ▶</div></div></button>';
+    };
+    box.innerHTML = '<button type="button" class="btn reel">▶ ' + esc(fmt(S.reel, { n: reel.length })) + '</button>' + shown.map(card).join('');
+    $('.reel', box).onclick = function () { playClip(reel, 0, true); };
+    box.querySelectorAll('.mom').forEach(function (b) { b.onclick = function () { playClip(shown, Number(b.dataset.i), false); }; });
   }
   function renderMatrices() {
     var box = $('#matrices');

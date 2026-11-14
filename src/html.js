@@ -185,6 +185,16 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .radio{border-color:rgba(185,167,122,.4)}.radio .rtext{margin:8px 0 0;font-size:16px;line-height:1.55;white-space:pre-line}
 .clipbox{position:fixed;inset:0;z-index:70;background:rgba(5,7,10,.8);display:grid;place-items:center;padding:16px}
 .clipbox .panel{width:min(100%,520px);margin:0}
+.rbar .band{position:absolute;top:18px;height:8px;border-radius:3px;background:rgba(242,169,0,.22);pointer-events:none}
+.rbar .band.cur{background:rgba(242,169,0,.6);box-shadow:0 0 0 1px var(--gold)}
+.map .cliptag{position:absolute;top:44px;inset-inline-start:8px;font:13px/1 var(--stencil);letter-spacing:.04em;background:var(--gold);color:#111;border-radius:6px;padding:6px 8px 4px;max-width:70%}
+.mtags{font:11px/1 var(--mono);letter-spacing:.06em;color:#111;background:var(--gold);border-radius:4px;padding:3px 5px;margin-inline-start:6px;vertical-align:middle}
+.btn.reel{width:100%;margin-bottom:2px}
+.enemies .erow{padding:8px 0;border-bottom:1px dashed var(--line)}.enemies .erow:last-of-type{border:0}
+.enemies .en{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.enemies .ek{color:#ff8a8a}.enemies .ed{color:#fff;background:rgba(229,56,59,.35);border-radius:4px;padding:0 5px}
+.enemies .dmg{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--panel2);margin:6px 0 3px}
+.enemies .dmg u{display:block;background:var(--gold)}.enemies .dmg s{display:block;background:#e5383b;text-decoration:none}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -380,7 +390,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=2', '/app/session.js?v=19'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=3', '/app/session.js?v=22'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

@@ -90,7 +90,8 @@ test('extractDerived on real telemetry', () => {
 test('validDerived rejects junk and foreign players', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
   assert.equal(validDerived(d, new Set(OURS.slice(1))), false);
-  assert.equal(validDerived({ ...d, v: 4 }, new Set(OURS)), false);
+  assert.equal(validDerived({ ...d, v: 5 }, new Set(OURS)), false);
+  assert.equal(validDerived({ ...d, enemies: [{ t: 1, n: [['a', 'b']], dd: -5, dt: 0, k: 0, kn: 0, d: 0, dn: 0, f: 1, l: 2 }] }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, alive: [[1, 2]] }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, events: [{ ...d.events[0], as: ['account.stranger'] }] }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, events: [{ k: 'kill', t: 'x' }] }, new Set(OURS)), false);

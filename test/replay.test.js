@@ -50,3 +50,18 @@ test('HUD numbers and timeline from real telemetry', () => {
     assert.equal(typeof new Function(`return (${f.toString()})`)(), 'function');
   }
 });
+
+import { actionWindows } from '../src/replay.js';
+test('actionWindows chains nearby action into firefights and skips lone events', () => {
+  const E = (t, k, a, v, extra = {}) => ({ t, k, a, v, an: a, vn: v, vp: [0, 0], ap: [0, 0], ...extra });
+  const d = { zones: [], players: {}, events: [
+    E(100, 'knock', 'A', 'x1', { vt: 7 }), E(104, 'kill', 'A', 'x1', { vt: 7 }), E(110, 'kill', 'B', 'x2', { vt: 7 }), E(118, 'revive', 'A', 'B'),
+    E(400, 'kill', 'A', 'y1', { vt: 9 }), // lone kill: score 3 < 5
+    E(700, 'knock', 'z', 'B', { at: 4 }), E(705, 'kill', 'z', 'B', { at: 4 }), E(709, 'kill', 'A', 'z', { vt: 4 }),
+  ] };
+  const w = actionWindows(d, ['A', 'B']);
+  assert.equal(w.length, 2);
+  assert.deepEqual([w[0].s, w[0].e, w[0].kills, w[0].knocks, w[0].revives, w[0].teams], [94, 122, 2, 1, 1, [7]]);
+  assert.deepEqual([w[1].deaths, w[1].kills, w[1].teams], [1, 1, [4]]);
+  assert.equal(typeof new Function(`return (${actionWindows.toString()})`)(), 'function');
+});

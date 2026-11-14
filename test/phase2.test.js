@@ -47,9 +47,17 @@ test('matrices: revives and set-ups (assists + knock for a teammate)', () => {
   assert.deepEqual(m.setups, { A: { B: 1 }, C: { B: 1 } });
 });
 
-test('real telemetry: v2 fields and moments run', () => {
+test('real telemetry: v4 fields (enemy squads) and moments run', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
-  assert.equal(d.v, 3);
+  assert.equal(d.v, 4);
+  // enemy squads: names, damage both ways, our kills match the kill events by team
+  assert.ok(d.enemies.length >= 1);
+  const ourKillsByTeam = {};
+  for (const e of d.events) if (e.k === 'kill' && OURS.includes(e.a) && !OURS.includes(e.v)) ourKillsByTeam[e.vt] = (ourKillsByTeam[e.vt] || 0) + 1;
+  for (const x of d.enemies) assert.equal(x.k, ourKillsByTeam[x.t] || 0, `team ${x.t}`);
+  assert.ok(d.enemies.some((x) => x.dd > 0) && d.enemies.some((x) => x.dt > 0), 'damage dealt and taken');
+  assert.ok(d.enemies.every((x) => x.n.length >= 1 && x.n.length <= 4));
+  assert.ok(d.events.filter((e) => e.k === 'kill').every((e) => Number.isInteger(e.at)));
   assert.ok(d.alive.length > 10, 'alive series');
   assert.ok(d.alive.every((a, i) => i === 0 || a[0] >= d.alive[i - 1][0]), 'in time order');
   assert.ok(d.alive[d.alive.length - 1][1] < d.alive[0][1] / 3, 'the field thins out');

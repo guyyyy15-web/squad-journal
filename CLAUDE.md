@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 3: adds the `alive` series). Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 4: v3 added the `alive` series, v4 enemy squads + attacker team `at`). Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
@@ -58,6 +58,11 @@ GitHub does **not** deploy.
   - Reuse `Intl.DateTimeFormat` instances (html.js `fmt`); building them per call cost ~10 ms a page.
 - **RTL check:** absolutely positioned decorations need a positioned parent (`.mdl` mud once made Hebrew pages
   scroll sideways). Before releasing UI, check `scrollWidth <= clientWidth` on every page in `he` and `en`.
+- **Highlights are clips:** `actionWindows` (replay.js) chains our kills/knocks/deaths/revives ≤ 12 s apart into
+  FIREFIGHT windows (score ≥ 5); moments inside a window become its tags. Cards open the replay in clip mode
+  (loop, ⏭ next); the reel plays the top clips in order; "Action only" skips quiet stretches in a full replay.
+- **Uploads from the page:** `keepalive` shares a 64 KB budget across in-flight requests; always fall back to a
+  plain fetch (a page that finds an older derived version re-analyses anyway).
 - **Client scripts** in `src/client/` are bundled as text and served from `/app/`. Bump the `?v=` in the page
   when they change. Functions shipped to the browser via `toString()` must be self-contained.
 

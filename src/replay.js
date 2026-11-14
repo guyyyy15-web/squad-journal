@@ -105,3 +105,41 @@ export function cameraTarget(d, ours, t, follow = '') {
   const cx = (x0 + x1) / 2; const cy = (y0 + y1) / 2;
   return [Math.max(0, Math.min(1000 - size, cx - size / 2)), Math.max(0, Math.min(1000 - size, cy - size / 2)), size];
 }
+
+/**
+ * Firefights: our kills/knocks/deaths/revives (and knocks on us) chained when ≤ gap seconds apart, padded so the
+ * build-up and the aftermath are in the clip. Score: kill 3, our death 3, knock 2, revive 2, knocked 1.
+ * Returns [{s, e, t0, t1, kills, knocks, deaths, revives, teams:[enemy team ids], score}] sorted by time.
+ */
+export function actionWindows(d, ours, gap = 12, minScore = 5) {
+  const set = new Set(ours);
+  const ev = [];
+  for (const e of d.events) {
+    let w = 0; let kind = '';
+    if (e.k === 'kill' && set.has(e.a) && !set.has(e.v)) { w = 3; kind = 'kills'; }
+    else if (e.k === 'kill' && set.has(e.v)) { w = 3; kind = 'deaths'; }
+    else if (e.k === 'knock' && set.has(e.a) && !set.has(e.v)) { w = 2; kind = 'knocks'; }
+    else if (e.k === 'revive' && set.has(e.a)) { w = 2; kind = 'revives'; }
+    else if (e.k === 'knock' && set.has(e.v)) { w = 1; kind = 'downed'; }
+    if (w) ev.push({ t: e.t, w, kind, team: kind === 'kills' || kind === 'knocks' ? e.vt : e.at });
+  }
+  ev.sort((a, b) => a.t - b.t);
+  const out = [];
+  let cur = null;
+  const close = () => {
+    if (cur && cur.score >= minScore) {
+      out.push({ s: Math.max(0, cur.t0 - 6), e: cur.t1 + 4, t0: cur.t0, t1: cur.t1, kills: cur.kills, knocks: cur.knocks, deaths: cur.deaths,
+        revives: cur.revives, teams: [...cur.teams], score: cur.score });
+    }
+  };
+  for (const x of ev) {
+    if (!cur || x.t - cur.t1 > gap) {
+      close();
+      cur = { t0: x.t, t1: x.t, kills: 0, knocks: 0, deaths: 0, revives: 0, downed: 0, teams: new Set(), score: 0 };
+    }
+    cur.t1 = x.t; cur.score += x.w; cur[x.kind]++;
+    if (x.team) cur.teams.add(x.team);
+  }
+  close();
+  return out;
+}
