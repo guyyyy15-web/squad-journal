@@ -144,7 +144,7 @@ async function backfill(env, b) {
   const db = env.DB;
   if (b.token !== await inviteToken(db)) return fail('bad token', 403);
   if (!ACC.test(b.accountId || '')) return fail('bad account');
-  const d = await drain(env, 3, b.accountId);
+  const d = await drain(env, 2, b.accountId);
   const remaining = await db.prepare('SELECT COUNT(*) AS n FROM queue WHERE account_id = ? AND attempts < 3').bind(b.accountId).first('n');
   if (d.stored || d.skipped) {
     // Rebuild sessions when this member's backfill is done (or every few calls), not on every slice.

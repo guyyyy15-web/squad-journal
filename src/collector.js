@@ -242,12 +242,13 @@ export async function collect(env, kind, doPoll, st) {
         rate = { remaining: 0, resetAt: Date.now() + 60_000 };
       }
     }
-    const d = await drain(env, 6);
+    // Small slices: the free plan allows ~10 ms CPU per run, and each match is a ~70 KB JSON.parse.
+    const d = await drain(env, 2);
     if (d.stored) info.stored = d.stored;
     if (d.retry) info.retry = d.retry;
-    const t = await archiveTelemetry(env, settings, 3);
+    // Telemetry is streamed byte-for-byte into R2 (no parsing), so it is cheap on CPU.
+    const t = d.stored ? 0 : await archiveTelemetry(env, settings, 2);
     if (t) info.telemetry = t;
-    if (d.stored || d.skipped) info.sessions = (await rebuildSessions(env, settings)).sessions;
 
     const [q, tp, last] = await db.batch([
       db.prepare('SELECT COUNT(*) AS n FROM queue WHERE attempts < 3'),
@@ -258,6 +259,13 @@ export async function collect(env, kind, doPoll, st) {
     const now = Date.now();
     const lastActivity = last.results[0]?.t || 0;
     const next = { ...st, pending: q.results[0].n + tp.results[0].n, last_activity: lastActivity };
+    // Rebuild sessions once the backlog is (nearly) drained, in a run that stored nothing, to spread CPU.
+    if (d.stored || d.skipped) next.dirty = true;
+    if (next.dirty && !d.stored && q.results[0].n <= 2) {
+      info.sessions = (await rebuildSessions(env, settings)).sessions;
+      next.dirty = false;
+    }
+    if (next.dirty) next.pending++;
     if (doPoll) {
       next.next_poll = now + nextPollDelay({
         now, lastActivity, foundNew: info.queued > 0, rateRemaining: rate?.remaining ?? null, rateResetAt: rate?.resetAt || 0,
