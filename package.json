@@ -1,0 +1,13 @@
+{
+  "name": "squad-journal",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "dev": "wrangler dev",
+    "deploy": "wrangler d1 migrations apply squad-journal --remote && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.162.0"
+  }
+}

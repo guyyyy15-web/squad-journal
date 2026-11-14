@@ -1,0 +1,29 @@
+# Squad Journal: one Worker = collector (cron) + API + pages.
+# Secrets (set in the Cloudflare dashboard or `wrangler secret put`, never in git):
+#   PUBG_API_KEY  developer.pubg.com key
+#   ADMIN_CODE    code for /admin
+name = "squad-journal"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[triggers]
+crons = ["* * * * *"]  # every minute; the collector decides whether to call PUBG (adaptive)
+
+[vars]
+PUBG_SHARD = "steam"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "squad-journal"
+database_id = "dfa595fc-8f3b-4559-8b61-f9cf3ca43746"
+migrations_dir = "migrations"
+
+# Raw match JSON (matches/<id>.json) and telemetry (telemetry/<id>.json.gz).
+# PUBG deletes both after 14 days; this is our permanent copy.
+[[r2_buckets]]
+binding = "DATA"
+bucket_name = "squad-journal-data"
