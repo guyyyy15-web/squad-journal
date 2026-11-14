@@ -174,7 +174,7 @@ export function extractDerived(events, ours, mapSize) {
   for (const h of healBuf) if (ppIdx.has(h[1])) out.heal.push([h[0], ppIdx.get(h[1]), h[2]]);
   for (const g of gearBuf) if (ppIdx.has(g[1])) out.gear.push([g[0], ppIdx.get(g[1]), g[2], g[2] >= 2 ? wIdx(g[3]) : g[3]]);
   // everyone else (after the battle index is final, so heals/gear stay limited to the fighters)
-  for (const id of Object.keys(oth).slice(0, 110)) {
+  for (const id of Object.keys(oth).slice(0, 130)) {
     const { c, pts } = oth[id];
     const tEnd = othDead[id] !== undefined ? othDead[id] : pts[pts.length - 1][0];
     const tStart = Math.ceil(pts[0][0] / 10) * 10;
@@ -243,7 +243,7 @@ export function validDerived(d, allowedIds) {
   }
   if (d.v >= 6) {
     const P = d.pp.length;
-    if (!Array.isArray(d.op) || d.op.length > 110 || !d.op.every((x) => Array.isArray(x) && x.length >= 5 && x.length <= 803 && x.length % 2 === 1
+    if (!Array.isArray(d.op) || d.op.length > 130 || !d.op.every((x) => Array.isArray(x) && x.length >= 5 && x.length <= 803 && x.length % 2 === 1
       && isInt(x[0], 0, P - 1) && isInt(x[1], 0, 100000) && isInt(x[2], x[1], 100000) && x.every((v) => isInt(v)))) return false;
   }
   if (d.enemies !== undefined) {

@@ -673,7 +673,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=9');
+      var w = new Worker('/app/extract-worker.js?v=10');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
