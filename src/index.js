@@ -2,7 +2,7 @@
 import { tick, drain, rebuildSessions, getSettings, enqueue } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
-import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage } from './html.js';
+import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
 import { hallOfFame } from './hall.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
@@ -224,7 +224,15 @@ async function putDerived(env, id, req) {
   const { results } = await env.DB.prepare(`SELECT account_id FROM participants WHERE match_id = ?`).bind(id).all();
   if (!results.length) return fail('unknown match', 404);
   if (!validDerived(d, new Set(results.map((r) => r.account_id)))) return fail('invalid');
+  const map = await env.DB.prepare('SELECT map FROM matches WHERE match_id = ?').bind(id).first('map');
+  const pts = [];
+  for (const [acc, p] of Object.entries(d.players)) {
+    for (const kind of ['land', 'death']) {
+      if (p[kind]) pts.push(env.DB.prepare('INSERT OR REPLACE INTO points (match_id, account_id, map, kind, x, y, t) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, acc, map || '', kind, p[kind][0], p[kind][1], p[kind][2]));
+    }
+  }
   await env.DB.batch([
+    ...pts,
     // First write wins, except that a newer extractor version replaces an older one.
     env.DB.prepare(`INSERT INTO derived (match_id, json) VALUES (?, ?) ON CONFLICT(match_id) DO UPDATE SET json = excluded.json
       WHERE json_extract(derived.json, '$.v') < json_extract(excluded.json, '$.v')`).bind(id, text),
@@ -374,6 +382,18 @@ export default {
         if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
+        if (path === '/maps') {
+          const kind = url.searchParams.get('kind') === 'death' ? 'death' : 'land';
+          const maps = (await env.DB.prepare(`SELECT p.map, COUNT(DISTINCT p.match_id) AS n FROM points p JOIN members mb ON mb.account_id = p.account_id
+            JOIN session_matches sm ON sm.match_id = p.match_id GROUP BY p.map ORDER BY n DESC`).all()).results;
+          const want = url.searchParams.get('map');
+          const map = maps.find((x) => x.map === want)?.map || maps[0]?.map || 'Baltic_Main';
+          const [points, members, clan] = await Promise.all([
+            env.DB.prepare(`SELECT p.match_id, p.account_id, p.x, p.y FROM points p JOIN session_matches sm ON sm.match_id = p.match_id
+              WHERE p.map = ? AND p.kind = ?`).bind(map, kind).all().then((r) => r.results),
+            env.DB.prepare('SELECT * FROM members WHERE active = 1').all().then((r) => r.results), clanOf(env.DB)]);
+          return mapsPage({ lang, maps, map, kind, points, members, clan });
+        }
         if (path === '/hall') {
           const [hall, members, clan] = await Promise.all([hallData(env), env.DB.prepare('SELECT * FROM members').all().then((r) => r.results), clanOf(env.DB)]);
           return hallPage({ lang, hall, members, clan });

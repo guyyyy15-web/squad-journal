@@ -95,7 +95,7 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .rbar .pp,.rbar .spd{min-height:44px;min-width:44px;padding:0 12px;font-size:15px}
 .cams{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
 .cam{min-height:36px;padding:4px 10px;font-size:13px;font-weight:600;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;flex:none}
-.cam.on{background:rgba(242,169,0,.15);color:var(--gold2);border-color:rgba(242,169,0,.6)}
+.cam{text-decoration:none;display:inline-flex;align-items:center;gap:6px}.cam.on{background:rgba(242,169,0,.15);color:var(--gold2);border-color:rgba(242,169,0,.6)}
 .map .hud{position:absolute;top:8px;inset-inline-start:8px;display:flex;gap:0;direction:ltr;background:rgba(10,12,15,.88);border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .map .hud>*{font:700 11px/1 var(--mono);letter-spacing:.04em;padding:6px 7px;color:var(--text);border-inline-start:1px solid var(--line)}
 .map .hud>*:first-child{border:0;color:var(--gold2);font-size:12px}.map .hud span:empty{display:none}
@@ -163,7 +163,7 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 @keyframes pulse{70%{box-shadow:0 0 0 12px rgba(229,56,59,0)}100%{box-shadow:0 0 0 0 rgba(229,56,59,0)}}
 .toast{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.6)}
 .tabs{display:flex;gap:6px;margin-top:12px}
-.tabs a{flex:1;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:10px;color:var(--muted);text-decoration:none;font:15px/1 var(--stencil);background:var(--panel)}
+.tabs a{flex:1;font-size:14px!important;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:10px;color:var(--muted);text-decoration:none;font:15px/1 var(--stencil);background:var(--panel)}
 .tabs a.on{color:#111;background:var(--gold);border-color:var(--gold)}
 .cmd .pos{font:28px/1 var(--stencil);color:var(--dim);width:28px;text-align:center}
 .xp{margin-top:10px}.xp i{display:block;height:8px;border-radius:4px;background:var(--panel2);overflow:hidden;margin-bottom:6px}
@@ -375,7 +375,39 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
 }
 
 /** Tabs under the tape: sessions | hall of fame. */
-export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a></nav>`;
+export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a><a href="/maps" class="${active === 'maps' ? 'on' : ''}">🗺 ${esc(S[lang].navMaps)}</a></nav>`;
+
+/** /maps — per-map heatmap of where we land (or die), filterable by player. */
+export function mapsPage({ lang, maps, map, kind, points, members, clan }) {
+  const t = S[lang];
+  const byId = new Map(members.map((m) => [m.account_id, m]));
+  const pts = points.filter((p) => byId.has(p.account_id));
+  let box = [0, 0, 1000];
+  if (pts.length) {
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const size = Math.min(1000, Math.max(320, Math.max(x1 - x0, y1 - y0) + 160));
+    box = [Math.max(0, Math.min(1000 - size, (x0 + x1) / 2 - size / 2)), Math.max(0, Math.min(1000 - size, (y0 + y1) / 2 - size / 2)), size];
+  }
+  const u = box[2] / 100;
+  const hot = kind === 'death' ? '229,56,59' : '242,169,0';
+  const svg = `<svg class="mp" viewBox="${box.map((v) => Math.round(v)).join(' ')} ${Math.round(box[2])}" xmlns="http://www.w3.org/2000/svg">
+    <defs><radialGradient id="heat"><stop offset="0" stop-color="rgb(${hot})" stop-opacity=".55"/><stop offset="1" stop-color="rgb(${hot})" stop-opacity="0"/></radialGradient></defs>
+    <image href="/maps/${esc(map)}.jpg" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/><rect width="1000" height="1000" fill="rgba(5,7,10,.35)"/>
+    ${pts.map((p) => `<g class="hp" data-acc="${esc(p.account_id)}"><circle cx="${p.x}" cy="${p.y}" r="${u * 9}" fill="url(#heat)"/><circle cx="${p.x}" cy="${p.y}" r="${u * 0.9}" fill="${esc(byId.get(p.account_id).color)}" stroke="#000" stroke-width="${u * 0.3}"/></g>`).join('')}
+  </svg>`;
+  const who = [...new Set(pts.map((p) => p.account_id))].map((id) => byId.get(id));
+  const chips = `<button type="button" class="cam on" data-f="">${esc(t.everyone)}</button>` + who.map((m) => `<button type="button" class="cam" data-f="${esc(m.account_id)}">${pt(m, 16)}${esc(m.nickname)}</button>`).join('');
+  const games = new Set(points.map((p) => p.match_id)).size;
+  return page(lang, `${t.navMaps} · ${t.brand}`, `${top(lang, '/maps', false, clan)}${nav(lang, 'maps')}
+    <div style="margin:22px 0 8px"><span class="tag">INTEL // HEATMAPS</span><h1 style="margin-top:8px">${esc(t.mapsTitle)}</h1></div>
+    <div class="cams">${maps.map((m) => `<a class="cam ${m.map === map ? 'on' : ''}" href="/maps?map=${esc(m.map)}&kind=${esc(kind)}">${esc(mapName(m.map))} <span class="muted">${m.n}</span></a>`).join('')}</div>
+    <div class="tabs" style="margin-top:8px"><a href="/maps?map=${esc(map)}&kind=land" class="${kind === 'land' ? 'on' : ''}">🪂 ${esc(t.drops)}</a><a href="/maps?map=${esc(map)}&kind=death" class="${kind === 'death' ? 'on' : ''}">✕ ${esc(t.deaths)}</a></div>
+    <div class="panel" style="padding:0;margin-top:12px"><div class="map" style="margin:0;border:0">${pts.length ? svg : `<div class="ov">${esc(t.noPoints)}</div>`}</div></div>
+    <div class="muted small">${esc(t.onMap(games))}</div>
+    <div class="cams" id="pf">${chips}</div>`,
+  { script: meScript + `document.querySelectorAll('#pf .cam').forEach(function(b){b.onclick=function(){var f=b.dataset.f;document.querySelectorAll('#pf .cam').forEach(function(x){x.classList.toggle('on',x===b)});document.querySelectorAll('.hp').forEach(function(g){g.style.display=!f||g.dataset.acc===f?'':'none'})}});` });
+}
 
 const xpBar = (lang, p) => `<div class="xp"><i><u style="width:${Math.round(p.progress * 100)}%"></u></i><span class="muted small num">${esc(p.next ? S[lang].xpTo(p.xp, p.next.xp, p.next[lang]) : S[lang].xpMax(p.xp))}</span></div>`;
 const recCard = (lang, r, byId, showWho = true) => `<div class="mdl rec">
