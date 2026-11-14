@@ -40,3 +40,18 @@ test('hall: service records, records with deep links, streaks', () => {
   assert.equal(rec.win_streak.where.m, 1);
   assert.equal(h.games, 3);
 });
+
+import { pairsOf } from '../src/hall.js';
+test('pairs: together stats and head-to-head', () => {
+  const rows = [
+    R({ account_id: 'B', kills: 5, place: 1 }), R({ account_id: 'A', kills: 2, place: 1 }), R({ account_id: 'C', kills: 2, place: 1 }),
+    R({ match_id: 'm2', account_id: 'A', kills: 3, place: 9 }), R({ match_id: 'm2', account_id: 'B', kills: 3, place: 9 }),
+    R({ match_id: 'm3', account_id: 'A', kills: 1, place: 4 }), R({ match_id: 'm3', account_id: 'B', kills: 0, place: 4, team_id: 2 }),
+  ];
+  const p = Object.fromEntries(pairsOf(rows).map((x) => [x.a + x.b, x]));
+  assert.deepEqual(Object.keys(p).sort(), ['AB', 'AC', 'BC']);
+  assert.equal(p.AB.games, 2); assert.equal(p.AB.wins, 1); assert.equal(p.AB.win_rate, 50); assert.equal(p.AB.avg_place, 5);
+  assert.equal(p.AB.ka, 0); assert.equal(p.AB.kb, 1); // game 2 was a tie; game 3 they were on different teams
+  assert.equal(p.AC.ka, 0); assert.equal(p.AC.kb, 0);
+  assert.equal(p.BC.ka, 1);
+});

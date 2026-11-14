@@ -174,6 +174,14 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .cabinet{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:12px}
 .cab{display:grid;justify-items:center;text-align:center;gap:2px}.cab b{font:18px/1 var(--stencil);color:var(--gold2)}.cab span{font-size:12px;color:var(--muted)}
 .rank{flex:none;vertical-align:middle;filter:drop-shadow(0 1px 1px rgba(0,0,0,.7))}
+.duo{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line)}
+.duo:last-child{border:0}.duo .pos{font:22px/1 var(--stencil);color:var(--dim);text-align:center}
+.duo .dv{display:grid;justify-items:end}.duo .dv b{font:22px/1 var(--stencil);color:var(--gold2)}
+.duo .row b{font-size:14px;max-width:82px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h2h{padding:12px 0;border-bottom:1px dashed var(--line)}.h2h:last-child{border:0}
+.h2h .score{font:24px/1 var(--stencil)}.h2h b{font-size:14px}
+.tug{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px;background:var(--panel2)}.tug u{display:block;height:100%}
+.pairs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.pair{margin:0}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -376,6 +384,26 @@ const recCard = (lang, r, byId, showWho = true) => `<div class="mdl rec">
   <p>${esc(recordText(lang, r))}${r.where?.at ? ` · ${esc(fmtDay(lang, r.where.at))}` : ''}${r.where?.map ? ` · ${esc(mapName(r.where.map))}` : ''}</p>
   ${r.where?.session_id ? `<p><a href="/s/${esc(r.where.session_id)}${r.where.m ? `?m=${r.where.m}&t=0` : ''}">▶ ${esc(S[lang].watch)}</a></p>` : ''}</div></div>`;
 
+const pairFace = (byId, id) => { const m = byId.get(id); return m ? `${pt(m, 26)}<b>${esc(m.nickname)}</b>` : ''; };
+function duosBlock(lang, pairs, byId) {
+  const t = S[lang];
+  const list = pairs.filter((p) => p.games >= 3 && byId.has(p.a) && byId.has(p.b)).sort((x, y) => y.win_rate - x.win_rate || y.games - x.games).slice(0, 5);
+  if (!list.length) return '';
+  return `<h2>${esc(t.duos)} <span class="tag">DUOS</span></h2><div class="panel"><div class="muted small">${esc(t.duosSub)}</div>
+    ${list.map((p, i) => `<div class="duo"><span class="pos">${i + 1}</span><span class="row" style="gap:6px;flex-wrap:nowrap">${pairFace(byId, p.a)}<span class="muted">+</span>${pairFace(byId, p.b)}</span>
+      <span class="dv"><b>${p.win_rate}%</b><span class="muted small">${esc(t.games(p.games))}</span></span></div>`).join('')}</div>`;
+}
+function rivalsBlock(lang, pairs, byId) {
+  const t = S[lang];
+  const list = pairs.filter((p) => p.ka + p.kb >= 2 && byId.has(p.a) && byId.has(p.b)).sort((x, y) => (y.ka + y.kb) - (x.ka + x.kb)).slice(0, 5);
+  if (!list.length) return '';
+  return `<h2>${esc(t.rivals)} <span class="tag">HEAD TO HEAD</span></h2><div class="panel"><div class="muted small">${esc(t.rivalsSub)}</div>
+    ${list.map((p) => { const A = byId.get(p.a), B = byId.get(p.b), tot = p.ka + p.kb;
+      return `<div class="h2h"><div class="row sp" style="flex-wrap:nowrap"><span class="row" style="gap:6px;flex-wrap:nowrap">${pt(A, 24)}<b>${esc(A.nickname)}</b></span>
+        <span class="score num">${p.ka}<span class="muted">–</span>${p.kb}</span><span class="row" style="gap:6px;flex-wrap:nowrap"><b>${esc(B.nickname)}</b>${pt(B, 24)}</span></div>
+        <div class="tug" dir="ltr"><u style="width:${Math.round((p.ka / tot) * 100)}%;background:${esc(A.color)}"></u><u style="width:${Math.round((p.kb / tot) * 100)}%;background:${esc(B.color)}"></u></div></div>`; }).join('')}</div>`;
+}
+
 /** /hall — chain of command (ranks) and all-time records. */
 export function hallPage({ lang, hall, members, clan }) {
   const t = S[lang];
@@ -394,7 +422,20 @@ export function hallPage({ lang, hall, members, clan }) {
     <div style="margin:22px 0 8px"><span class="tag">HALL OF FAME${clan?.tag ? ` // [${esc(clan.tag)}]` : ''}</span><h1 style="margin-top:8px">${esc(t.hallTitle)}</h1>
     <p class="muted small">${hall.games} ${esc(t.st.games)} · ${hall.sessions} ${esc(t.st.sessions)}</p></div>
     <h2>${esc(t.chain)} <span class="tag">RANKS</span></h2>${chain}
+    ${duosBlock(lang, hall.pairs, byId)}${rivalsBlock(lang, hall.pairs, byId)}
     <h2>${esc(t.records)} <span class="tag">RECORDS</span></h2><div class="medals recs">${recs}</div>`, { script: meScript });
+}
+
+function partnerBlock(lang, id, pairs, byId) {
+  const t = S[lang];
+  const mine = pairs.filter((p) => (p.a === id || p.b === id) && byId.has(p.a) && byId.has(p.b));
+  const other = (p) => (p.a === id ? p.b : p.a);
+  const best = mine.filter((p) => p.games >= 3).sort((x, y) => y.win_rate - x.win_rate || y.games - x.games)[0];
+  const mineScore = (p) => (p.a === id ? [p.ka, p.kb] : [p.kb, p.ka]);
+  const rival = mine.filter((p) => p.ka + p.kb >= 2).sort((x, y) => (mineScore(y)[1] - mineScore(y)[0]) - (mineScore(x)[1] - mineScore(x)[0]) || (y.ka + y.kb) - (x.ka + x.kb))[0];
+  if (!best && !rival) return '';
+  const card = (label, p, text) => `<div class="panel pair"><span class="kicker">${esc(label)}</span><div class="row" style="gap:8px;margin-top:6px">${pt(byId.get(other(p)), 30)}<b style="font:20px/1 var(--stencil)">${esc(byId.get(other(p)).nickname)}</b></div><div class="muted small" style="margin-top:6px">${esc(text)}</div></div>`;
+  return `<div class="pairs">${best ? card(t.bestPartner, best, t.together(best.games, best.win_rate)) : ''}${rival ? card(t.rival, rival, t.h2h(...mineScore(rival))) : ''}</div>`;
 }
 
 /** /p/:id — a member's service record. */
@@ -410,6 +451,7 @@ export function profilePage({ lang, p, member, hall, members, recent, clan, path
         <div class="row" style="gap:8px">${rankInsignia(p.level, 28)}<span class="kicker" style="font-size:15px">${esc(p.rank[lang])}</span></div>
         <h1 style="margin-top:4px">${esc(member.nickname)}</h1></div></div>
       ${xpBar(lang, p)}</div>
+    ${partnerBlock(lang, p.account_id, hall.pairs, byId)}
     <h2>${esc(t.serviceRecord)} <span class="tag">STATS</span></h2>
     <div class="stats">${stat(p.games, t.st.games)}${stat(p.wins, t.st.wins, p.wins)}${stat(`${p.win_rate}%`, t.st.winRate)}${stat(p.mvps, t.st.mvps, p.mvps)}</div>
     <div class="stats">${stat(p.kills, t.st.kills)}${stat(p.kd, t.st.kd)}${stat(p.avg_damage, t.st.avgDmg)}${stat(p.revives, t.st.revives)}</div>

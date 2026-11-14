@@ -141,7 +141,7 @@ async function hallData(env) {
   const db = env.DB;
   const keyRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM session_matches) AS n, (SELECT MAX(end_at) FROM sessions) AS e,
     (SELECT COUNT(*) FROM sessions WHERE summary_json IS NOT NULL) AS s, (SELECT group_concat(account_id) FROM members WHERE active = 1) AS m`).first();
-  const key = `v1:${keyRow.n}:${keyRow.e}:${keyRow.s}:${hash(keyRow.m || '')}`;
+  const key = `v2:${keyRow.n}:${keyRow.e}:${keyRow.s}:${hash(keyRow.m || '')}`;
   try {
     const c = JSON.parse((await setting(db, 'hall_cache')) || 'null');
     if (c && c.key === key) return c.data;

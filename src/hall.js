@@ -128,5 +128,35 @@ export function hallOfFame(rows, sessions) {
   }
   if (bestRun >= 2) records.push({ id: 'win_streak', value: bestRun, holders: [], where: where(bestStart.r) });
 
-  return { players, records, games: games.size, sessions: sessions.length };
+  return { players, records, pairs: pairsOf(rows), games: games.size, sessions: sessions.length };
+}
+
+/**
+ * Every two members who played on the same team: games and wins together, and head-to-head
+ * (in how many shared games each one got more kills). a < b by account id, so each pair appears once.
+ */
+export function pairsOf(rows) {
+  const teams = new Map();
+  for (const r of rows) {
+    const k = `${r.match_id}|${r.team_id}`;
+    if (!teams.has(k)) teams.set(k, []);
+    teams.get(k).push(r);
+  }
+  const P = new Map();
+  for (const team of teams.values()) {
+    for (let i = 0; i < team.length; i++) {
+      for (let j = i + 1; j < team.length; j++) {
+        let [x, y] = [team[i], team[j]];
+        if (x.account_id > y.account_id) [x, y] = [y, x];
+        const k = `${x.account_id}|${y.account_id}`;
+        if (!P.has(k)) P.set(k, { a: x.account_id, b: y.account_id, games: 0, wins: 0, place: 0, ka: 0, kb: 0, kills_a: 0, kills_b: 0 });
+        const p = P.get(k);
+        p.games++; p.place += x.place; if (x.place === 1) p.wins++;
+        p.kills_a += x.kills; p.kills_b += y.kills;
+        if (x.kills > y.kills) p.ka++; else if (y.kills > x.kills) p.kb++;
+      }
+    }
+  }
+  return [...P.values()].map((p) => ({ ...p, win_rate: Math.round((p.wins / p.games) * 100), avg_place: Math.round((p.place / p.games) * 10) / 10 }))
+    .sort((x, y) => y.games - x.games);
 }
