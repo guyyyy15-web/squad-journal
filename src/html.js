@@ -78,7 +78,7 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .match .hd h3{font-size:20px}
 .winner{font:16px/1.2 var(--stencil);color:var(--gold2);letter-spacing:.03em;margin:8px 0 2px}
 .map{position:relative;margin:12px -16px 0;aspect-ratio:1;background:#0b0e12 center/cover;border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;touch-action:pan-y}
-.map svg.mp{width:100%;height:100%;display:block}
+.map svg.mp{width:100%;height:100%;display:block;direction:ltr}
 .map .ov{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:var(--muted);font-size:14px;background:rgba(8,10,13,.55)}
 .map .tools{position:absolute;bottom:4px;inset-inline-end:4px;display:flex;gap:2px}
 .map .tools button{min-height:36px;padding:6px 12px;font-size:13px;border-radius:999px;background:rgba(10,12,15,.85);color:var(--text);border:1px solid var(--line);font-weight:600}
@@ -97,10 +97,10 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .cams{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
 .cam{min-height:36px;padding:4px 10px;font-size:13px;font-weight:600;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;flex:none}
 .cam{text-decoration:none;display:inline-flex;align-items:center;gap:6px}.cam.on{background:rgba(242,169,0,.15);color:var(--gold2);border-color:rgba(242,169,0,.6)}
-.map .hud{position:absolute;top:6px;inset-inline-start:6px;display:flex;gap:0;direction:ltr;background:rgba(10,12,15,.55);border-radius:5px;overflow:hidden;pointer-events:none}
+.map .hud{position:absolute;top:6px;left:6px;display:flex;gap:0;direction:ltr;background:rgba(10,12,15,.55);border-radius:5px;overflow:hidden;pointer-events:none}
 .map .hud>*{font:700 9px/1 var(--mono);letter-spacing:.03em;padding:4px 5px;color:rgba(238,241,245,.85);border-inline-start:1px solid rgba(255,255,255,.08)}
 .map .hud>*:first-child{border:0;color:var(--gold2);font-size:10px}.map .hud span:empty{display:none}
-.map .h-sm{position:absolute;top:6px;inset-inline-end:6px;font:800 8px/1 var(--mono);letter-spacing:.1em;background:rgba(242,169,0,.8);color:#111;border-radius:4px;padding:3px 5px;pointer-events:none}
+.map .h-sm{position:absolute;top:6px;right:6px;font:800 8px/1 var(--mono);letter-spacing:.1em;background:rgba(242,169,0,.8);color:#111;border-radius:4px;padding:3px 5px;pointer-events:none}
 .map .kf{position:absolute;bottom:6px;inset-inline-start:6px;margin:0;padding:0;list-style:none;display:grid;gap:2px;max-width:66%;justify-items:start;pointer-events:none}
 .map.fighting .kf{display:none}
 .map .kf li{font-size:10px;line-height:1.2;background:rgba(10,12,15,.6);border-inline-start:2px solid #ff4d4d;border-radius:3px;padding:2px 5px;animation:kfin .25s ease-out;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -189,7 +189,7 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .clipbox .panel{width:min(100%,520px);margin:0}
 .rbar .band{position:absolute;top:18px;height:8px;border-radius:3px;background:rgba(242,169,0,.22);pointer-events:none}
 .rbar .band.cur{background:rgba(242,169,0,.6);box-shadow:0 0 0 1px var(--gold)}
-.map .cliptag{position:absolute;top:26px;inset-inline-start:6px;font:9px/1 var(--stencil);letter-spacing:.04em;background:rgba(242,169,0,.75);color:#111;border-radius:3px;padding:3px 5px 2px;max-width:60%;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.map .cliptag{position:absolute;top:26px;left:6px;font:9px/1 var(--stencil);letter-spacing:.04em;background:rgba(242,169,0,.75);color:#111;border-radius:3px;padding:3px 5px 2px;max-width:60%;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mtags{font:11px/1 var(--mono);letter-spacing:.06em;color:#111;background:var(--gold);border-radius:4px;padding:3px 5px;margin-inline-start:6px;vertical-align:middle}
 .btn.reel{width:100%;margin-bottom:2px}
 .enemies .erow{padding:8px 0;border-bottom:1px dashed var(--line)}.enemies .erow:last-of-type{border:0}
@@ -218,7 +218,6 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .battle{margin:8px 0 0;background:#0b0d12;border:3px solid #eef1f5;box-shadow:0 0 0 3px #0b0d12,0 0 0 5px var(--gold);padding:6px 8px}
 .battle .bh{display:flex;justify-content:space-between;font:9px/1 "Press Start 2P",monospace;color:var(--muted);margin-bottom:4px;direction:ltr}
 .battle .vsm{color:#ff6b6b}.battle .bg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.battle .side{min-width:0}
-.map svg.cut{animation:cut .22s ease-out}@keyframes cut{0%{filter:brightness(2.2) contrast(1.2)}100%{filter:none}}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -414,7 +413,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=6', '/app/session.js?v=36'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=7', '/app/session.js?v=39'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

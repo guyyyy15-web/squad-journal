@@ -113,6 +113,13 @@ test('directorShot: close shots for kills, duels and approaches; groups over str
   assert.equal(fol.kind, 'follow'); assert.ok(fol.box[2] <= 170, 'not zoomed out for the straggler'); assert.ok(inside(fol.box, [412, 401]) && !inside(fol.box, [806, 800]));
   const one = directorShot(d, null, ['A', 'B', 'C'], 150, 'C');
   assert.ok(inside(one.box, [806, 800]));
+  // the straggler's kill far away stays in the background: the camera keeps the group (no jump across the map)
+  const far = { ...d, events: [{ t: 300, k: 'kill', a: 'C', v: 'y', vp: [830, 800], ap: [810, 800], an: 'C', vn: 'y' }] };
+  const bg = directorShot(far, null, ['A', 'B', 'C'], 300.2);
+  assert.equal(bg.kind, 'follow'); assert.ok(inside(bg.box, [412, 401]) && !inside(bg.box, [830, 800]));
+  // ...but following C, or when C is the last one standing, it is the shot
+  assert.equal(directorShot(far, null, ['A', 'B', 'C'], 300.2, 'C').kind, 'kill');
+  assert.equal(directorShot(far, null, ['C'], 300.2).kind, 'kill');
   assert.equal(typeof new Function(`return (${directorShot.toString()})`)(), 'function');
 });
 

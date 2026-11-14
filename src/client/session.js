@@ -191,7 +191,7 @@
     // Director: at each firefight pause on an ENGAGEMENT card, play the fight slowly with a live battle panel,
     // then a RESULT card. Needs derived v5 (damage/HP/gear); older data falls back to the plain replay.
     var model = d.pp ? battleModel(d, match.ours) : null, director = !!model, introduced = {}, phase = null, curW = null, fight = null;
-    var battle = null, lastHp = {}, held = null, lastCut = 0, lastTiles = 0;
+    var battle = null, lastHp = {}, held = null, lastTiles = 0;
     var card = el.closest('.match');
     var ours = new Set(match.ours);
     var ids = Object.keys(d.players);
@@ -207,7 +207,7 @@
     svg.push('<g class="ops"></g>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 6) + '</g><text class="pmn" y="5" font-size="1.75" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
+    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 4.6) + '</g><g class="php" display="none"><rect x="-2.5" y="-4" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-3.85" width="4.7" height=".6"/></g><text class="pmn" y="4" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
@@ -239,6 +239,13 @@
     var svgEl = $('svg.mp', el), tileG = $('.tiles', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
     var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), sm: $('.h-sm', el) };
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
+    var php = pm.map(function (g) { return g.querySelector('.php'); }), phf = pm.map(function (g) { return g.querySelector('.phf'); });
+    var hpCol = function (h) { return h.state ? '#ff4d4d' : h.hp > 50 ? '#3ddc97' : h.hp > 25 ? '#ffcf4d' : '#ff4d4d'; };
+    // a small HP bar floating under an enemy marker (map units)
+    var hpBar = function (x, y, u, h) {
+      var w = u * 3.6, fill = h.state ? 0.12 : h.hp / 100;
+      return '<rect x="' + (x - w / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(2) + '" height="' + (u * 0.8).toFixed(2) + '" fill="#000" fill-opacity=".75"/><rect x="' + (x - w / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (w * fill).toFixed(2) + '" height="' + (u * 0.8).toFixed(2) + '" fill="' + hpCol(h) + '"/>';
+    };
     var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
     var squadIds = ids.filter(function (id) { return ours.has(id); });
     // Everyone else in the match (derived v6): faint dots; the squads we trade with turn red with a trail
@@ -264,15 +271,13 @@
       else if (held && t - held.t < 2.5 && t >= held.t && shot.kind === 'follow') shot = held.shot; // let the moment breathe
       var target = shot.box, nowMs = performance.now();
       var ccx = cur[0] + cur[2] / 2, ccy = cur[1] + cur[2] / 2, tcx = target[0] + target[2] / 2, tcy = target[1] + target[2] / 2;
-      if (!snap && Math.hypot(tcx - ccx, tcy - ccy) > Math.max(cur[2], target[2]) * 1.3 && nowMs - lastCut > 1500) {
-        snap = true; lastCut = nowMs;
-        svgEl.classList.remove('cut'); void svgEl.getBoundingClientRect(); svgEl.classList.add('cut');
-      }
       if (snap) { cur = target.slice(); snap = false; } else {
-        var dt = realDt || 0.016, kill = shot.kind === 'kill';
-        var kp = 1 - Math.exp(-dt * (kill ? 5 : 3));
-        var kz = 1 - Math.exp(-dt * (kill ? 6 : target[2] < cur[2] ? 2.2 : 1.3));
-        var ncx = ccx + (tcx - ccx) * kp, ncy = ccy + (tcy - ccy) * kp, ns = cur[2] + (target[2] - cur[2]) * kz;
+        // smooth only: a long move pulls back a little on the way (zoom out → glide → zoom in), never a jump
+        var dt = realDt || 0.016, kill = shot.kind === 'kill', far = Math.hypot(tcx - ccx, tcy - ccy);
+        var tsz = far > cur[2] * 0.7 ? Math.max(target[2], Math.min(1000, far * 1.2)) : target[2];
+        var kp = 1 - Math.exp(-dt * (kill ? 3.5 : 2.4));
+        var kz = 1 - Math.exp(-dt * (tsz < cur[2] ? (kill ? 3 : 1.8) : 2.2));
+        var ncx = ccx + (tcx - ccx) * kp, ncy = ccy + (tcy - ccy) * kp, ns = cur[2] + (tsz - cur[2]) * kz;
         cur = [ncx - ns / 2, ncy - ns / 2, ns];
       }
       // a little shake when we trade hits, a punch-in on a headshot
@@ -309,12 +314,20 @@
         pm[i].style.display = pos ? '' : 'none';
         if (pos) {
           // fan out markers that would sit on top of each other in a close-up
-          var mx = pos[0], my = pos[1], gap = u * 4.2;
+          var mx = pos[0], my = pos[1], gap = u * 3.3;
           for (var oj = 0; oj < i; oj++) {
             var op = posAt(d.players[ids[oj]], t);
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
           pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + u.toFixed(3) + ')');
+          var pi = model ? model.idx.get(id) : undefined;
+          if (pi !== undefined) {
+            var hp = hpAt(model, pi, t);
+            php[i].setAttribute('display', '');
+            phf[i].setAttribute('width', (4.7 * (hp.state ? 0.12 : hp.hp / 100)).toFixed(2));
+            phf[i].setAttribute('fill', hpCol(hp));
+            php[i].setAttribute('opacity', hp.state === 1 ? (Math.floor(performance.now() / 300) % 2 ? '1' : '.35') : '1');
+          } else php[i].setAttribute('display', 'none');
         }
         var pts = p.land && t >= p.land[2] ? [p.land[0] + ',' + p.land[1]] : [];
         for (var q = 0; q < p.path.length && p.path[q][0] <= t; q++) pts.push(p.path[q][1] + ',' + p.path[q][2]);
@@ -374,13 +387,13 @@
           if (t - lx.t > 8) return;
           var hh = hpAt(model, i, t);
           if (hh.state === 2) return;
-          var pos = lx.a == i ? lx.ap : lx.vp, r = u * 1.6;
+          var pos = lx.a == i ? lx.ap : lx.vp, r = u * 1.15;
           var live = opBy[i] && t - lx.t > 1.5 ? opAt(opBy[i], t) : null;
           if (live) pos = live;
           if (!pos[0] && !pos[1]) return;
           diam[i] = 1;
-          fxh.push('<path d="M' + pos[0] + ' ' + (pos[1] - r) + 'L' + (pos[0] + r) + ' ' + pos[1] + 'L' + pos[0] + ' ' + (pos[1] + r) + 'L' + (pos[0] - r) + ' ' + pos[1] + 'Z" fill="#e5383b" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
-          fxh.push('<rect x="' + (pos[0] - u * 2.5) + '" y="' + (pos[1] + r + u * 0.6) + '" width="' + (u * 5) + '" height="' + (u * 0.8) + '" fill="#000"/><rect x="' + (pos[0] - u * 2.5) + '" y="' + (pos[1] + r + u * 0.6) + '" width="' + (u * 5 * (hh.state ? 0.15 : hh.hp / 100)) + '" height="' + (u * 0.8) + '" fill="' + (hh.state === 1 ? '#e5383b' : '#ff8a8a') + '"/>');
+          fxh.push('<path d="M' + pos[0] + ' ' + (pos[1] - r) + 'L' + (pos[0] + r) + ' ' + pos[1] + 'L' + pos[0] + ' ' + (pos[1] + r) + 'L' + (pos[0] - r) + ' ' + pos[1] + 'Z" fill="' + (hh.state === 1 ? '#ff4d4d' : '#dfe3ea') + '" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
+          fxh.push(hpBar(pos[0], pos[1] - r - u * 1.3, u, hh));
         });
       }
       var oh = [], dim = [];
@@ -390,11 +403,16 @@
         var team = d.pp[orow[0]] ? d.pp[orow[0]][2] : 0, en = foeT[team];
         if (en && t >= en.f - 90 && t <= en.l + 15) {
           var tp = [];
-          for (var ts2 = Math.max(orow[1], t - 60); ts2 < t; ts2 += 10) { var q2 = opAt(orow, ts2); if (q2) tp.push(q2[0].toFixed(1) + ',' + q2[1].toFixed(1)); }
-          tp.push(opos[0].toFixed(1) + ',' + opos[1].toFixed(1));
-          oh.push('<polyline points="' + tp.join(' ') + '" fill="none" stroke="#ff6b6b" stroke-opacity=".7" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>');
-          oh.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 1.1).toFixed(2) + '" fill="#ff5c5c" stroke="#000" stroke-width="1.2" vector-effect="non-scaling-stroke"/>');
-        } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.7).toFixed(2) + '"/>');
+          for (var ts2 = Math.max(orow[1] + 10, t - 30); ts2 < t; ts2 += 5) { var q2 = opAt(orow, ts2); if (q2) tp.push(q2); }
+          tp.push(opos);
+          for (var si2 = 1; si2 < tp.length; si2++) {
+            var a2 = tp[si2 - 1], b2 = tp[si2];
+            if (Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) > 25) continue;
+            oh.push('<line x1="' + a2[0].toFixed(1) + '" y1="' + a2[1].toFixed(1) + '" x2="' + b2[0].toFixed(1) + '" y2="' + b2[1].toFixed(1) + '" stroke="#dfe3ea" stroke-opacity="' + (0.08 + 0.42 * si2 / tp.length).toFixed(2) + '" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>');
+          }
+          oh.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.8).toFixed(2) + '" fill="#dfe3ea" fill-opacity=".92" stroke="#000" stroke-width="1.2" vector-effect="non-scaling-stroke"/>');
+          if (model) oh.push(hpBar(opos[0], opos[1] - u * 2.1, u, hpAt(model, orow[0], t)));
+        } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
       fx.innerHTML = fxh.join('');

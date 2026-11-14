@@ -64,12 +64,14 @@ GitHub does **not** deploy.
 - **Director** (replay): at each firefight a small ENGAGEMENT banner (n VS n, enemy names), the fight in slow
   motion with a live battle panel under the map (HP bars, DOWN/KIA, helmet/vest, guns), combo damage numbers, tracers,
   enemy markers and a combat camera, then a RESULT banner (dealt/taken, kills, MVP). Banners fade by themselves and
-  **never pause the replay**. Everyone else in the match is a faint dot (`opAt`); squads we trade with turn red with a
-  60 s trail from 90 s before first contact. Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
+  **never pause the replay**. Everyone else in the match is a faint dot (`opAt`); squads we trade with become a stronger grey
+  (never red: red means knocked/killed) with a short fading 30 s trail from 90 s before first contact (steps > 25 units
+  are not drawn). Our patches and enemies carry a floating HP bar. Map overlays use physical left/right (the map is LTR). Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
   `fightOf`, tested); RPG look uses the Press Start 2P font. Grid columns must be `minmax(0,1fr)` or they overflow.
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
-  (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s, a big jump is a
-  cut (flash) instead of a pan, zoom eases slower out than in, shake on hits, punch on headshots, close markers fan
+  (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
+  fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move
+  pulls back on the way (zoom out → glide → zoom in), zoom eases slower out than in, shake on hits, punch on headshots, close markers fan
   out. Sharp close-ups come from 8192 px map tiles in R2 (`maps/hi/<code>/<x>_<y>.jpg`, 8×8 of 1024 px, from
   pubg/api-assets LFS), loaded only for what is on screen when the view is < 420 units.
 - **Uploads from the page:** `keepalive` shares a 64 KB budget across in-flight requests; always fall back to a

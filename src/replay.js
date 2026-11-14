@@ -261,10 +261,20 @@ export function directorShot(d, model, ours, t, follow = '') {
   }
   const posOf = (id) => { const a = alive.find((x) => x[0] === id); return a ? a[1] : null; };
   const real = (p) => p && (p[0] || p[1]);
+  // The main group (members within 50 units of each other). When most of us are together, a straggler's fight far
+  // away doesn't pull the camera across the map: it plays in the background (callouts, kill feed).
+  let best = [];
+  for (const [, p] of alive) {
+    const group = alive.filter(([, q]) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 50);
+    if (group.length > best.length) best = group;
+  }
+  const groupIds = new Set(best.map((x) => x[0]));
+  const strict = best.length >= 2 && best.length > alive.length - best.length;
+  const counts = (...idList) => idList.some((id) => mine(id) && (!strict || groupIds.has(id) || !posOf(id)));
   // 1. kill cam
   let kc = null;
   for (const e of d.events) {
-    if ((e.k !== 'kill' && e.k !== 'knock') || !(mine(e.a) || mine(e.v))) continue;
+    if ((e.k !== 'kill' && e.k !== 'knock') || !counts(e.a, e.v)) continue;
     if (e.t < t - 1 || e.t > t + 0.6) continue;
     if (!kc || Math.abs(e.t - t) < Math.abs(kc.t - t)) kc = e;
   }
@@ -281,7 +291,7 @@ export function directorShot(d, model, ours, t, follow = '') {
     for (const x of model.dmg) {
       if (x.t < t - 1.2 || x.t > t + 0.8) continue;
       const ida = model.pp[x.a][0]; const idv = model.pp[x.v][0];
-      if (!(mine(ida) || mine(idv))) continue;
+      if (!counts(ida, idv)) continue;
       if (real(x.ap)) pts.push(x.ap);
       if (real(x.vp)) pts.push(x.vp);
       ids.add(ida); ids.add(idv);
@@ -296,7 +306,7 @@ export function directorShot(d, model, ours, t, follow = '') {
   // 3. approach: the next fight of ours within 6 s
   let nx = null;
   for (const e of d.events) {
-    if ((e.k !== 'kill' && e.k !== 'knock') || !(mine(e.a) || mine(e.v)) || e.t <= t || e.t > t + 6) continue;
+    if ((e.k !== 'kill' && e.k !== 'knock') || !counts(e.a, e.v) || e.t <= t || e.t > t + 6) continue;
     if (!nx || e.t < nx.t) nx = e;
   }
   if (nx && alive.length) {
@@ -308,12 +318,7 @@ export function directorShot(d, model, ours, t, follow = '') {
   }
   // 4. follow the biggest group (members within 50 units of each other), not the stragglers
   if (alive.length) {
-    let best = null;
-    for (const [, p] of alive) {
-      const group = alive.filter(([, q]) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 50).map((x) => x[1]);
-      if (!best || group.length > best.length) best = group;
-    }
-    const X = best.map((p) => p[0]); const Y = best.map((p) => p[1]);
+    const X = best.map((x) => x[1][0]); const Y = best.map((x) => x[1][1]);
     const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
     return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.6 + 70, 100, 170)), kind: 'follow' };
   }
