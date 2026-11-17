@@ -23,7 +23,7 @@ export function extractDerived(events, ours, mapSize) {
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 6, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [] };
+  const out = { v: 7, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [] };
   // v6 — everyone else on the map. op: [ppIndex, tStart, tEnd, x0, y0, x1, y1, …], one point every 10 s from the landing
   // (PUBG logs every player's position about every 10 s) until death.
   const oth = {}; const othLand = {}; const othJump = {}; const othDead = {};
@@ -62,7 +62,7 @@ export function extractDerived(events, ours, mapSize) {
         if (e.vehicle && e.vehicle.vehicleType === 'TransportAircraft' && e.character) {
           jumps.push([T(e), ...P(e.character.location)]);
           if (set.has(e.character.accountId)) pl(e.character).jump = [...P(e.character.location), T(e)];
-          else othJump[e.character.accountId] = 1;
+          else othJump[e.character.accountId] = T(e);
         }
         break;
       case 'LogParachuteLanding':
@@ -73,7 +73,7 @@ export function extractDerived(events, ours, mapSize) {
         const c = e.character;
         if (!c || !(e.elapsedTime > 0)) break;
         if (set.has(c.accountId)) pl(c).path.push([T(e), ...P(c.location)]);
-        else if (c.accountId && (othLand[c.accountId] !== undefined || !othJump[c.accountId])) {
+        else if (c.accountId) {
           (oth[c.accountId] ||= { c: { accountId: c.accountId, name: c.name, teamId: c.teamId }, pts: [] }).pts.push([T(e), ...P(c.location)]);
         }
         break;
@@ -175,7 +175,11 @@ export function extractDerived(events, ours, mapSize) {
   for (const g of gearBuf) if (ppIdx.has(g[1])) out.gear.push([g[0], ppIdx.get(g[1]), g[2], g[2] >= 2 ? wIdx(g[3]) : g[3]]);
   // everyone else (after the battle index is final, so heals/gear stay limited to the fighters)
   for (const id of Object.keys(oth).slice(0, 130)) {
-    const { c, pts } = oth[id];
+    const { c } = oth[id];
+    // v7: nothing from the plane ride or the parachute (positions start at the landing, or 90 s after the jump)
+    const from = othLand[id] !== undefined ? othLand[id] : othJump[id] !== undefined ? othJump[id] + 90 : -1;
+    const pts = oth[id].pts.filter((q) => q[0] >= from);
+    if (!pts.length) continue;
     const tEnd = othDead[id] !== undefined ? othDead[id] : pts[pts.length - 1][0];
     const tStart = Math.ceil(pts[0][0] / 10) * 10;
     if (tEnd <= tStart) continue;
@@ -218,7 +222,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || ![1, 2, 3, 4, 5, 6].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3, 4, 5, 6, 7].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;

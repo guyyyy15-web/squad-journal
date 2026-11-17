@@ -197,7 +197,25 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .enemies .ek{color:#ff8a8a}.enemies .ed{color:#fff;background:rgba(229,56,59,.35);border-radius:4px;padding:0 5px}
 .enemies .dmg{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--panel2);margin:6px 0 3px}
 .enemies .dmg u{display:block;background:var(--gold)}.enemies .dmg s{display:block;background:#e5383b;text-decoration:none}
-.map .bn{position:absolute;top:44px;inset-inline:0;margin-inline:auto;width:max-content;max-width:86%;z-index:3;pointer-events:none;text-align:center;background:rgba(11,13,18,.8);border:1px solid rgba(242,169,0,.7);border-radius:4px;padding:4px 8px;opacity:0;transform:translateY(-4px);transition:opacity .3s,transform .3s;visibility:hidden}
+.map .bn{position:absolute;top:44px;inset-inline:0;margin-inline:auto;width:max-content;max-width:calc(100% - 136px);z-index:3;pointer-events:none;text-align:center;background:rgba(11,13,18,.8);border:1px solid rgba(242,169,0,.7);border-radius:4px;padding:4px 8px;opacity:0;transform:translateY(-4px);transition:opacity .3s,transform .3s;visibility:hidden}
+.map .vig{position:absolute;inset:0;pointer-events:none;z-index:1;opacity:.35;transition:opacity .6s;background:radial-gradient(circle at var(--vx,50%) var(--vy,50%),transparent 38%,rgba(0,0,0,.6) 100%)}
+.map.cine .vig{opacity:.85}
+.map .lbx{position:absolute;left:0;right:0;height:0;background:#000;z-index:2;pointer-events:none;transition:height .5s ease}
+.map .lbx.t{top:0}.map .lbx.b{bottom:0}.map.cine .lbx{height:6%}
+.map.cine .hud,.map.cine .h-sm{top:calc(6% + 4px)}.map.cine .cliptag{top:calc(6% + 24px)}.map.cine .sqb{top:calc(6% + 24px)}
+.map .tn{position:absolute;left:0;right:0;top:0;height:2px;z-index:3;pointer-events:none;background:linear-gradient(90deg,var(--khaki),var(--gold),#ff6b3d);opacity:.15;transition:opacity .4s}
+.map .tn.beat{animation:beat 1s ease-in-out infinite}@keyframes beat{50%{filter:brightness(1.8)}}
+.map .sqb{position:absolute;top:24px;right:6px;z-index:3;pointer-events:none;display:grid;gap:3px;transition:top .5s}
+.map .sqb .sq{display:flex;align-items:center;gap:4px;background:rgba(10,12,15,.6);border-radius:4px;padding:2px 4px 2px 3px}
+.map .sqb .sv{display:grid;gap:1px}.map .sqb .sh{display:block;width:34px;height:4px;background:#000;border:1px solid rgba(255,255,255,.12)}
+.map .sqb .sh u{display:block;height:100%;transition:width .25s}
+.map .sqb .sg{font:7px/1 var(--mono);color:var(--muted);letter-spacing:.04em}
+.map .sqb .dn .sg{color:#ff6b6b;animation:blink .6s steps(2) infinite}.map .sqb .kia{opacity:.4}
+.map .irb{position:absolute;top:calc(6% + 26px);left:50%;transform:translateX(-50%);z-index:4;min-height:30px;padding:4px 10px;border-radius:3px;border:1px solid rgba(255,255,255,.5);background:rgba(10,12,15,.75);color:#eef1f5;font:9px/1 "Press Start 2P",monospace;letter-spacing:.06em;animation:irb 1s steps(2) infinite}
+@keyframes irb{50%{border-color:var(--gold)}}
+.map.rw svg.mp{animation:rw .45s ease-out}@keyframes rw{0%{filter:grayscale(1) contrast(1.3) blur(1px)}100%{filter:none}}
+.map .sqb.hide,.map .irb.hide{display:none}
+.map .hud,.map .h-sm,.map .kf,.map .cliptag,.map .tools,.map .bn{z-index:3}
 .map .bn.on{opacity:1;transform:none;visibility:visible}
 .map .bn .bt{font:9px/1.3 "Press Start 2P",monospace;color:var(--gold2);letter-spacing:.04em}.map .bn.result .bt{color:#eef1f5}
 .map .bn .bv{font:9px/1.3 "Press Start 2P",monospace;color:#ff6b6b;margin-inline-start:4px}.map .bn .bv i{font-style:normal}
@@ -413,7 +431,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=7', '/app/session.js?v=40'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=8', '/app/session.js?v=42'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

@@ -316,14 +316,206 @@ export function directorShot(d, model, ours, t, follow = '') {
     if (dist < 150) return { box: box((who[0] + target[0]) / 2, (who[1] + target[1]) / 2, clamp(dist * 1.6 + 40, 60, 130)), kind: 'approach' };
     return { box: box(who[0], who[1], 90), kind: 'approach' };
   }
-  // 4. follow the biggest group (members within 50 units of each other), not the stragglers
+  // 4. stalk: someone closing in on the group (derived v6) → frame both, the camera creeps in
+  if (best.length && d.op && d.op.length) {
+    const gx = best.reduce((s, x) => s + x[1][0], 0) / best.length; const gy = best.reduce((s, x) => s + x[1][1], 0) / best.length;
+    let foe = null; let fd = 1e9;
+    for (const r of d.op) { const p = opAt(r, t); if (!p) continue; const dd = Math.hypot(p[0] - gx, p[1] - gy); if (dd < fd) { fd = dd; foe = p; } }
+    if (foe && fd < 90) {
+      const X = best.map((x) => x[1][0]).concat(foe[0]); const Y = best.map((x) => x[1][1]).concat(foe[1]);
+      const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
+      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.5 + 36, 70, 150)), kind: 'stalk' };
+    }
+  }
+  // 5. follow the biggest group (members within 50 units of each other), not the stragglers
   if (alive.length) {
     const X = best.map((x) => x[1][0]); const Y = best.map((x) => x[1][1]);
     const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
     return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.6 + 70, 100, 170)), kind: 'follow' };
   }
-  // 5. nobody of ours left: stay on the last fall
+  // 6. nobody of ours left: stay on the last fall
   const deaths = Object.keys(d.players).filter(mine).map((id) => d.players[id].death).filter(Boolean).sort((a, b) => b[2] - a[2]);
   if (deaths.length) return { box: box(deaths[0][0], deaths[0][1], 90), kind: 'aftermath' };
   return { box: [0, 0, 1000], kind: 'wide' };
+}
+
+// ---------------- cinematic layer (pace, drop, downed state, instant replays) ----------------
+
+/** Weapon class for tracers and sound: sr, dmr, ar, smg, sg, lmg, pistol, boom, melee, other. */
+export function weaponClass(w) {
+  const s = String(w || '').toLowerCase();
+  if (!s) return 'other';
+  if (/grenade|molotov|c4|panzer|mortar|sticky|m79|rpg|explosion|bomb/.test(s)) return 'boom';
+  if (/kar98|m24|awm|mosin|win94|lynx|dragunov|l6|winchester/.test(s)) return 'sr';
+  if (/mini14|sks|slr|mk14|mk12|vss|qbu|fnfal|mk47|dmr/.test(s)) return 'dmr';
+  if (/s12k|s1897|s686|saiga|dbs|o12|sawnoff|shotgun|origin12/.test(s)) return 'sg';
+  if (/m249|dp28|mg3|lmg/.test(s)) return 'lmg';
+  if (/uzi|ump|vector|tommy|thompson|bizon|mp5|mp9|p90|js9|smg|vz61/.test(s)) return 'smg';
+  if (/p92|p1911|p18|r1895|r45|deagle|skorpion|nagant|pistol|flare/.test(s)) return 'pistol';
+  if (/pan|machete|crowbar|sickle|fist|player(male|female)|melee|punch/.test(s)) return 'melee';
+  if (/hk416|m416|akm|ak47|scar|m16|groza|beryl|berylm762|aug|g36|qbz|mk47|ace32|k2|famas|m762|ar/.test(s)) return 'ar';
+  return 'other';
+}
+
+/**
+ * The transport plane at time t, from our jump points along the flight line d.plane:
+ * { pos: [x, y], dir: [dx, dy] } or null when there is no plane / it has left the map.
+ * Speed comes from two of our jumps at different places; otherwise `fallback` map units per second.
+ */
+export function planeAt(d, ours, t, fallback = 8.5) {
+  if (!d.plane) return null;
+  const [a, b] = d.plane;
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const dir = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+  const along = (p) => (p[0] - a[0]) * dir[0] + (p[1] - a[1]) * dir[1];
+  const jumps = ours.map((id) => d.players[id] && d.players[id].jump).filter(Boolean).sort((x, y) => x[2] - y[2]);
+  if (!jumps.length) return null;
+  const j0 = jumps[0]; const j1 = jumps[jumps.length - 1];
+  let v = fallback;
+  if (j1[2] - j0[2] >= 2 && along(j1) - along(j0) > 5) v = Math.min(30, Math.max(3, (along(j1) - along(j0)) / (j1[2] - j0[2])));
+  const s = along(j0) + (t - j0[2]) * v;
+  if (s < 0 || s > L) return null;
+  return { pos: [a[0] + dir[0] * s, a[1] + dir[1] * s], dir };
+}
+
+/**
+ * Opening shot: before the first of us lands. Wide on the plane before the jump, then it closes in on the
+ * parachutes and their landing spots. null once everyone of ours is on the ground (or no data).
+ */
+export function dropShot(d, ours, t, plane) {
+  const ps = ours.map((id) => d.players[id]).filter((p) => p && p.land);
+  if (!ps.length || t >= Math.max(...ps.map((p) => p.land[2]))) return null;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const box = (cx, cy, size) => { const s = clamp(size, 20, 1000); return [clamp(cx - s / 2, 0, 1000 - s), clamp(cy - s / 2, 0, 1000 - s), s]; };
+  const air = ps.filter((p) => p.jump && t >= p.jump[2]);
+  if (!air.length) {
+    if (!plane) return null;
+    const firstJump = Math.min(...ps.map((p) => (p.jump ? p.jump[2] : p.land[2])));
+    // the camera drifts from the plane towards the drop zone as the jump comes closer
+    const lz = ps.map((p) => p.land);
+    const lx = lz.reduce((s, p) => s + p[0], 0) / lz.length; const ly = lz.reduce((s, p) => s + p[1], 0) / lz.length;
+    const f = clamp(1 - (firstJump - t) / 25, 0, 1);
+    return { box: box(plane.pos[0] + (lx - plane.pos[0]) * f * 0.5, plane.pos[1] + (ly - plane.pos[1]) * f * 0.5, 420 - f * 120), kind: 'plane' };
+  }
+  const pts = [];
+  for (const p of air) { pts.push(p.land); pts.push(posAt(p, t) || p.land); }
+  const X = pts.map((p) => p[0]); const Y = pts.map((p) => p[1]);
+  const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
+  return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.5 + 60, 90, 400)), kind: 'drop' };
+}
+
+/**
+ * Knocked state of a player at t: null, or { bleed: 1..0 (time left), revive: 0..1 (a teammate picking him up) }.
+ * Uses what really happened next: the bleed-out ends exactly at the finishing kill; a revive fills over its last 10 s.
+ */
+export function downedAt(d, id, t, nominal = 45) {
+  let k = null;
+  for (const e of d.events) if (e.k === 'knock' && e.v === id && e.t <= t && (!k || e.t > k.t)) k = e;
+  if (!k) return null;
+  let end = null;
+  for (const e of d.events) if ((e.k === 'kill' || e.k === 'revive') && e.v === id && e.t >= k.t && (!end || e.t < end.t)) end = e;
+  if (end && t >= end.t) return null;
+  if (!end && t - k.t > 60) return null;
+  const clamp = (v) => Math.max(0, Math.min(1, v));
+  if (end && end.k === 'kill') return { bleed: clamp(1 - (t - k.t) / Math.max(1, end.t - k.t)), revive: 0 };
+  return { bleed: Math.max(0.15, clamp(1 - (t - k.t) / nominal)), revive: end ? clamp((t - (end.t - 10)) / 10) : 0 };
+}
+
+/**
+ * Tension 0..1 for every second from `from` to `to` (array index = second - from): enemies close to us,
+ * hits and falls, the build-up to our next fight, teammates down, standing outside the zone, the endgame.
+ * Rises ahead of action (look-ahead) and falls off slowly after it.
+ */
+export function tensionCurve(d, model, ours, from, to) {
+  const set = new Set(ours);
+  const n = Math.max(1, Math.ceil(to - from) + 1);
+  const raw = new Array(n).fill(0);
+  const add = (i, v) => { if (i >= 0 && i < n && v > raw[i]) raw[i] = v; };
+  // enemies close by (sampled every 2 s)
+  const others = d.op || [];
+  for (let i = 0; i < n; i += 2) {
+    const t = from + i;
+    const us = ours.map((id) => d.players[id] && posAt(d.players[id], t)).filter(Boolean);
+    if (!us.length) continue;
+    let best = 1e9;
+    for (const r of others) {
+      const p = opAt(r, t);
+      if (!p) continue;
+      for (const q of us) best = Math.min(best, Math.hypot(p[0] - q[0], p[1] - q[1]));
+    }
+    const prox = Math.max(0, Math.min(1, (32 - best) / 24)) * 0.55; // within ~250 m on an 8 km map
+    add(i, prox); add(i + 1, prox);
+    const z = zoneAt(d, t);
+    if (z && us.some((q) => Math.hypot(q[0] - z.safe[0], q[1] - z.safe[1]) > z.safe[2])) { add(i, Math.max(raw[i], 0.25)); }
+    const al = aliveAt(d, t);
+    if (al && al[0] <= 12) { add(i, 0.3 + (12 - al[0]) * 0.03); add(i + 1, 0.3 + (12 - al[0]) * 0.03); }
+  }
+  // hits that involve us
+  if (model) {
+    for (const x of model.dmg) {
+      if (!(model.ourIdx.has(x.a) || model.ourIdx.has(x.v))) continue;
+      const i = Math.floor(x.t - from);
+      for (let k = -1; k <= 1; k++) add(i + k, 0.72);
+    }
+  }
+  // our fights: knocks, kills, deaths, revives; and the build-up before them
+  for (const e of d.events) {
+    if (!(set.has(e.a) || set.has(e.v))) continue;
+    const i = Math.floor(e.t - from);
+    const top = e.k === 'revive' ? 0.75 : 1;
+    for (let k = -1; k <= 1; k++) add(i + k, top);
+    // the build-up before a fight (only before its first shot: nothing of ours in the 20 s before)
+    const opener = e.k !== 'revive' && !d.events.some((x) => (set.has(x.a) || set.has(x.v)) && x.t < e.t && x.t >= e.t - 20);
+    if (opener) for (let k = 1; k <= 15; k++) add(i - k, 0.45 * (1 - k / 16) + 0.15);
+  }
+  // teammates on the ground
+  for (const id of ours) {
+    for (const e of d.events) {
+      if (e.k !== 'knock' || e.v !== id) continue;
+      for (let i = Math.floor(e.t - from); i < n; i++) { if (!downedAt(d, id, from + i)) break; add(i, 0.6); }
+    }
+  }
+  // smooth: rise a little early, fall slowly
+  const out = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) out[i] = Math.max(raw[i], i + 2 < n ? raw[i + 2] * 0.85 : 0, i > 0 ? out[i - 1] - 0.08 : 0);
+  return out.map((v) => Math.round(Math.min(1, v) * 100) / 100);
+}
+
+/** Game seconds per real second for a tension value (auto pace). */
+export function paceOf(x) {
+  const pts = [[0, 50], [0.2, 28], [0.4, 14], [0.6, 7], [0.75, 4], [0.9, 2], [1, 1.2]];
+  for (let i = 1; i < pts.length; i++) {
+    if (x <= pts[i][0]) { const [a, va] = pts[i - 1]; const [b, vb] = pts[i]; return va + (vb - va) * ((x - a) / (b - a)); }
+  }
+  return 1.1;
+}
+
+/**
+ * Moments worth an instant replay: each of our deaths (killcam), and the best kill of each firefight
+ * (headshot, long shot, multi-kill or the one that wiped the squad). [{ t, kind: 'kill'|'death', e, head, score }]
+ */
+export function bigMoments(d, model, ours, windows) {
+  const set = new Set(ours);
+  const kills = d.events.filter((e) => e.k === 'kill' && e.a && set.has(e.a) && !set.has(e.v));
+  const head = (e) => {
+    if (!model) return false;
+    const ai = model.idx.get(e.a); const vi = model.idx.get(e.v);
+    let last = null;
+    for (const x of model.dmg) if (x.a === ai && x.v === vi && x.t <= e.t + 0.5 && x.t >= e.t - 15) last = x;
+    return !!(last && last.head);
+  };
+  const out = [];
+  for (const w of windows) {
+    let best = null;
+    const inW = kills.filter((e) => e.t >= w.s && e.t <= w.e);
+    inW.forEach((e, i) => {
+      const h = head(e);
+      const multi = kills.filter((x) => x.a === e.a && Math.abs(x.t - e.t) <= 10).length >= 2;
+      const score = (h ? 3 : 0) + ((e.d || 0) >= 100 ? 2 : 0) + (multi ? 2 : 0) + (i === inW.length - 1 && w.kills >= 2 ? 2 : 0) + 1;
+      if (!best || score > best.score) best = { t: e.t, kind: 'kill', e, head: h, score };
+    });
+    if (best && best.score >= 3) out.push(best);
+  }
+  for (const e of d.events) if (e.k === 'kill' && set.has(e.v)) out.push({ t: e.t, kind: 'death', e, head: head(e), score: 10 });
+  return out.sort((a, b) => a.t - b.t);
 }

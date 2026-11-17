@@ -171,6 +171,71 @@
     $('.rp', el).onclick = function () { replay(match, el, d, 0); };
   }
 
+  // ---------- sound (off by default; synthesized in the browser, no files) ----------
+  var sfx = (function () {
+    var on = false, ac = null, noise = null, lastShot = 0, lastBeat = 0, lastWhoosh = 0;
+    try { on = localStorage.getItem('sj_snd') === '1'; } catch (e) {}
+    function ctx() {
+      if (!ac) {
+        var C = window.AudioContext || window.webkitAudioContext;
+        if (!C) return null;
+        ac = new C();
+        noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+        var ch = noise.getChannelData(0);
+        for (var i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+      }
+      if (ac.state === 'suspended') ac.resume();
+      return ac;
+    }
+    function burst(dur, type, freq, vol, q) {
+      var c = ctx(); if (!c) return;
+      var src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), now = c.currentTime;
+      src.buffer = noise; f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
+      g.gain.setValueAtTime(vol, now); g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      src.connect(f); f.connect(g); g.connect(c.destination); src.start(now, Math.random() * 0.5); src.stop(now + dur + 0.05);
+    }
+    function tone(f0, f1, dur, vol) {
+      var c = ctx(); if (!c) return;
+      var o = c.createOscillator(), g = c.createGain(), now = c.currentTime;
+      o.frequency.setValueAtTime(f0, now); o.frequency.exponentialRampToValueAtTime(f1, now + dur);
+      g.gain.setValueAtTime(vol, now); g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      o.connect(g); g.connect(c.destination); o.start(now); o.stop(now + dur + 0.05);
+    }
+    var api = {
+      get on() { return on; },
+      toggle: function () { on = !on; try { localStorage.setItem('sj_snd', on ? '1' : '0'); } catch (e) {} if (on) ctx(); },
+      shot: function (wc, mine) {
+        if (!on) return;
+        var now = performance.now(); if (now - lastShot < 45) return; lastShot = now;
+        var v = mine ? 0.5 : 0.3;
+        if (wc === 'sr') { burst(0.6, 'lowpass', 1100, v * 1.4); tone(90, 40, 0.35, v * 0.8); }
+        else if (wc === 'dmr') { burst(0.35, 'lowpass', 1500, v * 1.2); tone(110, 50, 0.2, v * 0.5); }
+        else if (wc === 'sg') { burst(0.3, 'lowpass', 900, v * 1.3); tone(80, 40, 0.25, v * 0.6); }
+        else if (wc === 'boom') { burst(1.2, 'lowpass', 300, v * 1.8); tone(60, 25, 0.9, v); }
+        else if (wc === 'smg' || wc === 'pistol') burst(0.07, 'highpass', 900, v);
+        else burst(0.12, 'bandpass', 1400, v * 1.1, 0.7);
+      },
+      heart: function (tens) {
+        if (!on) return;
+        var now = performance.now(), gap = 1100 - 600 * Math.min(1, (tens - 0.55) / 0.45);
+        if (now - lastBeat < gap) return; lastBeat = now;
+        tone(62, 45, 0.11, 0.35); setTimeout(function () { if (on) tone(58, 42, 0.1, 0.25); }, 190);
+      },
+      whoosh: function () {
+        if (!on) return;
+        var now = performance.now(); if (now - lastWhoosh < 900) return; lastWhoosh = now;
+        var c = ctx(); if (!c) return;
+        var src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t0 = c.currentTime;
+        src.buffer = noise; f.type = 'bandpass'; f.Q.value = 1.2;
+        f.frequency.setValueAtTime(1800, t0); f.frequency.exponentialRampToValueAtTime(250, t0 + 0.5);
+        g.gain.setValueAtTime(0.001, t0); g.gain.linearRampToValueAtTime(0.22, t0 + 0.12); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.55);
+        src.connect(f); f.connect(g); g.connect(c.destination); src.start(t0); src.stop(t0 + 0.6);
+      },
+      thud: function (big) { if (on) tone(big ? 95 : 120, 35, big ? 0.4 : 0.25, big ? 0.6 : 0.4); },
+    };
+    return api;
+  })();
+
   // ---------- replay ----------
   // Uses posAt, zoneAt, aliveAt, phaseAt, timelineMarks, actionNear, cameraTarget from /app/lib.js.
   var active = null; // one running replay at a time
@@ -195,10 +260,20 @@
     var card = el.closest('.match');
     var ours = new Set(match.ours);
     var ids = Object.keys(d.players);
-    var t0 = Math.min.apply(null, ids.map(function (id) { var p = d.players[id]; return (p.jump || p.land || [0, 0, 60])[2]; }).concat([60])) - 5;
+    var firstJump = Math.min.apply(null, ids.map(function (id) { var p = d.players[id]; return (p.jump || p.land || [0, 0, 60])[2]; }).concat([60]));
+    var t0 = firstJump - (d.plane ? 22 : 5); // the opening shows the plane crossing before we jump
+    var lastLand = Math.max.apply(null, match.ours.map(function (id) { var p = d.players[id]; return p && p.land ? p.land[2] : 0; }));
+    var mPerUnit = (MAP_SIZE[match.map] || 816000) / 100000, planeV = 70 / mPerUnit;
     var tEnd = Math.max(match.duration || 0, d.events.reduce(function (m, e) { return Math.max(m, e.t); }, 0)) + 5;
     var marks = timelineMarks(d, match.ours);
-    var mode = 'auto', slowmo = true, speeds = [10, 20, 40, 80], si = clip ? 0 : 1, playing = true, t = Math.max(t0, clip ? clip[0] : startAt || t0), last = 0, raf = 0;
+    // ---- cinematic layer: auto pace from a tension curve, freeze frames, instant replays, sound
+    var tension = tensionCurve(d, model, match.ours, t0, tEnd), paceNow = 10, freezeUntil = 0, irp = null, doneIR = {};
+    var moments = model ? bigMoments(d, model, match.ours, windows) : [];
+    var tensAt = function (x) { return tension[Math.max(0, Math.min(tension.length - 1, Math.floor(x - t0)))] || 0; };
+    var ourEv = d.events.filter(function (e) { return (e.k === 'kill' || e.k === 'knock') && (ours.has(e.a) || ours.has(e.v)); }).sort(function (a, b) { return a.t - b.t; });
+    var wcMap = {};
+    var breaks = (d.gear || []).filter(function (g) { return g[2] <= 1 && g[3] === 0 && (d.dmg || []).some(function (x) { return x[2] === g[1] && x[0] / 10 >= g[0] - 1.5 && x[0] / 10 <= g[0] + 0.5; }); });
+    var mode = 'auto', slowmo = true, speeds = ['AUTO', 10, 20, 40, 80], si = 0, playing = true, t = Math.max(t0, clip ? clip[0] : startAt || t0), last = 0, raf = 0;
     var cur = cameraTarget(d, match.ours, t), snap = true;
 
     var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + cur.join(' ') + ' ' + cur[2] + '">'].concat(baseLayers(match, d));
@@ -207,12 +282,12 @@
     svg.push('<g class="ops"></g>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 4.6) + '</g><g class="php" display="none"><rect x="-2.5" y="-4" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-3.85" width="4.7" height=".6"/></g><text class="pmn" y="4" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
+    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 4.6) + '</g><path class="chute" display="none" d="M-3.4 -4.6Q0 -9.4 3.4 -4.6Z M-3.4 -4.6L-.9 -2 M3.4 -4.6L.9 -2" fill="rgba(238,241,245,.85)" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-4" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-3.85" width="4.7" height=".6"/></g><text class="pmn" y="4" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
       + '<div class="hud"><b class="clock">0:00</b><span class="h-sq"></span><span class="h-left"></span><span class="h-ph"></span></div><div class="h-sm hide">SLOW-MO</div>'
-      + '<ol class="kf" aria-live="polite"></ol>'
+      + '<ol class="kf" aria-live="polite"></ol><div class="vig"></div><i class="lbx t"></i><i class="lbx b"></i><div class="tn"></div><div class="sqb"></div><button type="button" class="irb hide"></button>'
       + '<div class="tools"><button type="button" class="th" aria-label="' + esc(S.theater) + '">⛶</button><button type="button" class="cl" aria-label="' + esc(S.stop) + '">✕</button></div>';
 
     var bar = $('[data-rbar="' + match.id + '"]');
@@ -226,19 +301,20 @@
     }).join('');
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
-      + '<button type="button" class="cam on" data-slow="1">🐢 ' + esc(S.slowmo) + '</button>'
+      + '<button type="button" class="cam snd' + (sfx.on ? ' on' : '') + '">' + (sfx.on ? '🔊 ' : '🔇 ') + esc(S.sound) + '</button>'
       + (windows.length && !clip ? '<button type="button" class="cam" data-act="1">⚡ ' + esc(S.actionOnly) + '</button>' : '')
       + (model ? '<button type="button" class="cam on" data-dir="1">🎬 ' + esc(S.director) + '</button>' : '');
     // action stretches as bands on the timeline; the current clip highlighted
     var pct = function (x) { return Math.max(0, Math.min(100, (x - t0) / (tEnd - t0) * 100)).toFixed(2); };
     var bands = windows.map(function (w) { return '<i class="band' + (clip && w.s <= clip[0] + 1 && w.e >= clip[1] - 1 ? ' cur' : '') + '" style="left:' + pct(w.s) + '%;width:' + (pct(w.e) - pct(w.s)).toFixed(2) + '%"></i>'; }).join('')
       + (clip ? '<i class="band cur" style="left:' + pct(clip[0]) + '%;width:' + (pct(clip[1]) - pct(clip[0])).toFixed(2) + '%"></i>' : '');
-    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + bands + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">×' + speeds[si] + '</button></div><div class="cams">' + (opts.next ? '<button type="button" class="cam on nxt">⏭ ' + esc(S.next) + '</button>' : '') + '<button type="button" class="cam lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="cam clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + chips + '</div>';
+    bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + bands + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">AUTO</button></div><div class="cams">' + (opts.next ? '<button type="button" class="cam on nxt">⏭ ' + esc(S.next) + '</button>' : '') + '<button type="button" class="cam lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="cam clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
     var svgEl = $('svg.mp', el), tileG = $('.tiles', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
     var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), sm: $('.h-sm', el) };
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
+    var chute = pm.map(function (g) { return g.querySelector('.chute'); });
     var php = pm.map(function (g) { return g.querySelector('.php'); }), phf = pm.map(function (g) { return g.querySelector('.phf'); });
     var hpCol = function (h) { return h.state ? '#ff4d4d' : h.hp > 50 ? '#3ddc97' : h.hp > 25 ? '#ffcf4d' : '#ff4d4d'; };
     // a small HP bar floating under an enemy marker (map units)
@@ -256,6 +332,117 @@
     var opsG = $('.ops', el);
     var kfKey = '';
 
+    var knockedFoes = d.events.filter(function (e) { return e.k === 'knock' && ours.has(e.a) && !ours.has(e.v); });
+    var f1 = function (v) { return v.toFixed(1); };
+    var line = function (a, b, col, op, w, extra) { return '<line x1="' + f1(a[0]) + '" y1="' + f1(a[1]) + '" x2="' + f1(b[0]) + '" y2="' + f1(b[1]) + '" stroke="' + col + '" stroke-opacity="' + Math.max(0, op).toFixed(2) + '" stroke-width="' + w + '" stroke-linecap="round" vector-effect="non-scaling-stroke"' + (extra || '') + '/>'; };
+    var lerp = function (a, b, f) { return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; };
+    // a shot by weapon class: sniper = one long bright streak, AR = a fast round, SMG = short bursts, shotgun = a cone
+    function tracer(hx, age, u, col) {
+      var a = hx.ap, v = hx.vp, wc = wcMap[hx.w] || (wcMap[hx.w] = weaponClass(hx.w));
+      if (!a[0] && !a[1]) return '';
+      if (wc === 'boom') return age < 0.7 ? '<circle cx="' + v[0] + '" cy="' + v[1] + '" r="' + f1(u * (1 + age * 9)) + '" fill="rgba(255,179,71,' + (0.35 * (1 - age / 0.7)).toFixed(2) + ')" stroke="#ffb347" stroke-opacity="' + (1 - age / 0.7).toFixed(2) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>' : '';
+      if (wc === 'sr' || wc === 'dmr') {
+        var life = wc === 'sr' ? 0.75 : 0.45;
+        if (age > life) return '';
+        return line(a, v, '#fff3c4', 1 - age / life, wc === 'sr' ? 2.8 : 1.8) + (age < 0.2 ? '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + f1(u * 1.1) + '" fill="#fff3c4" fill-opacity="' + (1 - age / 0.2).toFixed(2) + '"/>' : '');
+      }
+      if (wc === 'sg') {
+        if (age > 0.25) return '';
+        var out = '', ang = Math.atan2(v[1] - a[1], v[0] - a[0]), L = Math.hypot(v[0] - a[0], v[1] - a[1]);
+        [-0.1, -0.05, 0, 0.05, 0.1].forEach(function (o) { out += line(a, [a[0] + Math.cos(ang + o) * L, a[1] + Math.sin(ang + o) * L], col, 1 - age / 0.25, 1); });
+        return out;
+      }
+      if (wc === 'smg' || wc === 'pistol' || wc === 'other' || wc === 'melee') {
+        var o2 = '', n = wc === 'smg' ? 3 : 1;
+        for (var k = 0; k < n; k++) {
+          var hk = age - k * 0.035;
+          if (hk < 0 || hk > 0.16) continue;
+          var p1 = Math.min(1, hk / 0.07), jx = (k - 1) * u * 0.35;
+          var pA = lerp(a, v, Math.max(0, p1 - 0.25)), pB = lerp(a, v, p1);
+          o2 += line([pA[0], pA[1] + jx], [pB[0], pB[1] + jx], col, 1 - hk / 0.16, 1.3);
+        }
+        return o2;
+      }
+      // ar / lmg: a round travelling from the muzzle to the target
+      if (age > 0.3) return '';
+      var p2 = Math.min(1, age / 0.12);
+      return line(lerp(a, v, Math.max(0, p2 - 0.35)), lerp(a, v, p2), col, age < 0.12 ? 1 : 1 - (age - 0.12) / 0.18, wc === 'lmg' ? 2.4 : 1.7);
+    }
+    function reticle(p, age, u) {
+      var sc = 1 + (1 - age / 0.6) * 1.3, r = u * 2 * sc, op = (1 - age / 0.6).toFixed(2), x = p[0], y = p[1];
+      return '<g stroke="#fff" stroke-opacity="' + op + '" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"><circle cx="' + x + '" cy="' + y + '" r="' + f1(r) + '" vector-effect="non-scaling-stroke"/>'
+        + line([x - r * 1.5, y], [x - r * 0.5, y], '#fff', op, 1.6) + line([x + r * 0.5, y], [x + r * 1.5, y], '#fff', op, 1.6) + line([x, y - r * 1.5], [x, y - r * 0.5], '#fff', op, 1.6) + line([x, y + r * 0.5], [x, y + r * 1.5], '#fff', op, 1.6) + '</g>';
+    }
+    // distance between the shooter and the target, offset to the side of the line of fire
+    function ruler(a, v, age, u) {
+      var m = Math.round(Math.hypot(v[0] - a[0], v[1] - a[1]) * mPerUnit);
+      if (m < 25) return '';
+      var L = Math.hypot(v[0] - a[0], v[1] - a[1]) || 1, nx = -(v[1] - a[1]) / L * u * 2.4, ny = (v[0] - a[0]) / L * u * 2.4, op = Math.min(1, (1.4 - age) / 0.4) * 0.85;
+      var A = [a[0] + nx, a[1] + ny], B = [v[0] + nx, v[1] + ny], mid = lerp(A, B, 0.5);
+      return line(A, B, '#eef1f5', op * 0.7, 1, ' stroke-dasharray="3 3"') + line([A[0] - nx * 0.4, A[1] - ny * 0.4], [A[0] + nx * 0.4, A[1] + ny * 0.4], '#eef1f5', op, 1) + line([B[0] - nx * 0.4, B[1] - ny * 0.4], [B[0] + nx * 0.4, B[1] + ny * 0.4], '#eef1f5', op, 1)
+        + '<text x="' + f1(mid[0] + nx * 0.8) + '" y="' + f1(mid[1] + ny * 0.8 + u * 0.6) + '" font-size="' + f1(u * 1.7) + '" text-anchor="middle" fill="#eef1f5" fill-opacity="' + op.toFixed(2) + '" stroke="#05070a" stroke-width="' + f1(u * 0.5) + '" paint-order="stroke" font-family="ui-monospace, monospace" font-weight="700">' + m + ' m</text>';
+    }
+    function ring(p, r, frac, col, u) {
+      return '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + f1(r) + '" fill="none" stroke="#05070a" stroke-opacity=".6" stroke-width="4" vector-effect="non-scaling-stroke"/>'
+        + '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + f1(r) + '" fill="none" stroke="' + col + '" stroke-width="2.5" pathLength="100" stroke-dasharray="' + (frac * 100).toFixed(1) + ' 100" transform="rotate(-90 ' + f1(p[0]) + ' ' + f1(p[1]) + ')" vector-effect="non-scaling-stroke"/>';
+    }
+    function placeOf(pi, at) {
+      var acc = d.pp[pi] && d.pp[pi][0];
+      if (acc && d.players[acc]) return posAt(d.players[acc], at);
+      return opBy[pi] ? opAt(opBy[pi], at) : null;
+    }
+    // heals rise in green; a broken helmet or vest bursts into shards
+    function lifeFx(u) {
+      var out = '';
+      (d.heal || []).forEach(function (h) {
+        var age = t - h[0] / 10;
+        if (age < 0 || age > 1.4) return;
+        var p = placeOf(h[1], t);
+        if (!p) return;
+        var op = (1 - age / 1.4).toFixed(2);
+        out += '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + f1(u * (1.5 + age * 3)) + '" fill="none" stroke="#3ddc97" stroke-opacity="' + op + '" stroke-width="2" vector-effect="non-scaling-stroke"/>'
+          + '<text x="' + f1(p[0] + u * 2.6) + '" y="' + f1(p[1] - u * (2 + age * 3)) + '" font-size="' + f1(u * 2) + '" fill="#3ddc97" fill-opacity="' + op + '" stroke="#05070a" stroke-width="' + f1(u * 0.5) + '" paint-order="stroke" font-family="Press Start 2P, monospace">+' + h[2] + '</text>';
+      });
+      breaks.forEach(function (g) {
+        var age = t - g[0];
+        if (age < 0 || age > 1.2) return;
+        var p = placeOf(g[1], t);
+        if (!p) return;
+        var op = 1 - age / 1.2, r0 = u * (1 + age * 4), r1 = r0 + u * 1.4;
+        for (var k = 0; k < 6; k++) { var an = k * 1.047 + 0.4; out += line([p[0] + Math.cos(an) * r0, p[1] + Math.sin(an) * r0], [p[0] + Math.cos(an) * r1, p[1] + Math.sin(an) * r1], '#cfd5dd', op, 1.6); }
+        out += '<text x="' + f1(p[0]) + '" y="' + f1(p[1] + u * 4.6) + '" font-size="' + f1(u * 1.5) + '" text-anchor="middle" fill="#cfd5dd" fill-opacity="' + op.toFixed(2) + '" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + (g[2] === 0 ? 'HELMET' : 'VEST') + ' ✕</text>';
+      });
+      return out;
+    }
+    function planeSvg(pl, u) {
+      var ang = Math.atan2(pl.dir[1], pl.dir[0]) * 180 / Math.PI, s = Math.max(u, 2.2);
+      return '<g transform="translate(' + f1(pl.pos[0]) + ' ' + f1(pl.pos[1]) + ') rotate(' + ang.toFixed(1) + ') scale(' + (s * 0.9).toFixed(2) + ')" fill="#eef1f5" stroke="#05070a" stroke-width=".35"><path d="M4.5 0 L2 -.7 L-.5 -4.6 L-1.6 -4.6 L-.6 -.8 L-3 -.8 L-4 -2 L-4.7 -2 L-4.1 0 L-4.7 2 L-4 2 L-3 .8 L-.6 .8 L-1.6 4.6 L-.5 4.6 L2 .7 Z"/></g>';
+    }
+    // instant replay: frame the shooter and the target tight; a killcam follows the killer's last 30 s
+    function replayShot(mo) {
+      var e = mo.e, a = e.ap && (e.ap[0] || e.ap[1]) ? e.ap : e.vp, v = e.vp, pts = [a, v];
+      if (mo.kind === 'death') pts = pts.concat(killerTrack(mo));
+      var X = pts.map(function (p) { return p[0]; }), Y = pts.map(function (p) { return p[1]; });
+      var span = Math.max(Math.max.apply(null, X) - Math.min.apply(null, X), Math.max.apply(null, Y) - Math.min.apply(null, Y));
+      var size = Math.max(30, Math.min(mo.kind === 'death' ? 220 : 90, span * 1.6 + 20));
+      var cx = (Math.min.apply(null, X) + Math.max.apply(null, X)) / 2, cy = (Math.min.apply(null, Y) + Math.max.apply(null, Y)) / 2;
+      if (mo.kind === 'kill') { cx = a[0] + (v[0] - a[0]) * 0.42; cy = a[1] + (v[1] - a[1]) * 0.42; }
+      return { box: [Math.max(0, Math.min(1000 - size, cx - size / 2)), Math.max(0, Math.min(1000 - size, cy - size / 2)), size], kind: 'replay' };
+    }
+    function killerTrack(mo) {
+      var pi = model.idx.get(mo.e.a), row = pi !== undefined ? opBy[pi] : null, out = [];
+      if (!row) return out;
+      for (var s2 = mo.t - 30; s2 <= mo.t; s2 += 2.5) { var q = opAt(row, s2); if (q) out.push(q); }
+      return out;
+    }
+    function killcamPath(mo, u) {
+      var tr = killerTrack(mo).filter(function (_, k, arr) { return k === 0 || Math.hypot(arr[k][0] - arr[k - 1][0], arr[k][1] - arr[k - 1][1]) < 30; });
+      if (tr.length < 2) return '';
+      var n = tr.length, last = tr[n - 1], prev = tr[n - 2], an = Math.atan2(last[1] - prev[1], last[0] - prev[0]);
+      return '<polyline points="' + tr.map(function (p) { return f1(p[0]) + ',' + f1(p[1]); }).join(' ') + '" fill="none" stroke="#eef1f5" stroke-opacity=".8" stroke-width="1.8" stroke-dasharray="5 3" vector-effect="non-scaling-stroke"/>'
+        + '<path d="M' + f1(last[0] + Math.cos(an) * u * 2) + ' ' + f1(last[1] + Math.sin(an) * u * 2) + 'L' + f1(last[0] + Math.cos(an + 2.5) * u * 1.6) + ' ' + f1(last[1] + Math.sin(an + 2.5) * u * 1.6) + 'L' + f1(last[0] + Math.cos(an - 2.5) * u * 1.6) + ' ' + f1(last[1] + Math.sin(an - 2.5) * u * 1.6) + 'Z" fill="#eef1f5"/>'
+        + label(tr[0][0], tr[0][1] - u * 2.5, u, 'KILLCAM · ' + (mo.e.an || '?') + shortW(mo.e), '#eef1f5');
+    }
     function feedLine(e) {
       var A = '<b style="color:' + esc(colorOf(e.a)) + '">' + esc(nameOf(match, e.a, e.an)) + '</b>';
       var V = '<b style="color:' + esc(colorOf(e.v)) + '">' + esc(nameOf(match, e.v, e.vn)) + '</b>';
@@ -266,17 +453,19 @@
     function draw(realDt) {
       // camera
       // ---- director camera: pick a shot, hold action shots briefly, cut on big jumps, ease zoom and position apart
-      var shot = mode === 'full' ? { box: [0, 0, 1000], kind: 'wide' } : directorShot(d, model, match.ours, t, mode === 'auto' ? '' : mode);
+      var plane = t < lastLand ? planeAt(d, match.ours, t, planeV) : null;
+      var shot = mode === 'full' ? { box: [0, 0, 1000], kind: 'wide' } : irp ? replayShot(irp.m) : (mode === 'auto' && dropShot(d, match.ours, t, plane)) || directorShot(d, model, match.ours, t, mode === 'auto' ? '' : mode);
       if (shot.kind === 'kill' || shot.kind === 'duel' || shot.kind === 'approach') { held = { shot: shot, t: t }; }
       else if (held && t - held.t < 2.5 && t >= held.t && shot.kind === 'follow') shot = held.shot; // let the moment breathe
       var target = shot.box, nowMs = performance.now();
       var ccx = cur[0] + cur[2] / 2, ccy = cur[1] + cur[2] / 2, tcx = target[0] + target[2] / 2, tcy = target[1] + target[2] / 2;
       if (snap) { cur = target.slice(); snap = false; } else {
         // smooth only: a long move pulls back a little on the way (zoom out → glide → zoom in), never a jump
-        var dt = realDt || 0.016, kill = shot.kind === 'kill', far = Math.hypot(tcx - ccx, tcy - ccy);
-        var tsz = far > cur[2] * 0.7 ? Math.max(target[2], Math.min(1000, far * 1.2)) : target[2];
-        var kp = 1 - Math.exp(-dt * (kill ? 3.5 : 2.4));
-        var kz = 1 - Math.exp(-dt * (tsz < cur[2] ? (kill ? 3 : 1.8) : 2.2));
+        var dt = realDt || 0.016, kill = shot.kind === 'kill' || shot.kind === 'replay', far = Math.hypot(tcx - ccx, tcy - ccy);
+        var creep = shot.kind === 'stalk' || shot.kind === 'drop';
+        var tsz = far > cur[2] * 0.7 && shot.kind !== 'plane' ? Math.max(target[2], Math.min(1000, far * 1.2)) : target[2];
+        var kp = 1 - Math.exp(-dt * (kill ? 3.5 : creep ? 1.6 : 2.4));
+        var kz = 1 - Math.exp(-dt * (tsz < cur[2] ? (kill ? 3 : creep ? 0.9 : 1.8) : 2.2)); // the slow push-in before contact
         var ncx = ccx + (tcx - ccx) * kp, ncy = ccy + (tcy - ccy) * kp, ns = cur[2] + (tsz - cur[2]) * kz;
         cur = [ncx - ns / 2, ncy - ns / 2, ns];
       }
@@ -288,9 +477,12 @@
         if (t - hh.t > 0.3) break;
         if (model.ourIdx.has(hh.a) || model.ourIdx.has(hh.v)) { shake = Math.max(shake, cur[2] * 0.01 * (1 - (t - hh.t) / 0.3)); if (hh.head) punch = 0.94; }
       }
+      if (performance.now() < freezeUntil) punch = Math.min(punch, 0.9);
       var vs = cur[2] * punch;
       var vx = cur[0] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2, vy = cur[1] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2;
       view = [vx, vy, vs];
+      // the vignette centres on the shooter during an instant replay
+      if (irp) { var sp = irp.m.e.ap && (irp.m.e.ap[0] || irp.m.e.ap[1]) ? irp.m.e.ap : irp.m.e.vp; vig.style.setProperty('--vx', ((sp[0] - vx) / vs * 100).toFixed(1) + '%'); vig.style.setProperty('--vy', ((sp[1] - vy) / vs * 100).toFixed(1) + '%'); }
       window.SJ.cam = shot.kind + ':' + Math.round(vs);
       svgEl.setAttribute('viewBox', vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + vs.toFixed(1) + ' ' + vs.toFixed(1));
       if (nowMs - lastTiles > 250) { lastTiles = nowMs; tiles(tileG, match.map, view); }
@@ -320,6 +512,7 @@
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
           pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + u.toFixed(3) + ')');
+          chute[i].setAttribute('display', p.jump && p.land && t >= p.jump[2] && t < p.land[2] ? '' : 'none');
           var pi = model ? model.idx.get(id) : undefined;
           if (pi !== undefined) {
             var hp = hpAt(model, pi, t);
@@ -360,7 +553,7 @@
       if (model) {
         // tracers and floating damage numbers (RPG style), and enemies seen in the last 8 s with their HP
         var seen = {}; var diam = {};
-        var combos = {}, shown = [];
+        var combos = {}, shown = [], lastHit = null;
         for (var di = 0; di < model.dmg.length; di++) {
           var hx = model.dmg[di];
           if (hx.t > t) break;
@@ -368,7 +561,8 @@
           if (!model.ourIdx.has(hx.a)) seen[hx.a] = di;
           var hcol = model.ourIdx.has(hx.a) ? '#ffcf4d' : '#ff6b6b';
           var hage = t - hx.t;
-          if (hage < 0.4 && (hx.ap[0] || hx.ap[1])) fxh.push('<line x1="' + hx.ap[0] + '" y1="' + hx.ap[1] + '" x2="' + hx.vp[0] + '" y2="' + hx.vp[1] + '" stroke="' + hcol + '" stroke-opacity="' + (1 - hage / 0.4).toFixed(2) + '" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
+          if (hage < 0.8) { fxh.push(tracer(hx, hage, u, model.ourIdx.has(hx.a) ? '#ffd25e' : '#ffb08a')); if (hx.head && hage < 0.6) fxh.push(reticle(hx.vp, hage, u)); }
+          if (hage < 1.4 && (model.ourIdx.has(hx.a) || model.ourIdx.has(hx.v)) && (hx.ap[0] || hx.ap[1])) lastHit = hx;
           if (hage > 2.2) continue;
           // a burst on the same target (hits < 0.5 s apart) shows as one combo number
           var c = combos[hx.v];
@@ -382,6 +576,8 @@
           fxh.push('<text x="' + c.vp[0] + '" y="' + fy + '" font-size="' + (u * (big ? 4.2 : 3.4)) + '" text-anchor="middle" fill="' + c.col + '" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.8) + '" paint-order="stroke" font-family="Press Start 2P, monospace">-' + c.sum + '</text>');
           if ((c.head || c.n > 2) && age < 1) fxh.push('<text x="' + c.vp[0] + '" y="' + (fy - u * 4.4) + '" font-size="' + (u * 2) + '" text-anchor="middle" fill="#fff" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.6) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + (c.head ? 'HEADSHOT' : 'x' + c.n) + '</text>');
         });
+        if (lastHit) fxh.push(ruler(lastHit.ap, lastHit.vp, t - lastHit.t, u));
+        fxh.push(lifeFx(u));
         Object.keys(seen).forEach(function (i) {
           var lx = model.dmg[seen[i]];
           if (t - lx.t > 8) return;
@@ -415,6 +611,20 @@
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
+      if (plane && t < lastLand) fxh.push(planeSvg(plane, u));
+      if (irp && irp.m.kind === 'death') fxh.push(killcamPath(irp.m, u));
+      // knocked: a bleed-out ring that runs out when they die; a green ring while a teammate picks them up
+      squadIds.forEach(function (id, k) {
+        var dn = downedAt(d, id, t), ps = dn && posAt(d.players[id], t);
+        if (ps) fxh.push(ring(ps, u * 3.6, dn.bleed, '#ff4d4d', u) + (dn.revive > 0 ? ring(ps, u * 4.6, dn.revive, '#3ddc97', u) : ''));
+      });
+      knockedFoes.forEach(function (e) {
+        if (e.t > t || t - e.t > 60) return;
+        var dn = downedAt(d, e.v, t);
+        if (!dn) return;
+        var pi = model ? model.idx.get(e.v) : undefined, ps = (pi !== undefined && opBy[pi] && opAt(opBy[pi], t)) || e.vp;
+        fxh.push(ring(ps, u * 2.4, dn.bleed, '#ff4d4d', u));
+      });
       fx.innerHTML = fxh.join('');
       lb.innerHTML = lbh.join('');
       var shown = recent.slice(-2);
@@ -467,7 +677,31 @@
       });
     }
     function endFight(keepBanner) { phase = null; curW = null; fight = null; if (!keepBanner) hideBanner(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
-    var lastBattle = 0;
+    var lastBattle = 0, lastSq = 0;
+    var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
+    function startReplay(mo) {
+      irp = { m: mo, resume: t, until: mo.t + 1.3 };
+      t = mo.t - 5;
+      irb.textContent = mo.kind === 'death' ? '◀◀ KILLCAM' : '◀◀ REPLAY';
+      irb.classList.remove('hide');
+      el.classList.remove('rw'); void el.offsetWidth; el.classList.add('rw');
+      sfx.whoosh();
+    }
+    function endReplay() { if (!irp) return; t = irp.resume; irp = null; irb.classList.add('hide'); vig.style.removeProperty('--vx'); vig.style.removeProperty('--vy'); }
+    irb.onclick = function () { endReplay(); };
+    // squad bar: HP, state and armour of each of us, always on screen
+    function squadBar() {
+      if (!model) { sqb.classList.add('hide'); return; }
+      sqb.innerHTML = squadIds.map(function (id) {
+        var i = model.idx.get(id), m = member(id), h = i === undefined ? { hp: 100, state: 0 } : hpAt(model, i, t), g = i === undefined ? { helmet: 0, vest: 0 } : gearAt(model, i, t);
+        var dead = d.players[id].death && t >= d.players[id].death[2];
+        if (dead) h = { hp: 0, state: 2 };
+        var dn = !dead && downedAt(d, id, t);
+        return '<div class="sq' + (dead ? ' kia' : dn ? ' dn' : '') + '">' + (m ? patchSvg(m.emblem, m.color, 13) : patchSvg('chevrons', GUEST, 13))
+          + '<span class="sv"><span class="sh"><u style="width:' + (h.state ? (dn ? Math.round(dn.bleed * 100) : 0) : h.hp) + '%;background:' + (dead ? '#555' : dn ? '#ff4d4d' : hpCol(h)) + '"></u></span>'
+          + '<span class="sg">' + (dead ? 'KIA' : dn ? 'DOWN' : (g.helmet ? 'H' + g.helmet : '·') + ' ' + (g.vest ? 'V' + g.vest : '·')) + '</span></span></div>';
+      }).join('');
+    }
     function frame(ts) {
       var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;
       if (director && model && playing) {
@@ -480,15 +714,44 @@
         if (phase === 'fight' && ts - lastBattle > 120) { lastBattle = ts; updateBattle(); }
       }
       if (bannerUntil && ts > bannerUntil) hideBanner();
-      var slow = slowmo && actionNear(d, match.ours, t);
-      hud.sm.classList.toggle('hide', !(slow && playing));
-      if (playing) {
-        t += phase === 'fight' ? realDt * Math.min(4, speeds[si] * 0.4) : realDt * speeds[si] * (slow ? 0.25 : 1);
-        if (clip && t >= clip[1] && phase !== 'fight' && !(bannerUntil && $('.bn.result', el))) {
+      var auto = !si, slow = slowmo && actionNear(d, match.ours, t), tens = tensAt(t);
+      // pace: the tension curve sets game seconds per real second; it brakes quickly and speeds up gently
+      var target = irp ? 1.3 : t < firstJump ? 9 : t < lastLand ? 16 : paceOf(tens);
+      paceNow += (target - paceNow) * (1 - Math.exp(-realDt * (target < paceNow ? 6 : 1.6)));
+      if (auto && playing && paceNow < 6 && target < paceNow - 4) sfx.whoosh();
+      var frozen = ts < freezeUntil;
+      hud.sm.textContent = irp ? '' : frozen || paceNow < 2.6 ? 'BULLET TIME' : 'SLOW-MO';
+      hud.sm.classList.toggle('hide', !playing || !!irp || (auto ? !(frozen || paceNow < 8) : !slow));
+      el.classList.toggle('cine', !!irp || tens >= 0.55 || phase === 'fight');
+      tn.style.opacity = (0.15 + tens * 0.85).toFixed(2); tn.classList.toggle('beat', tens >= 0.6);
+      if (playing && tens >= 0.55 && !frozen) sfx.heart(tens);
+      if (playing && !frozen) {
+        var tPrev = t;
+        t += irp ? realDt * 1.3 : !auto ? (phase === 'fight' ? realDt * Math.min(4, speeds[si] * 0.4) : realDt * speeds[si] * (slow ? 0.25 : 1)) : realDt * paceNow;
+        if (director && model) {
+          // a beat of stillness on every knock/kill of ours (not inside an instant replay)
+          if (!irp) for (var fi = 0; fi < ourEv.length; fi++) {
+            var fe = ourEv[fi];
+            if (fe.t > tPrev && fe.t <= t) { t = fe.t; freezeUntil = ts + (fe.k === 'kill' ? 420 : 300); sfx.thud(fe.k === 'kill'); sfx.whoosh(); break; }
+          }
+          // instant replay right after a big moment: 5 s back, slow, then back to live
+          if (!irp) for (var mi = 0; mi < moments.length; mi++) {
+            var mo = moments[mi];
+            if (!doneIR[mo.t] && mo.t + 0.9 > tPrev && mo.t + 0.9 <= t) { doneIR[mo.t] = 1; startReplay(mo); break; }
+          }
+          if (irp && t >= irp.until) endReplay();
+          // gunfire
+          if (sfx.on) for (var gi = 0; gi < model.dmg.length; gi++) {
+            var gx = model.dmg[gi];
+            if (gx.t > t) break;
+            if (gx.t > tPrev && (model.ourIdx.has(gx.a) || model.ourIdx.has(gx.v))) sfx.shot(weaponClass(gx.w), model.ourIdx.has(gx.a));
+          }
+        }
+        if (clip && !irp && t >= clip[1] && phase !== 'fight' && !(bannerUntil && $('.bn.result', el))) {
           introduced = {};
           if (opts.next && opts.auto) { opts.next(); return; } // reel: on to the next clip
           t = clip[0]; snap = true;                             // single clip: loop
-        } else if (actionOnly) {
+        } else if (actionOnly && !irp) {
           var inside = windows.some(function (w) { return t >= w.s && t <= w.e; });
           if (!inside) {
             var nx = windows.filter(function (w) { return w.s > t; })[0];
@@ -497,12 +760,14 @@
         }
         if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; }
       }
+      if (ts - lastSq > 150) { lastSq = ts; squadBar(); }
       draw(realDt);
       raf = requestAnimationFrame(frame);
     }
-    function seek(x) { t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
+    function seek(x) { if (irp) { irp = null; irb.classList.add('hide'); } t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
-    spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = '×' + speeds[si]; };
+    spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = si ? '×' + speeds[si] : 'AUTO'; };
+    $('.snd', bar).onclick = function () { var b = $('.snd', bar); sfx.toggle(); b.classList.toggle('on', sfx.on); b.innerHTML = (sfx.on ? '🔊 ' : '🔇 ') + esc(S.sound); };
     if (CLIP_ENABLED) $('.clp', bar).onclick = function () { playing = false; pp.textContent = '▶'; clipDialog(match, d, t); };
     var lnk = $('.lnk', bar);
     lnk.onclick = function () {
@@ -515,7 +780,6 @@
     bar.querySelectorAll('.mk').forEach(function (b) { b.onclick = function () { seek(marks[Number(b.dataset.i)].t - 5); }; });
     bar.querySelectorAll('.cam[data-cam], .cam[data-slow], .cam[data-act], .cam[data-dir]').forEach(function (b) {
       b.onclick = function () {
-        if (b.dataset.slow) { slowmo = !slowmo; b.classList.toggle('on', slowmo); return; }
         if (b.dataset.act) { actionOnly = !actionOnly; b.classList.toggle('on', actionOnly); return; }
         if (b.dataset.dir) { director = !director; b.classList.toggle('on', director); endFight(); return; }
         mode = b.dataset.cam;
@@ -673,7 +937,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=10');
+      var w = new Worker('/app/extract-worker.js?v=11');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -699,7 +963,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 6
+    var p = match.derived >= 7
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -710,11 +974,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 6)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 7)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 6)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 7)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

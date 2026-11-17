@@ -262,6 +262,7 @@ onmessage = async function (e) {
 
 // Moment/matrix helpers for the session page (same source as src/moments.js, tested there).
 const LIB_JS = `var __name = function (f) { return f; };
+var MAP_SIZE = ${JSON.stringify(MAP_SIZE)};
 var findMoments = ${findMoments.toString()};
 var squadMatrices = ${squadMatrices.toString()};
 ${Object.entries(R).map(([k, f]) => `var ${k} = ${f.toString()};`).join('\n')}`;
