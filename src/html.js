@@ -370,7 +370,7 @@ export function ogInfo(session, summary, byId, clan) {
 }
 
 /** Session page: hero, highlights, who carried, medals, squad logs, engagements with maps + replay. */
-export function sessionPage({ lang, session, summary, members, origin, ogVer, ogReady, derivedIds, clan, path }) {
+export function sessionPage({ lang, session, summary, members, origin, ogVer, ogReady, derivedIds, clan, path, pub = null }) {
   const t = S[lang];
   const byId = new Map(members.map((m) => [m.account_id, m]));
   const tm = summary.team;
@@ -378,7 +378,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   const holders = (ids) => ids.map((id) => byId.get(id)).filter(Boolean).map(who).join(' ');
   const day = fmtDay(lang, session.start_at);
 
-  const hero = `<div style="margin:22px 0 4px"><span class="tag">MISSION DEBRIEF // ${fmtDate(session.start_at)}${clan?.tag ? ` // [${esc(clan.tag)}]` : ''}</span>
+  const hero = `<div style="margin:22px 0 4px">${pub ? `<a href="/look" class="small">${lang === 'he' ? '→' : '←'} ${esc(t.lookOther)}</a><br>` : ''}<span class="tag">${pub ? `PUBLIC REPLAY // ${esc(pub.name)}` : 'MISSION DEBRIEF'} // ${fmtDate(session.start_at)}${clan?.tag ? ` // [${esc(clan.tag)}]` : ''}</span>
     <h1 style="margin-top:8px;font-family:var(--head)">${esc(day)}</h1>
     <div class="muted num"><span dir="ltr">${fmtTime(session.start_at)}–${fmtTime(session.end_at)}</span> · ${esc(t.games(tm.games))} · ${dur(session.end_at - session.start_at)}</div>
     <div class="row" style="margin-top:12px;gap:6px">${summary.matches.map((m) => placeBadge(m.place)).join('')}${tm.wins ? `<span class="stamp" style="font-size:20px">CHICKEN DINNER${tm.wins > 1 ? ` ×${tm.wins}` : ''}</span>` : ''}</div></div>
@@ -431,7 +431,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   }).join('');
 
   const data = {
-    lang, session_id: session.session_id, ogVer, ogReady, title: day,
+    lang, session_id: session.session_id, ogVer, ogReady: pub ? true : ogReady, title: day, public: !!pub, tele: pub ? pub.tele : null,
     s: clientStrings(lang), mt: MOMENT_TITLES, emblems: EMBLEMS,
     members: Object.fromEntries(members.map((m) => [m.account_id, { nick: m.nickname, color: m.color, emblem: emblemOf(m), active: !!m.active }])),
     matches: summary.matches.map((m) => ({ id: m.match_id, map: m.map, place: m.place, duration: m.duration, derived: derivedIds.get(m.match_id) || 0,
@@ -441,15 +441,15 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     labels: { medicLog: t.medicLog, medicSub: t.medicSub, setupLog: t.setupLog, setupSub: t.setupSub, reviver: t.reviver, assister: t.assister, matchN: t.matchN(0).replace('0', '{n}') },
   };
   const ogDesc = S.en.sessionDesc(tm, mvp?.nickname);
-  return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
+  return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${pub ? `<p class="muted small">${esc(t.lookPrivacy)}</p>` : narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=10', '/app/session.js?v=50'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=10', '/app/session.js?v=52'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 
 /** Tabs under the tape: sessions | hall of fame. */
-export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a><a href="/maps" class="${active === 'maps' ? 'on' : ''}">🗺 ${esc(S[lang].navMaps)}</a></nav>`;
+export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a><a href="/maps" class="${active === 'maps' ? 'on' : ''}">🗺 ${esc(S[lang].navMaps)}</a><a href="/look" class="${active === 'look' ? 'on' : ''}">🔎 ${esc(S[lang].lookNav)}</a></nav>`;
 
 /** /maps — per-map heatmap of where we land (or die), filterable by player. */
 export function mapsPage({ lang, maps, map, kind, points, members, clan }) {
@@ -673,4 +673,26 @@ export function adminPage({ lang, authed, invite, members, settings, origin, cla
   document.querySelectorAll('[data-nick]').forEach(function(i){i.onchange=function(){A('member',{account_id:i.dataset.nick,nickname:i.value}).then(say)}});
   document.querySelectorAll('[data-toggle]').forEach(function(b){b.onclick=function(){A('member',{account_id:b.dataset.toggle,active:b.dataset.active==='1'?0:1}).then(function(){location.reload()})}});
   document.getElementById('saveSet').onclick=function(){var s={};document.querySelectorAll('[data-set]').forEach(function(i){s[i.dataset.set]=i.value});A('settings',s).then(say)};` });
+}
+
+/** Public look-up: a form, then the player's last matches (rows filled in by the page from /api/look/m/:id). */
+export function lookPage({ lang, path, name = '', player = null, error = '' }) {
+  const t = S[lang];
+  const err = error ? `<div class="panel" style="border-color:rgba(229,56,59,.5)">${esc({ busy: t.lookBusy, none: t.lookNone, name: t.lookName }[error] || error)}</div>` : '';
+  const form = `<form action="/look" method="get" class="row" style="gap:8px;margin:14px 0;flex-wrap:nowrap">
+    <input name="name" value="${esc(name)}" placeholder="${esc(t.lookPh)}" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr" style="flex:1;min-width:0;font-size:16px;min-height:48px;padding:10px 14px;background:#0f1217;color:var(--text);border:1px solid var(--line);border-radius:12px">
+    <button class="btn" type="submit">${esc(t.lookGo)}</button></form>`;
+  const list = player ? `<h2>${esc(t.lookRecent.replace('{n}', player.name))} <span class="tag">RECENT</span></h2>${player.matchIds.length ? player.matchIds.map((id) =>
+    `<a class="panel lk" href="/look/m/${esc(id)}?p=${esc(player.accountId)}" data-m="${esc(id)}" style="display:block;text-decoration:none;color:inherit"><div class="muted small">${esc(t.lookLoading)}</div></a>`).join('') : `<p class="muted">${esc(t.lookNoMatches)}</p>`}` : '';
+  const script = player ? `(function(){var p=${JSON.stringify(player.accountId)},L=${JSON.stringify(lang)};
+var maps={Baltic_Main:'Erangel',Erangel_Main:'Erangel',Desert_Main:'Miramar',Savage_Main:'Sanhok',DihorOtok_Main:'Vikendi',Summerland_Main:'Karakin',Chimera_Main:'Paramo',Tiger_Main:'Taego',Kiki_Main:'Deston',Neon_Main:'Rondo',Heaven_Main:'Haven',Range_Main:'Camp Jackal'};
+var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+document.querySelectorAll('.lk').forEach(function(a){fetch('/api/look/m/'+a.dataset.m+'?p='+encodeURIComponent(p)).then(function(r){return r.json()}).then(function(m){
+if(!m||!m.map){a.remove();return}
+var d=new Date(m.created_at),ago=Math.round((Date.now()-m.created_at)/3600000);
+a.innerHTML='<div class="row sp" style="flex-wrap:nowrap;gap:10px"><span class="pb'+(m.place===1?' gold':'')+'" style="font:700 15px var(--mono)">#'+m.place+'</span><b style="flex:1;min-width:0">'+esc(maps[m.map]||m.map)+' <span class="muted small">'+esc(m.mode)+'</span></b><span class="muted small" dir="ltr">'+(ago<48?ago+'h':Math.round(ago/24)+'d')+'</span></div>'
++'<div class="muted small" dir="ltr" style="text-align:start">'+m.kills+' kills · '+m.damage+' dmg · '+esc(m.team.join(', '))+'</div><div style="margin-top:6px;color:var(--gold);font-weight:700">▶ ${esc(t.lookWatch)}</div>';
+}).catch(function(){a.remove()})});})();` : '';
+  return page(lang, `${t.lookTitle} · ${t.brand}`, `${top(lang, path)}${nav(lang, 'look')}<h1 style="margin-top:18px;font-family:var(--head)">${esc(t.lookTitle)}</h1>
+    <p class="muted">${esc(t.lookIntro)}</p>${form}${err}${list}<p class="muted small" style="margin-top:18px">${esc(t.lookPrivacy)}</p>`, { script });
 }

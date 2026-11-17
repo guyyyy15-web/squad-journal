@@ -1105,11 +1105,11 @@
           // keepalive: the upload survives the friend closing the tab right after (limit 64 KB).
           // keepalive has a 64 KB budget shared by all in-flight requests; if it is refused, send normally.
           var send = function (keep) { return fetch('/api/derived/' + encodeURIComponent(match.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: keep }); };
-          send(body.length < 60000).then(function (r) { if (!r.ok && r.status >= 500) return send(false); }).catch(function () { return send(false).catch(function () {}); });
+          if (!SJ.public) send(body.length < 60000).then(function (r) { if (!r.ok && r.status >= 500) return send(false); }).catch(function () { return send(false).catch(function () {}); });
           resolve(m.done);
         }
       };
-      w.postMessage({ url: '/t/' + encodeURIComponent(match.id), ours: match.ours, map: match.map });
+      w.postMessage({ url: (SJ.tele && SJ.tele[match.id]) || '/t/' + encodeURIComponent(match.id), ours: match.ours, map: match.map });
     });
   }
   function load(match) {

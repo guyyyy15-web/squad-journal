@@ -2,12 +2,13 @@
 import { tick, drain, rebuildSessions, getSettings, enqueue, saveTotals, markWarm } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
-import { homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
+import { lookPage, homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
 import { mergeHall, hallSlice } from './hall.js';
 import { factsOf, prompt, checkNumbers, cleanRecap, isLang, NARRATOR_MODEL, DAILY_CAP } from './narrator.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
 import * as R from './replay.js';
+import { lookPlayer, lookMatch, matchRow, publicSession } from './look.js';
 import { summarize, SUMMARY_V } from './summary.js';
 import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
 import SESSION_JS from './client/session.js';
@@ -454,6 +455,29 @@ export default {
         if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
+        // ---- public look-up (any PUBG player; nothing stored) ----
+        if (path === '/look') {
+          const name = (url.searchParams.get('name') || '').trim();
+          if (!name) return lookPage({ lang, path });
+          const r = await lookPlayer(env, name, req.headers.get('CF-Connecting-IP') || 'x');
+          return lookPage({ lang, path: path + url.search, name, player: r.player || null, error: r.error || '' });
+        }
+        let lk;
+        if ((lk = /^\/api\/look\/m\/([\w-]{10,64})$/.exec(path))) {
+          const acc = url.searchParams.get('p') || '';
+          if (!ACC.test(acc)) return fail('bad account');
+          const mj = await lookMatch(env, lk[1]);
+          const row = mj ? matchRow(mj, acc) : null;
+          return new Response(JSON.stringify(row || {}), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' } });
+        }
+        if ((lk = /^\/look\/m\/([\w-]{10,64})$/.exec(path))) {
+          const acc = url.searchParams.get('p') || '';
+          const mj = ACC.test(acc) ? await lookMatch(env, lk[1]) : null;
+          const ps = mj ? publicSession(mj, acc) : null;
+          if (!ps) return notFoundPage(lang);
+          return sessionPage({ lang, session: ps.session, summary: ps.summary, members: ps.members, origin: url.origin, ogVer: '0', ogReady: true,
+            derivedIds: new Map(), clan: null, path: path + url.search, pub: { name: ps.name, tele: ps.tele } });
+        }
         if (path === '/maps') {
           const kind = url.searchParams.get('kind') === 'death' ? 'death' : 'land';
           const maps = (await env.DB.prepare(`SELECT p.map, COUNT(DISTINCT p.match_id) AS n FROM points p JOIN members mb ON mb.account_id = p.account_id
