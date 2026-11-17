@@ -454,15 +454,15 @@
       // camera
       // ---- director camera: pick a shot, hold action shots briefly, cut on big jumps, ease zoom and position apart
       var plane = t < lastLand ? planeAt(d, match.ours, t, planeV) : null;
-      var shot = mode === 'full' ? { box: [0, 0, 1000], kind: 'wide' } : irp ? replayShot(irp.m) : (mode === 'auto' && dropShot(d, match.ours, t, plane)) || directorShot(d, model, match.ours, t, mode === 'auto' ? '' : mode);
+      var shot = mode === 'full' ? { box: [0, 0, 1000], kind: 'wide' } : irp ? irp.shot : (mode === 'auto' && dropShot(d, match.ours, t, plane)) || directorShot(d, model, match.ours, t, mode === 'auto' ? '' : mode);
       if (shot.kind === 'kill' || shot.kind === 'duel' || shot.kind === 'approach') { held = { shot: shot, t: t }; }
       else if (held && t - held.t < 2.5 && t >= held.t && shot.kind === 'follow') shot = held.shot; // let the moment breathe
       var target = shot.box, nowMs = performance.now();
       var ccx = cur[0] + cur[2] / 2, ccy = cur[1] + cur[2] / 2, tcx = target[0] + target[2] / 2, tcy = target[1] + target[2] / 2;
       if (snap) { cur = target.slice(); snap = false; } else {
         // smooth only: a long move pulls back a little on the way (zoom out → glide → zoom in), never a jump
-        var dt = realDt || 0.016, kill = shot.kind === 'kill' || shot.kind === 'replay', far = Math.hypot(tcx - ccx, tcy - ccy);
-        var creep = shot.kind === 'stalk' || shot.kind === 'drop';
+        var dt = realDt || 0.016, kill = shot.kind === 'kill', far = Math.hypot(tcx - ccx, tcy - ccy);
+        var creep = shot.kind === 'stalk' || shot.kind === 'drop' || shot.kind === 'replay';
         var tsz = far > cur[2] * 0.7 && shot.kind !== 'plane' ? Math.max(target[2], Math.min(1000, far * 1.2)) : target[2];
         var kp = 1 - Math.exp(-dt * (kill ? 3.5 : creep ? 1.6 : 2.4));
         var kz = 1 - Math.exp(-dt * (tsz < cur[2] ? (kill ? 3 : creep ? 0.9 : 1.8) : 2.2)); // the slow push-in before contact
@@ -681,13 +681,14 @@
     var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
     function startReplay(mo) {
       irp = { m: mo, resume: t, until: mo.t + 1.3 };
+      irp.shot = replayShot(mo);
       t = mo.t - 5;
       irb.textContent = mo.kind === 'death' ? '◀◀ KILLCAM' : '◀◀ REPLAY';
       irb.classList.remove('hide');
       el.classList.remove('rw'); void el.offsetWidth; el.classList.add('rw');
       sfx.whoosh();
     }
-    function endReplay() { if (!irp) return; t = irp.resume; irp = null; irb.classList.add('hide'); vig.style.removeProperty('--vx'); vig.style.removeProperty('--vy'); }
+    function endReplay() { if (!irp) return; t = irp.resume; irp = null; el.classList.remove('rw'); void el.offsetWidth; el.classList.add('rw'); irb.classList.add('hide'); vig.style.removeProperty('--vx'); vig.style.removeProperty('--vy'); }
     irb.onclick = function () { endReplay(); };
     // squad bar: HP, state and armour of each of us, always on screen
     function squadBar() {
@@ -720,8 +721,8 @@
       paceNow += (target - paceNow) * (1 - Math.exp(-realDt * (target < paceNow ? 6 : 1.6)));
       if (auto && playing && paceNow < 6 && target < paceNow - 4) sfx.whoosh();
       var frozen = ts < freezeUntil;
-      hud.sm.textContent = irp ? '' : frozen || paceNow < 2.6 ? 'BULLET TIME' : 'SLOW-MO';
-      hud.sm.classList.toggle('hide', !playing || !!irp || (auto ? !(frozen || paceNow < 8) : !slow));
+      hud.sm.textContent = irp ? '' : frozen || paceNow < 2.4 ? 'BULLET TIME' : 'SLOW-MO';
+      hud.sm.classList.toggle('hide', !playing || !!irp || (auto ? !(frozen || paceNow < 5) : !slow));
       el.classList.toggle('cine', !!irp || tens >= 0.55 || phase === 'fight');
       tn.style.opacity = (0.15 + tens * 0.85).toFixed(2); tn.classList.toggle('beat', tens >= 0.6);
       if (playing && tens >= 0.55 && !frozen) sfx.heart(tens);
@@ -732,7 +733,7 @@
           // a beat of stillness on every knock/kill of ours (not inside an instant replay)
           if (!irp) for (var fi = 0; fi < ourEv.length; fi++) {
             var fe = ourEv[fi];
-            if (fe.t > tPrev && fe.t <= t) { t = fe.t; freezeUntil = ts + (fe.k === 'kill' ? 420 : 300); sfx.thud(fe.k === 'kill'); sfx.whoosh(); break; }
+            if (fe.t > tPrev && fe.t <= t) { if (fe.k !== 'kill') { sfx.thud(false); continue; } t = fe.t; freezeUntil = ts + 300; sfx.thud(true); sfx.whoosh(); break; }
           }
           // instant replay right after a big moment: 5 s back, slow, then back to live
           if (!irp) for (var mi = 0; mi < moments.length; mi++) {

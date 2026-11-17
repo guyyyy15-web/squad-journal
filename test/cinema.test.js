@@ -54,11 +54,11 @@ test('tension and pace: fast while looting, slow in fights', () => {
   const w = actionWindows(d, OURS);
   for (const x of w) assert.ok(c[Math.floor(x.t0 - lastLand)] >= 0.95, 'fights are tense');
   let real = 0; c.forEach((v) => { real += 1 / paceOf(v); });
-  assert.ok(real < 250, 'a whole match plays in a few minutes: ' + Math.round(real));
+  assert.ok(real < 200, 'a whole match plays in a few minutes: ' + Math.round(real));
   assert.ok(c[Math.floor(w[0].t0 - lastLand) - 8] > 0.3, 'tension builds before the fight');
   const calm = c.filter((v) => v < 0.2).length;
   assert.ok(calm > c.length * 0.15, 'there are quiet stretches to fast-forward');
-  assert.ok(paceOf(0) > 40 && paceOf(1) < 1.5 && paceOf(0.5) < paceOf(0.3));
+  assert.ok(paceOf(0) > 40 && paceOf(1) <= 2 && paceOf(0.5) < paceOf(0.3));
 });
 
 test('instant replays: one big kill per firefight at most, every death', () => {

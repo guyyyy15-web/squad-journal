@@ -483,7 +483,7 @@ export function tensionCurve(d, model, ours, from, to) {
 
 /** Game seconds per real second for a tension value (auto pace). */
 export function paceOf(x) {
-  const pts = [[0, 50], [0.2, 28], [0.4, 14], [0.6, 7], [0.75, 4], [0.9, 2], [1, 1.2]];
+  const pts = [[0, 50], [0.2, 30], [0.4, 18], [0.6, 10], [0.75, 6], [0.9, 3.5], [1, 2]];
   for (let i = 1; i < pts.length; i++) {
     if (x <= pts[i][0]) { const [a, va] = pts[i - 1]; const [b, vb] = pts[i]; return va + (vb - va) * ((x - a) / (b - a)); }
   }
