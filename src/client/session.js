@@ -314,7 +314,11 @@
       for (var i = shotStart(t - 0.8); i < shots.length && shots[i].t <= t; i++) {
         var sx = shots[i], age = t - sx.t, aim = aimOf(sx, i), mine = model && model.ourIdx.has(sx.p);
         if (aim) out += tracer({ ap: sx.pos, vp: aim, w: sx.w }, age, u, mine ? '#ffd25e' : '#ffb08a');
-        if (age < 0.07) out += '<rect x="' + f1(sx.pos[0] - u * 0.9) + '" y="' + f1(sx.pos[1] - u * 0.9) + '" width="' + f1(u * 1.8) + '" height="' + f1(u * 1.8) + '" fill="#fff3c4" transform="rotate(45 ' + f1(sx.pos[0]) + ' ' + f1(sx.pos[1]) + ')"/>';
+        if (age < 0.08 && aim) {
+          var L3 = Math.hypot(aim[0] - sx.pos[0], aim[1] - sx.pos[1]) || 1, mx3 = sx.pos[0] + (aim[0] - sx.pos[0]) / L3 * u * 3.2, my3 = sx.pos[1] - u * 4.4 + (aim[1] - sx.pos[1]) / L3 * u * 1.2, fs = u * 0.7;
+          out += sq(mx3, my3, fs * 1.6, '#fff3c4', 1) + sq(mx3 - fs * 1.2, my3, fs, '#ffd25e', 0.9) + sq(mx3 + fs * 1.2, my3, fs, '#ffd25e', 0.9) + sq(mx3, my3 - fs * 1.2, fs, '#ffd25e', 0.9) + sq(mx3, my3 + fs * 1.2, fs, '#ffd25e', 0.9);
+        }
+        if (mine && age < 0.45) { var cs = (i % 2 ? 1 : -1); out += sq(sx.pos[0] + cs * u * (0.8 + age * 5), sx.pos[1] - u * 4 + u * (age * 9) * (age * 2 - 0.4), u * 0.45, '#d9b25a', 1 - age / 0.45); }
       }
       return out;
     }
@@ -325,7 +329,7 @@
     var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + cur.join(' ') + ' ' + cur[2] + '">'].concat(baseLayers(match, d));
     svg.push('<circle class="zs" fill="rgba(59,139,235,.08)" stroke="#3b8beb" stroke-width="3" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<circle class="zw" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" r="0"/>');
-    svg.push('<g class="ops"></g>');
+    svg.push('<defs class="pxd"></defs><g class="ops"></g>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
     ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><ellipse cx="0" cy=".4" rx="2.8" ry="1.1" fill="#000" fill-opacity=".45"/><ellipse cx="0" cy=".4" rx="3.1" ry="1.3" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-width=".35"/><image class="spr" x="-3.75" y="-8.4" width="7.5" height="9" preserveAspectRatio="none" style="image-rendering:pixelated"/><path class="chute" display="none" d="M-4.4 -11.2Q0 -16.6 4.4 -11.2Z M-4.4 -11.2L-1.2 -7.4 M4.4 -11.2L1.2 -7.4" fill="' + esc(colorOf(id)) + '" fill-opacity=".85" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-10" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-9.85" width="4.7" height=".6"/></g><text class="pmn" y="3.1" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text><text class="pmt" y="4.6" font-size="1.05" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width=".45" paint-order="stroke" font-family="Press Start 2P, monospace"></text></g>'); });
@@ -386,11 +390,24 @@
       if (kind === 'crate') return PIX.thing('crate', color, enemy);
       return PIX.soldier({ dir: dir, pose: kind === 'walkA' ? 'walk1' : kind === 'walkB' ? 'walk2' : 'idle', gun: gun, team: color, enemy: enemy });
     }
+    // each pixel image is defined once (<symbol>) and placed with <use>, so a frame never re-parses data URLs
+    var pxDefs = null, pxN = 0;
+    function pxRef(px) {
+      if (!pxDefs) pxDefs = $('.pxd', el);
+      if (!px.ref) {
+        px.ref = 'px' + (++pxN) + Math.random().toString(36).slice(2, 6);
+        var sym = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
+        sym.setAttribute('id', px.ref); sym.setAttribute('viewBox', '0 0 ' + px.w + ' ' + px.h); sym.setAttribute('preserveAspectRatio', 'none');
+        sym.innerHTML = '<image href="' + px.url + '" width="' + px.w + '" height="' + px.h + '" style="image-rendering:pixelated"/>';
+        pxDefs.appendChild(sym);
+      }
+      return px.ref;
+    }
     // standing on (x, y): the sprite's feet on the spot, `size` = its height in map units
     function sprite(kind, color, gun, enemy, x, y, size, ang) {
       var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 24, w = size * px.w / 24, flat = kind === 'down' || kind === 'car' || kind === 'crate';
       return '<ellipse cx="' + f1(x) + '" cy="' + f1(y + size * 0.04) + '" rx="' + f1(w * 0.36) + '" ry="' + f1(size * 0.11) + '" fill="#000" fill-opacity=".4"/>'
-        + '<image href="' + px.url + '" x="' + f1(x - w / 2) + '" y="' + f1(y - h * (flat ? 0.7 : 0.94)) + '" width="' + f1(w) + '" height="' + f1(h) + '" preserveAspectRatio="none" style="image-rendering:pixelated"/>';
+        + '<use href="#' + pxRef(px) + '" x="' + f1(x - w / 2) + '" y="' + f1(y - h * (flat ? 0.7 : 0.94)) + '" width="' + f1(w) + '" height="' + f1(h) + '"/>';
     }
     function kindOf(p0, p1, dn) {
       if (dn) return 'down';
@@ -422,7 +439,7 @@
     function tracer(hx, age, u, col) {
       var a = hx.ap, v = hx.vp, wc = wcOf(hx.w);
       if (!a[0] && !a[1]) return '';
-      if (wc === 'boom') return age < 0.7 ? '<circle cx="' + v[0] + '" cy="' + v[1] + '" r="' + f1(u * (1 + age * 9)) + '" fill="rgba(255,179,71,' + (0.35 * (1 - age / 0.7)).toFixed(2) + ')" stroke="#ffb347" stroke-opacity="' + (1 - age / 0.7).toFixed(2) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>' : '';
+      if (wc === 'boom') return boomFx(v, age, u, (v[0] * 7 + v[1]) % 6);
       if (wc === 'sr' || wc === 'dmr') {
         var life = wc === 'sr' ? 0.75 : 0.45;
         if (age > life) return '';
@@ -449,6 +466,38 @@
       if (age > 0.3) return '';
       var p2 = Math.min(1, age / 0.12);
       return line(lerp(a, v, Math.max(0, p2 - 0.35)), lerp(a, v, p2), col, age < 0.12 ? 1 : 1 - (age - 0.12) / 0.18, wc === 'lmg' ? 2.4 : 1.7);
+    }
+    var sq = function (x, y, s2, col, op) { return '<rect x="' + f1(x - s2 / 2) + '" y="' + f1(y - s2 / 2) + '" width="' + f1(s2) + '" height="' + f1(s2) + '" fill="' + col + '" fill-opacity="' + Math.max(0, op).toFixed(2) + '"/>'; };
+    // pixel explosion: a hot core, a ring of fire squares, then dark smoke that rises
+    function boomFx(p, age, u, seed) {
+      if (age > 1.6) return '';
+      var out = '';
+      if (age < 0.18) out += sq(p[0], p[1], u * (3 + age * 20), '#fff3c4', 1 - age / 0.18);
+      for (var k = 0; k < 12; k++) {
+        var an = k * 0.5236 + seed, r = u * (1 + age * 10), fire = age < 0.6;
+        out += sq(p[0] + Math.cos(an) * r, p[1] + Math.sin(an) * r - (fire ? 0 : u * age * 3), u * (fire ? 1.4 : 1.8), fire ? (k % 3 ? '#ff8a3c' : '#ffd25e') : '#3a3833', fire ? 1 - age / 0.6 : 0.6 * (1 - age / 1.6));
+      }
+      return out;
+    }
+    // dust kicked up behind someone moving (more and bigger for vehicles)
+    function dustFx(p, p0, u, big) {
+      if (!p0) return '';
+      var dx = p[0] - p0[0], dy = p[1] - p0[1], L = Math.hypot(dx, dy) || 1, out = '', now = performance.now() / 1000;
+      for (var k = 0; k < (big ? 6 : 3); k++) {
+        var ph = (now * (big ? 3 : 2) + k / (big ? 6 : 3)) % 1, back = u * (1 + ph * (big ? 7 : 3));
+        out += sq(p[0] - dx / L * back + Math.sin(k * 2.1) * u * ph, p[1] - dy / L * back + u * 0.3, u * (big ? 1.6 : 0.8) * (0.6 + ph), '#b9a77a', 0.5 * (1 - ph));
+      }
+      return out;
+    }
+    // smoke drifting up from a loot crate for a while
+    function smokeFx(p, age, u, seed) {
+      if (age < 0 || age > 25) return '';
+      var out = '', now = performance.now() / 1000;
+      for (var k = 0; k < 4; k++) {
+        var ph = (now * 0.5 + k / 4 + seed) % 1;
+        out += sq(p[0] + Math.sin(ph * 6 + k) * u * 0.8, p[1] - u * (3 + ph * 7), u * (0.9 + ph * 1.4), '#8b8f94', 0.45 * (1 - ph) * (1 - age / 25));
+      }
+      return out;
     }
     function sparks(p, age, u, seed) {
       var out = '', op = (1 - age / 0.25).toFixed(2), s2 = u * 0.55;
@@ -505,6 +554,10 @@
       return out;
     }
     function planeSvg(pl, u) {
+      var ang = Math.atan2(pl.dir[1], pl.dir[0]) * 180 / Math.PI, px = PIX.thing('plane', '#8a8f78', false), W2 = Math.max(u * 22, 26), H2 = W2 * 24 / 32;
+      return '<g transform="translate(' + f1(pl.pos[0]) + ' ' + f1(pl.pos[1]) + ') rotate(' + ang.toFixed(1) + ')"><ellipse cx="' + f1(W2 * 0.12) + '" cy="' + f1(H2 * 0.5) + '" rx="' + f1(W2 * 0.4) + '" ry="' + f1(H2 * 0.18) + '" fill="#000" fill-opacity=".25"/><use href="#' + pxRef(px) + '" x="' + f1(-W2 / 2) + '" y="' + f1(-H2 / 2) + '" width="' + f1(W2) + '" height="' + f1(H2) + '"/></g>';
+    }
+    function planeSvgOld(pl, u) {
       var ang = Math.atan2(pl.dir[1], pl.dir[0]) * 180 / Math.PI, s = Math.max(u, 2.2);
       return '<g transform="translate(' + f1(pl.pos[0]) + ' ' + f1(pl.pos[1]) + ') rotate(' + ang.toFixed(1) + ') scale(' + (s * 0.9).toFixed(2) + ')" fill="#eef1f5" stroke="#05070a" stroke-width=".35"><path d="M4.5 0 L2 -.7 L-.5 -4.6 L-1.6 -4.6 L-.6 -.8 L-3 -.8 L-4 -2 L-4.7 -2 L-4.1 0 L-4.7 2 L-4 2 L-3 .8 L-.6 .8 L-1.6 4.6 L-.5 4.6 L2 .7 Z"/></g>';
     }
@@ -591,6 +644,7 @@
       if (z) { zs.setAttribute('cx', z.safe[0]); zs.setAttribute('cy', z.safe[1]); zs.setAttribute('r', z.safe[2]); }
       if (z && z.warn) { zw.setAttribute('cx', z.warn[0]); zw.setAttribute('cy', z.warn[1]); zw.setAttribute('r', z.warn[2]); } else zw.setAttribute('r', 0);
       // players
+      var moveFx = [];
       ids.forEach(function (id, i) {
         var p = d.players[id], pos = posAt(p, t);
         pm[i].style.display = pos ? '' : 'none';
@@ -613,6 +667,7 @@
             sprEl[i].setAttribute('href', px0.url); sprEl[i].setAttribute('width', pw.toFixed(2)); sprEl[i].setAttribute('height', ph.toFixed(2));
             sprEl[i].setAttribute('x', (-pw / 2).toFixed(2)); sprEl[i].setAttribute('y', (-ph * (flat0 ? 0.7 : 0.94)).toFixed(2));
           }
+          if (kd === 'car' || kd === 'walkA' || kd === 'walkB') moveFx.push(dustFx(pos, pPrev, u, kd === 'car'));
           var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
           tagEl[i].textContent = vs < 170 && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '') + (GUNTAG[gn] ? ' ' + GUNTAG[gn] : '')).trim() : '';
           var pi = model ? model.idx.get(id) : undefined;
@@ -637,7 +692,7 @@
         var mine = ours.has(e.a) || ours.has(e.v);
         if (!mine && e.k !== 'revive') return;
         if (e.k === 'kill' && ours.has(e.v)) {
-          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], u * 7, 0));
+          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], u * 7, 0) + smokeFx(e.vp, age, u, (e.t % 7) / 7));
           if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + shortW(e), '#ff8a8a'));
         } else if (age > 8) {
           if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
@@ -663,6 +718,7 @@
           if (!model.ourIdx.has(hx.a)) seen[hx.a] = di;
           var hcol = model.ourIdx.has(hx.a) ? '#ffcf4d' : '#ff6b6b';
           var hage = t - hx.t;
+          if (wcOf(hx.w) === 'boom' && hage < 1.6 && hasShots) fxh.push(boomFx(hx.vp, hage, u, di % 6));
           if (hage < 0.8) { if (!hasShots) fxh.push(tracer(hx, hage, u, model.ourIdx.has(hx.a) ? '#ffd25e' : '#ffb08a')); if (hx.head && hage < 0.6) fxh.push(reticle(hx.vp, hage, u)); }
           if (hage < 0.25) fxh.push(sparks(hx.vp, hage, u, di));
           if (hage < 1.4 && (model.ourIdx.has(hx.a) || model.ourIdx.has(hx.v)) && (hx.ap[0] || hx.ap[1])) lastHit = hx;
@@ -734,7 +790,7 @@
         var pi = model ? model.idx.get(e.v) : undefined, ps = (pi !== undefined && opBy[pi] && opAt(opBy[pi], t)) || e.vp;
         fxh.push(ring(ps, u * 2.4, dn.bleed, '#ff4d4d', u));
       });
-      fx.innerHTML = fxh.join('');
+      fx.innerHTML = moveFx.join('') + fxh.join('');
       lb.innerHTML = lbh.join('');
       var shown = recent.slice(-2);
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
@@ -797,6 +853,7 @@
       // a visible rewind (no jump): time runs back fast, plays slowly, then fast-forwards to where we were
       irp = { m: mo, resume: t, until: mo.t + 1.3, from: mo.t - 5, ph: 'rw' };
       irp.shot = replayShot(mo);
+      hideBanner();
       irb.textContent = mo.kind === 'death' ? '◀◀ KILLCAM' : '◀◀ REPLAY';
       irb.classList.remove('hide');
       el.classList.remove('rw'); void el.offsetWidth; el.classList.add('rw');
