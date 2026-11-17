@@ -213,7 +213,7 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .map .sqb .dn .sg{color:#ff6b6b;animation:blink .6s steps(2) infinite}.map .sqb .kia{opacity:.4}
 .map .irb{position:absolute;top:calc(6% + 26px);left:50%;transform:translateX(-50%);z-index:4;min-height:30px;padding:4px 10px;border-radius:3px;border:1px solid rgba(255,255,255,.5);background:rgba(10,12,15,.75);color:#eef1f5;font:9px/1 "Press Start 2P",monospace;letter-spacing:.06em;animation:irb 1s steps(2) infinite}
 @keyframes irb{50%{border-color:var(--gold)}}
-.map.rw svg.mp{animation:rw .45s ease-out}@keyframes rw{0%{filter:grayscale(1) contrast(1.3) blur(1px)}100%{filter:none}}
+.map svg.mp{transition:filter .25s}.map.rwd svg.mp{filter:saturate(.35) contrast(1.15) brightness(.9)}
 .map .sqb.hide,.map .irb.hide{display:none}
 .map .hud,.map .h-sm,.map .kf,.map .cliptag,.map .tools,.map .bn{z-index:3}
 .map .bn.on{opacity:1;transform:none;visibility:visible}
@@ -444,7 +444,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=10', '/app/session.js?v=49'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=10', '/app/session.js?v=50'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

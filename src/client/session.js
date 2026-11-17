@@ -816,16 +816,16 @@
     var lastBattle = 0, lastSq = 0;
     var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
     function startReplay(mo) {
-      irp = { m: mo, resume: t, until: mo.t + 1.3 };
+      // a visible rewind (no jump): time runs back fast, plays slowly, then fast-forwards to where we were
+      irp = { m: mo, resume: t, until: mo.t + 1.3, from: mo.t - 5, ph: 'rw' };
       irp.shot = replayShot(mo);
-      t = mo.t - 5;
       irb.textContent = mo.kind === 'death' ? '◀◀ KILLCAM' : '◀◀ REPLAY';
       irb.classList.remove('hide');
       el.classList.remove('rw'); void el.offsetWidth; el.classList.add('rw');
       sfx.whoosh();
     }
-    function endReplay() { if (!irp) return; t = irp.resume; irp = null; el.classList.remove('rw'); void el.offsetWidth; el.classList.add('rw'); irb.classList.add('hide'); vig.style.removeProperty('--vx'); vig.style.removeProperty('--vy'); }
-    irb.onclick = function () { endReplay(); };
+    function endReplay() { if (!irp) return; if (irp.ph !== 'ff') { irp.ph = 'ff'; return; } irp = null; irb.classList.add('hide'); vig.style.removeProperty('--vx'); vig.style.removeProperty('--vy'); }
+    irb.onclick = function () { if (irp) irp.ph = 'ff'; };
     // squad bar: HP, state and armour of each of us, always on screen
     function squadBar() {
       if (!model) { sqb.classList.add('hide'); return; }
@@ -860,11 +860,14 @@
       hud.sm.textContent = irp ? '' : frozen || paceNow < 2.4 ? 'BULLET TIME' : 'SLOW-MO';
       hud.sm.classList.toggle('hide', !playing || !!irp || (auto ? !(frozen || paceNow < 5) : !slow));
       el.classList.toggle('cine', !!irp || tens >= 0.55 || phase === 'fight');
+      el.classList.toggle('rwd', !!irp && irp.ph !== 'play');
       tn.style.opacity = (0.15 + tens * 0.85).toFixed(2); tn.classList.toggle('beat', tens >= 0.6);
       if (playing && tens >= 0.55 && !frozen) sfx.heart(tens);
       if (playing && !frozen) {
         var tPrev = t;
-        t += irp ? realDt * 1.3 : !auto ? (phase === 'fight' ? realDt * Math.min(4, speeds[si] * 0.4) : realDt * speeds[si] * (slow ? 0.25 : 1)) : realDt * paceNow;
+        if (irp && irp.ph === 'rw') { t -= realDt * Math.max(8, (irp.resume - irp.from) / 0.6); if (t <= irp.from) { t = irp.from; irp.ph = 'play'; } }
+        else if (irp && irp.ph === 'ff') { t += realDt * Math.max(8, (irp.resume - irp.until) / 0.5); if (t >= irp.resume) { t = irp.resume; irb.classList.add('hide'); irp = null; vig.style.removeProperty('--vx'); vig.style.removeProperty('--vy'); } }
+        else t += irp ? realDt * 1.3 : !auto ? (phase === 'fight' ? realDt * Math.min(4, speeds[si] * 0.4) : realDt * speeds[si] * (slow ? 0.25 : 1)) : realDt * paceNow;
         if (director && model) {
           // a beat of stillness on every knock/kill of ours (not inside an instant replay)
           if (!irp) for (var fi = 0; fi < ourEv.length; fi++) {
@@ -876,7 +879,7 @@
             var mo = moments[mi];
             if (!doneIR[mo.t] && mo.t + 0.9 > tPrev && mo.t + 0.9 <= t) { doneIR[mo.t] = 1; startReplay(mo); break; }
           }
-          if (irp && t >= irp.until) endReplay();
+          if (irp && irp.ph === 'play' && t >= irp.until) endReplay();
           // gunfire
           if (sfx.on && hasShots) for (var gs = shotStart(tPrev); gs < shots.length && shots[gs].t <= t; gs++) sfx.shot(wcOf(shots[gs].w), model.ourIdx.has(shots[gs].p));
           else if (sfx.on) for (var gi = 0; gi < model.dmg.length; gi++) {
