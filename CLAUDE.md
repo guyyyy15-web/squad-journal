@@ -81,7 +81,7 @@ GitHub does **not** deploy.
   Cache API; telemetry is fetched by the visitor's browser straight from telemetry-cdn.pubg.com (CORS allows it) and the
   derived result is never uploaded (`SJ.public`). `/players` budget: ≤ 6 look-ups/min per IP and ≤ 4/min overall, so the
   squad's own poll keeps the rest of the 10/min. The looked-up team is shown as a temporary squad (sessionPage `pub`).
-- **Retro look of the replay:** pixel sprites drawn from grids on a canvas (`SPR` in session.js, cached data URLs,
+- **Retro look of the replay:** pixel art from `src/client/pixel.js` (`PIX.soldier`/`PIX.thing`: palette grids + army-tech camo noise, side/front/back views standing on the map, cached data URLs; preview with scratch pix.cjs,
   `image-rendering: pixelated`): soldiers (walk cycle, 8-way facing, gun by `weaponClass`, prone when DOWN), loot crate on
   death, vehicle when moving > 2.4 units/s. Original art: no PUBG/KRAFTON assets. In-frame tags (helmet/vest/gun) when
   zoomed in (< 170 units). Desktop ≥ 1100 px: map + side column (battle panel, feed, tables); keys space/←/→/F/Esc.

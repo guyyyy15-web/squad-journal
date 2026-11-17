@@ -171,46 +171,7 @@
     $('.rp', el).onclick = function () { replay(match, el, d, 0); };
   }
 
-  // ---------- retro pixel sprites (original art, drawn from grids on a canvas, cached as data URLs) ----------
-  // Top-down, facing north (rotated in 45° steps on the map). o outline · h helmet · b body · c camo · l boots
-  // k glove · w crate wood · W plank · x wheel · G glass.
-  var SPR = (function () {
-    var G = {
-      stand: ['............', '............', '............', '....oooo....', '...ohHhho...', '..oohhhhoo..', '.obbohhobbo.', '.obcbooobbo.', '.obbppppbbo.', '..obppppbo..', '...ll..ll...', '............'],
-      walkA: ['............', '............', '............', '....oooo....', '...ohHhho...', '..oohhhhoo..', '.obbohhobbo.', '.obcbooobbo.', '.obbppppbbo.', '..obppppbo..', '...ll.......', '........ll..'],
-      walkB: ['............', '............', '............', '....oooo....', '...ohHhho...', '..oohhhhoo..', '.obbohhobbo.', '.obcbooobbo.', '.obbppppbbo.', '..obppppbo..', '........ll..', '...ll.......'],
-      down: ['............', '....oooo....', '...ohHhho...', '...ohhhho...', '..kobbbbok..', '...obcbbo...', '...obppbo...', '...obppbo...', '...obbcbo...', '....oooo....', '....l..l....', '............'],
-      crate: ['............', '............', '.oooooooooo.', '.oWWWWWWWWo.', '.owwwwwwwwo.', '.oWWWWWWWWo.', '.owwwwwwwwo.', '.oWWWWWWWWo.', '.owwwwwwwwo.', '.oooooooooo.', '............', '............'],
-      car: ['...oooooo...', '..obbbbbbo..', '.xobGGGGbox.', '.xobGGGGbox.', '..obbbbbbo..', '..obbbbbbo..', '..obbbbbbo..', '..obbbbbbo..', '.xobbbbbbox.', '.xobbbbbbox.', '..obbbbbbo..', '...oooooo...'],
-    };
-    // guns: barrel length (px) and width by class, held in the right hand
-    var GUN = { sr: [6, 1], dmr: [5, 1], ar: [4, 1], lmg: [4, 2], smg: [3, 1], sg: [3, 2], pistol: [2, 1], other: [3, 1] };
-    var hex = function (h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; };
-    var mix = function (h, f, to) { var c = hex(h), d = hex(to || '#000000'); return 'rgb(' + c.map(function (v, i) { return Math.round(v + (d[i] - v) * f); }).join(',') + ')'; };
-    var cache = {};
-    function url(kind, color, gun, enemy) {
-      var key = kind + color + gun + (enemy ? 'e' : '');
-      if (cache[key]) return cache[key];
-      var cv = document.createElement('canvas'); cv.width = 12; cv.height = 12;
-      var g = cv.getContext('2d');
-      var body = enemy ? '#8a7f5a' : mix('#4f5a2c', 0.3, color), camo = enemy ? '#5f583c' : mix('#3a4019', 0.2, color), helm = enemy ? '#55513b' : color;
-      var pal = { o: '#0b0d10', h: helm, H: enemy ? '#6e6a52' : mix(color, 0.45, '#ffffff'), b: body, c: camo, p: enemy ? '#4d4532' : '#5a4630', l: '#1b1d20', k: '#2b2420', w: '#7a5530', W: '#a8773f', x: '#111', G: '#9fd3e6' };
-      if (kind === 'car') pal.b = enemy ? '#6b6a5a' : mix(color, 0.15);
-      (G[kind] || G.stand).forEach(function (row, y) { for (var x = 0; x < 12; x++) { var ch = row[x]; if (pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } } });
-      if (gun && GUN[gun] && kind !== 'crate' && kind !== 'car' && kind !== 'down') {
-        var L = GUN[gun][0], W = GUN[gun][1];
-        g.fillStyle = '#0b0d10'; g.fillRect(8, 5 - L, W + 1, L + 1);
-        g.fillStyle = '#4a5058'; g.fillRect(8, 5 - L, W, L);
-        g.fillStyle = '#2b2420'; g.fillRect(8, 5, 1, 2); g.fillRect(7, 4, 1, 1); // gloves on the gun
-        if (gun === 'sr') { g.fillStyle = '#9fd3e6'; g.fillRect(8, 2, 1, 1); } // scope glint
-      }
-      cache[key] = cv.toDataURL();
-      return cache[key];
-    }
-    return { url: url };
-  })();
   // facing in 45° steps from a direction vector (0° = north)
-  SJ.SPR = SPR;
   var face8 = function (dx, dy) { return Math.round(Math.atan2(dx, -dy) / (Math.PI / 4)) * 45; };
 
   // ---------- sound (off by default; synthesized in the browser, no files) ----------
@@ -367,7 +328,7 @@
     svg.push('<g class="ops"></g>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><ellipse cx="0" cy=".3" rx="3.2" ry="3.2" fill="' + esc(colorOf(id)) + '" fill-opacity=".25"/><image class="spr" x="-4.2" y="-4.2" width="8.4" height="8.4" preserveAspectRatio="none" style="image-rendering:pixelated"/><path class="chute" display="none" d="M-3.4 -4.6Q0 -9.4 3.4 -4.6Z M-3.4 -4.6L-.9 -2 M3.4 -4.6L.9 -2" fill="' + esc(colorOf(id)) + '" fill-opacity=".85" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-5" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-4.85" width="4.7" height=".6"/></g><text class="pmn" y="5.2" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text><text class="pmt" y="6.7" font-size="1.05" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width=".45" paint-order="stroke" font-family="Press Start 2P, monospace"></text></g>'); });
+    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><ellipse cx="0" cy=".4" rx="2.8" ry="1.1" fill="#000" fill-opacity=".45"/><ellipse cx="0" cy=".4" rx="3.1" ry="1.3" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-width=".35"/><image class="spr" x="-3.75" y="-8.4" width="7.5" height="9" preserveAspectRatio="none" style="image-rendering:pixelated"/><path class="chute" display="none" d="M-4.4 -11.2Q0 -16.6 4.4 -11.2Z M-4.4 -11.2L-1.2 -7.4 M4.4 -11.2L1.2 -7.4" fill="' + esc(colorOf(id)) + '" fill-opacity=".85" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-10" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-9.85" width="4.7" height=".6"/></g><text class="pmn" y="3.1" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text><text class="pmt" y="4.6" font-size="1.05" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width=".45" paint-order="stroke" font-family="Press Start 2P, monospace"></text></g>'); });
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
@@ -416,8 +377,20 @@
       if (p0 && p1 && Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 0.12) faceOf[key] = face8(p1[0] - p0[0], p1[1] - p0[1]);
       return faceOf[key] || 0;
     }
+    // angle (0 = north) → which way the pixel soldier faces; side views win unless clearly up/down
+    var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
+    function pixOf(kind, color, gun, enemy, ang) {
+      var dir = dirOf(ang || 0);
+      if (kind === 'down') return PIX.thing('down', color, enemy, dir === 'W');
+      if (kind === 'car') return PIX.thing('jeep', color, enemy, dir === 'W');
+      if (kind === 'crate') return PIX.thing('crate', color, enemy);
+      return PIX.soldier({ dir: dir, pose: kind === 'walkA' ? 'walk1' : kind === 'walkB' ? 'walk2' : 'idle', gun: gun, team: color, enemy: enemy });
+    }
+    // standing on (x, y): the sprite's feet on the spot, `size` = its height in map units
     function sprite(kind, color, gun, enemy, x, y, size, ang) {
-      return '<image href="' + SPR.url(kind, color, gun, enemy) + '" x="' + f1(x - size / 2) + '" y="' + f1(y - size / 2) + '" width="' + f1(size) + '" height="' + f1(size) + '" preserveAspectRatio="none" style="image-rendering:pixelated" transform="rotate(' + ang + ' ' + f1(x) + ' ' + f1(y) + ')"/>';
+      var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 24, w = size * px.w / 24, flat = kind === 'down' || kind === 'car' || kind === 'crate';
+      return '<ellipse cx="' + f1(x) + '" cy="' + f1(y + size * 0.04) + '" rx="' + f1(w * 0.36) + '" ry="' + f1(size * 0.11) + '" fill="#000" fill-opacity=".4"/>'
+        + '<image href="' + px.url + '" x="' + f1(x - w / 2) + '" y="' + f1(y - h * (flat ? 0.7 : 0.94)) + '" width="' + f1(w) + '" height="' + f1(h) + '" preserveAspectRatio="none" style="image-rendering:pixelated"/>';
     }
     function kindOf(p0, p1, dn) {
       if (dn) return 'down';
@@ -634,7 +607,12 @@
           var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
           var kd = inAir ? 'stand' : kindOf(pPrev, pos, dnO), gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
           var sk = kd + gn + an;
-          if (sprKey[i] !== sk) { sprKey[i] = sk; sprEl[i].setAttribute('href', SPR.url(kd, colorOf(id), gn, false)); sprEl[i].setAttribute('transform', 'rotate(' + an + ')'); }
+          if (sprKey[i] !== sk) {
+            sprKey[i] = sk;
+            var px0 = pixOf(kd, colorOf(id), gn, false, an), ph = 9 * px0.h / 24, pw = 9 * px0.w / 24, flat0 = kd === 'down' || kd === 'car';
+            sprEl[i].setAttribute('href', px0.url); sprEl[i].setAttribute('width', pw.toFixed(2)); sprEl[i].setAttribute('height', ph.toFixed(2));
+            sprEl[i].setAttribute('x', (-pw / 2).toFixed(2)); sprEl[i].setAttribute('y', (-ph * (flat0 ? 0.7 : 0.94)).toFixed(2));
+          }
           var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
           tagEl[i].textContent = vs < 170 && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '') + (GUNTAG[gn] ? ' ' + GUNTAG[gn] : '')).trim() : '';
           var pi = model ? model.idx.get(id) : undefined;
@@ -659,7 +637,7 @@
         var mine = ours.has(e.a) || ours.has(e.v);
         if (!mine && e.k !== 'revive') return;
         if (e.k === 'kill' && ours.has(e.v)) {
-          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], u * 6, 0) + '<rect x="' + f1(e.vp[0] + u * 1.2) + '" y="' + f1(e.vp[1] - u * 3.4) + '" width="' + f1(u * 1.4) + '" height="' + f1(u * 1) + '" fill="' + esc(colorOf(e.v)) + '"/><rect x="' + f1(e.vp[0] + u * 1.1) + '" y="' + f1(e.vp[1] - u * 3.4) + '" width="' + f1(u * 0.2) + '" height="' + f1(u * 2.4) + '" fill="#0b0d10"/>');
+          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], u * 7, 0));
           if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + shortW(e), '#ff8a8a'));
         } else if (age > 8) {
           if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
@@ -716,10 +694,10 @@
           diam[i] = 1;
           var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
           var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
-          fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], u * 7.6, ea));
-          fxh.push(hpBar(pos[0], pos[1] - u * 4.6, u, hh));
+          fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], u * 9, ea));
+          fxh.push(hpBar(pos[0], pos[1] - u * 10, u, hh));
           var eGr = gearAt(model, ip, t);
-          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + u * 5) + '" font-size="' + f1(u * 1.05) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
+          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + u * 2.4) + '" font-size="' + f1(u * 1.05) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
         });
       }
       var oh = [], dim = [];
@@ -737,8 +715,8 @@
             oh.push('<line x1="' + a2[0].toFixed(1) + '" y1="' + a2[1].toFixed(1) + '" x2="' + b2[0].toFixed(1) + '" y2="' + b2[1].toFixed(1) + '" stroke="#dfe3ea" stroke-opacity="' + (0.08 + 0.42 * si2 / tp.length).toFixed(2) + '" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>');
           }
           var hp0 = opAt(orow, t - 1);
-          oh.push('<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], u * 6.6, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>');
-          if (model) oh.push(hpBar(opos[0], opos[1] - u * 4, u, hpAt(model, orow[0], t)));
+          oh.push('<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], u * 8, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>');
+          if (model) oh.push(hpBar(opos[0], opos[1] - u * 9, u, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
