@@ -171,6 +171,48 @@
     $('.rp', el).onclick = function () { replay(match, el, d, 0); };
   }
 
+  // ---------- retro pixel sprites (original art, drawn from grids on a canvas, cached as data URLs) ----------
+  // Top-down, facing north (rotated in 45° steps on the map). o outline · h helmet · b body · c camo · l boots
+  // k glove · w crate wood · W plank · x wheel · G glass.
+  var SPR = (function () {
+    var G = {
+      stand: ['............', '............', '............', '....oooo....', '...ohHhho...', '..oohhhhoo..', '.obbohhobbo.', '.obcbooobbo.', '.obbppppbbo.', '..obppppbo..', '...ll..ll...', '............'],
+      walkA: ['............', '............', '............', '....oooo....', '...ohHhho...', '..oohhhhoo..', '.obbohhobbo.', '.obcbooobbo.', '.obbppppbbo.', '..obppppbo..', '...ll.......', '........ll..'],
+      walkB: ['............', '............', '............', '....oooo....', '...ohHhho...', '..oohhhhoo..', '.obbohhobbo.', '.obcbooobbo.', '.obbppppbbo.', '..obppppbo..', '........ll..', '...ll.......'],
+      down: ['............', '....oooo....', '...ohHhho...', '...ohhhho...', '..kobbbbok..', '...obcbbo...', '...obppbo...', '...obppbo...', '...obbcbo...', '....oooo....', '....l..l....', '............'],
+      crate: ['............', '............', '.oooooooooo.', '.oWWWWWWWWo.', '.owwwwwwwwo.', '.oWWWWWWWWo.', '.owwwwwwwwo.', '.oWWWWWWWWo.', '.owwwwwwwwo.', '.oooooooooo.', '............', '............'],
+      car: ['...oooooo...', '..obbbbbbo..', '.xobGGGGbox.', '.xobGGGGbox.', '..obbbbbbo..', '..obbbbbbo..', '..obbbbbbo..', '..obbbbbbo..', '.xobbbbbbox.', '.xobbbbbbox.', '..obbbbbbo..', '...oooooo...'],
+    };
+    // guns: barrel length (px) and width by class, held in the right hand
+    var GUN = { sr: [6, 1], dmr: [5, 1], ar: [4, 1], lmg: [4, 2], smg: [3, 1], sg: [3, 2], pistol: [2, 1], other: [3, 1] };
+    var hex = function (h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; };
+    var mix = function (h, f, to) { var c = hex(h), d = hex(to || '#000000'); return 'rgb(' + c.map(function (v, i) { return Math.round(v + (d[i] - v) * f); }).join(',') + ')'; };
+    var cache = {};
+    function url(kind, color, gun, enemy) {
+      var key = kind + color + gun + (enemy ? 'e' : '');
+      if (cache[key]) return cache[key];
+      var cv = document.createElement('canvas'); cv.width = 12; cv.height = 12;
+      var g = cv.getContext('2d');
+      var body = enemy ? '#8a7f5a' : mix('#4f5a2c', 0.3, color), camo = enemy ? '#5f583c' : mix('#3a4019', 0.2, color), helm = enemy ? '#55513b' : color;
+      var pal = { o: '#0b0d10', h: helm, H: enemy ? '#6e6a52' : mix(color, 0.45, '#ffffff'), b: body, c: camo, p: enemy ? '#4d4532' : '#5a4630', l: '#1b1d20', k: '#2b2420', w: '#7a5530', W: '#a8773f', x: '#111', G: '#9fd3e6' };
+      if (kind === 'car') pal.b = enemy ? '#6b6a5a' : mix(color, 0.15);
+      (G[kind] || G.stand).forEach(function (row, y) { for (var x = 0; x < 12; x++) { var ch = row[x]; if (pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } } });
+      if (gun && GUN[gun] && kind !== 'crate' && kind !== 'car' && kind !== 'down') {
+        var L = GUN[gun][0], W = GUN[gun][1];
+        g.fillStyle = '#0b0d10'; g.fillRect(8, 5 - L, W + 1, L + 1);
+        g.fillStyle = '#4a5058'; g.fillRect(8, 5 - L, W, L);
+        g.fillStyle = '#2b2420'; g.fillRect(8, 5, 1, 2); g.fillRect(7, 4, 1, 1); // gloves on the gun
+        if (gun === 'sr') { g.fillStyle = '#9fd3e6'; g.fillRect(8, 2, 1, 1); } // scope glint
+      }
+      cache[key] = cv.toDataURL();
+      return cache[key];
+    }
+    return { url: url };
+  })();
+  // facing in 45° steps from a direction vector (0° = north)
+  SJ.SPR = SPR;
+  var face8 = function (dx, dy) { return Math.round(Math.atan2(dx, -dy) / (Math.PI / 4)) * 45; };
+
   // ---------- sound (off by default; synthesized in the browser, no files) ----------
   var sfx = (function () {
     var on = false, ac = null, noise = null, lastShot = 0, lastBeat = 0, lastWhoosh = 0;
@@ -325,7 +367,7 @@
     svg.push('<g class="ops"></g>');
     ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><g class="pmi">' + patchAt(id, 0, 0, 4.6) + '</g><path class="chute" display="none" d="M-3.4 -4.6Q0 -9.4 3.4 -4.6Z M-3.4 -4.6L-.9 -2 M3.4 -4.6L.9 -2" fill="rgba(238,241,245,.85)" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-4" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-3.85" width="4.7" height=".6"/></g><text class="pmn" y="4" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text></g>'); });
+    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><ellipse cx="0" cy=".3" rx="3.2" ry="3.2" fill="' + esc(colorOf(id)) + '" fill-opacity=".25"/><image class="spr" x="-4.2" y="-4.2" width="8.4" height="8.4" preserveAspectRatio="none" style="image-rendering:pixelated"/><path class="chute" display="none" d="M-3.4 -4.6Q0 -9.4 3.4 -4.6Z M-3.4 -4.6L-.9 -2 M3.4 -4.6L.9 -2" fill="' + esc(colorOf(id)) + '" fill-opacity=".85" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-5" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-4.85" width="4.7" height=".6"/></g><text class="pmn" y="5.2" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text><text class="pmt" y="6.7" font-size="1.05" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width=".45" paint-order="stroke" font-family="Press Start 2P, monospace"></text></g>'); });
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
@@ -358,6 +400,30 @@
     var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), sm: $('.h-sm', el) };
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
     var chute = pm.map(function (g) { return g.querySelector('.chute'); });
+    var sprEl = pm.map(function (g) { return g.querySelector('.spr'); }), tagEl = pm.map(function (g) { return g.querySelector('.pmt'); });
+    var sprKey = [], faceOf = {};
+    var GUNTAG = { sr: 'SR', dmr: 'DMR', ar: 'AR', lmg: 'LMG', smg: 'SMG', sg: 'SG', pistol: 'PST', boom: '', melee: '', other: '' };
+    // the gun in hand: the last shot within 20 s, else the last gun picked up
+    function gunOf(pi, at) {
+      if (pi === undefined) return '';
+      for (var k = shotStart(at) - 1; k >= 0 && shots[k].t > at - 20; k--) if (shots[k].p === pi) return wcOf(shots[k].w);
+      if (model) { var gg = gearAt(model, pi, at).guns; if (gg.length) return wcOf((d.wp || [])[gg[gg.length - 1]] || ''); }
+      return '';
+    }
+    // facing: towards the latest shot's target (0.6 s), else the way they move; remembered when standing still
+    function facing(key, pi, p0, p1) {
+      if (pi !== undefined) for (var k = shotStart(t) - 1; k >= 0 && shots[k].t > t - 0.6; k--) if (shots[k].p === pi) { var a = aimOf(shots[k], k); if (a) return (faceOf[key] = face8(a[0] - shots[k].pos[0], a[1] - shots[k].pos[1])); }
+      if (p0 && p1 && Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 0.12) faceOf[key] = face8(p1[0] - p0[0], p1[1] - p0[1]);
+      return faceOf[key] || 0;
+    }
+    function sprite(kind, color, gun, enemy, x, y, size, ang) {
+      return '<image href="' + SPR.url(kind, color, gun, enemy) + '" x="' + f1(x - size / 2) + '" y="' + f1(y - size / 2) + '" width="' + f1(size) + '" height="' + f1(size) + '" preserveAspectRatio="none" style="image-rendering:pixelated" transform="rotate(' + ang + ' ' + f1(x) + ' ' + f1(y) + ')"/>';
+    }
+    function kindOf(p0, p1, dn) {
+      if (dn) return 'down';
+      var sp = p0 && p1 ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) : 0;
+      return sp > 2.4 ? 'car' : sp > 0.12 ? (Math.floor(performance.now() / 160) % 2 ? 'walkA' : 'walkB') : 'stand';
+    }
     var php = pm.map(function (g) { return g.querySelector('.php'); }), phf = pm.map(function (g) { return g.querySelector('.phf'); });
     var hpCol = function (h) { return h.state ? '#ff4d4d' : h.hp > 50 ? '#3ddc97' : h.hp > 25 ? '#ffcf4d' : '#ff4d4d'; };
     // a small HP bar floating under an enemy marker (map units)
@@ -557,13 +623,20 @@
         pm[i].style.display = pos ? '' : 'none';
         if (pos) {
           // fan out markers that would sit on top of each other in a close-up
-          var mx = pos[0], my = pos[1], gap = u * 3.3;
+          var mx = pos[0], my = pos[1], gap = u * 5;
           for (var oj = 0; oj < i; oj++) {
             var op = posAt(d.players[ids[oj]], t);
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
           pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + u.toFixed(3) + ')');
-          chute[i].setAttribute('display', p.jump && p.land && t >= p.jump[2] && t < p.land[2] ? '' : 'none');
+          var inAir = p.jump && p.land && t >= p.jump[2] && t < p.land[2];
+          chute[i].setAttribute('display', inAir ? '' : 'none');
+          var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
+          var kd = inAir ? 'stand' : kindOf(pPrev, pos, dnO), gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
+          var sk = kd + gn + an;
+          if (sprKey[i] !== sk) { sprKey[i] = sk; sprEl[i].setAttribute('href', SPR.url(kd, colorOf(id), gn, false)); sprEl[i].setAttribute('transform', 'rotate(' + an + ')'); }
+          var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
+          tagEl[i].textContent = vs < 170 && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '') + (GUNTAG[gn] ? ' ' + GUNTAG[gn] : '')).trim() : '';
           var pi = model ? model.idx.get(id) : undefined;
           if (pi !== undefined) {
             var hp = hpAt(model, pi, t);
@@ -586,7 +659,7 @@
         var mine = ours.has(e.a) || ours.has(e.v);
         if (!mine && e.k !== 'revive') return;
         if (e.k === 'kill' && ours.has(e.v)) {
-          fxh.push(cross(e.vp[0], e.vp[1], u * 2.2, colorOf(e.v)));
+          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], u * 6, 0) + '<rect x="' + f1(e.vp[0] + u * 1.2) + '" y="' + f1(e.vp[1] - u * 3.4) + '" width="' + f1(u * 1.4) + '" height="' + f1(u * 1) + '" fill="' + esc(colorOf(e.v)) + '"/><rect x="' + f1(e.vp[0] + u * 1.1) + '" y="' + f1(e.vp[1] - u * 3.4) + '" width="' + f1(u * 0.2) + '" height="' + f1(u * 2.4) + '" fill="#0b0d10"/>');
           if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + shortW(e), '#ff8a8a'));
         } else if (age > 8) {
           if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
@@ -641,8 +714,12 @@
           if (live) pos = live;
           if (!pos[0] && !pos[1]) return;
           diam[i] = 1;
-          fxh.push('<path d="M' + pos[0] + ' ' + (pos[1] - r) + 'L' + (pos[0] + r) + ' ' + pos[1] + 'L' + pos[0] + ' ' + (pos[1] + r) + 'L' + (pos[0] - r) + ' ' + pos[1] + 'Z" fill="' + (hh.state === 1 ? '#ff4d4d' : '#dfe3ea') + '" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
-          fxh.push(hpBar(pos[0], pos[1] - r - u * 1.3, u, hh));
+          var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
+          var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
+          fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], u * 7.6, ea));
+          fxh.push(hpBar(pos[0], pos[1] - u * 4.6, u, hh));
+          var eGr = gearAt(model, ip, t);
+          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + u * 5) + '" font-size="' + f1(u * 1.05) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
         });
       }
       var oh = [], dim = [];
@@ -659,8 +736,9 @@
             if (Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) > 25) continue;
             oh.push('<line x1="' + a2[0].toFixed(1) + '" y1="' + a2[1].toFixed(1) + '" x2="' + b2[0].toFixed(1) + '" y2="' + b2[1].toFixed(1) + '" stroke="#dfe3ea" stroke-opacity="' + (0.08 + 0.42 * si2 / tp.length).toFixed(2) + '" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>');
           }
-          oh.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.8).toFixed(2) + '" fill="#dfe3ea" fill-opacity=".92" stroke="#000" stroke-width="1.2" vector-effect="non-scaling-stroke"/>');
-          if (model) oh.push(hpBar(opos[0], opos[1] - u * 2.1, u, hpAt(model, orow[0], t)));
+          var hp0 = opAt(orow, t - 1);
+          oh.push('<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], u * 6.6, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>');
+          if (model) oh.push(hpBar(opos[0], opos[1] - u * 4, u, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
