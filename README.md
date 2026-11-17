@@ -13,6 +13,15 @@ callouts on the map (who knocked/killed whom, weapon, distance), an in-game styl
 players alive, zone phase), a timeline with tappable kill/knock/death/revive marks, slow-motion around action,
 and a fullscreen theater mode.
 
+It plays like a retro 2D game: chibi pixel-art soldiers (`src/client/pixel.js`, original art, shaded and camo-textured,
+side/front/back views, walk cycles, guns by class), real vehicles (jeep, motorbike, bicycle, boat, glider, truck),
+swimmers, care packages on parachutes, every real shot fired at the gun's rhythm, explosions, dust and smoke. An AUTO pace
+driven by a tension curve fast-forwards the looting and slows down for fights; instant replays and a killcam rewind
+the big moments. Desktop gets a wide layout with a side column and keyboard controls.
+
+Public look-up (`/look`): anyone can type a Steam PUBG name and watch that player's last matches with the same replay.
+Nothing about strangers is stored (edge cache only; telemetry is analysed in the visitor's browser).
+
 Live: https://squad-journal.guyyyy15-web.workers.dev
 
 ## How collection works
@@ -40,7 +49,8 @@ src/logic.js      pure logic (tested)       src/pubg.js       PUBG API client
 src/html.js       server-rendered pages     migrations/       D1 schema
 src/i18n.js       en + he strings           src/emblems.js    unit patches + medals (SVG)
 src/summary.js    awards, carry (tested)    src/telemetry.js  browser-side extraction (tested)
-src/moments.js    highlights, matrices      src/client/       session page script (served at /app/)
+src/moments.js    highlights, matrices      src/client/       session.js + pixel.js (served at /app/)
+src/look.js       public look-up (no storage)
 src/replay.js     camera, HUD, timeline      src/hall.js       ranks, records, pairs
 src/narrator.js   AI recap + number guard
 test/             node --test               scripts/          dev relay, seed
