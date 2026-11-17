@@ -385,7 +385,7 @@
     var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
     function pixOf(kind, color, gun, enemy, ang) {
       var dir = dirOf(ang || 0);
-      if (kind === 'down') return PIX.thing('down', color, enemy, dir === 'W');
+      if (kind === 'down') { var dd2 = PIX.downed(color, enemy, dir === 'W'); if (dd2.fresh && dd2.ref) { dd2.fresh = false; var sy = document.getElementById(dd2.ref); if (sy) sy.firstChild.setAttribute('href', dd2.url); } return dd2; }
       if (kind === 'car') return PIX.thing('jeep', color, enemy, dir === 'W');
       if (kind === 'crate') return PIX.thing('crate', color, enemy);
       return PIX.soldier({ dir: dir, pose: kind === 'walkA' ? 'walk1' : kind === 'walkB' ? 'walk2' : 'idle', gun: gun, team: color, enemy: enemy });
@@ -405,7 +405,7 @@
     }
     // standing on (x, y): the sprite's feet on the spot, `size` = its height in map units
     function sprite(kind, color, gun, enemy, x, y, size, ang) {
-      var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 24, w = size * px.w / 24, flat = kind === 'down' || kind === 'car' || kind === 'crate';
+      var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 28, w = size * px.w / 28, flat = kind === 'down' || kind === 'car' || kind === 'crate';
       return '<ellipse cx="' + f1(x) + '" cy="' + f1(y + size * 0.04) + '" rx="' + f1(w * 0.36) + '" ry="' + f1(size * 0.11) + '" fill="#000" fill-opacity=".4"/>'
         + '<use href="#' + pxRef(px) + '" x="' + f1(x - w / 2) + '" y="' + f1(y - h * (flat ? 0.7 : 0.94)) + '" width="' + f1(w) + '" height="' + f1(h) + '"/>';
     }
@@ -423,6 +423,9 @@
     };
     var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
     var squadIds = ids.filter(function (id) { return ours.has(id); });
+    // knocked sprites are drawn asynchronously (rotated); make them ready before they are needed
+    squadIds.forEach(function (id) { PIX.downed(colorOf(id), false, false); PIX.downed(colorOf(id), false, true); });
+    PIX.downed('#7d7452', true, false); PIX.downed('#7d7452', true, true);
     // Everyone else in the match (derived v6): faint dots; the squads we trade with turn red with a trail
     // from ~90 s before first contact, so you see them coming.
     var others = d.op || [], opBy = {}, foeT = {};
@@ -660,10 +663,10 @@
           chute[i].setAttribute('display', inAir ? '' : 'none');
           var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
           var kd = inAir ? 'stand' : kindOf(pPrev, pos, dnO), gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
-          var sk = kd + gn + an;
+          var px0 = pixOf(kd, colorOf(id), gn, false, an), sk = px0.url;
           if (sprKey[i] !== sk) {
             sprKey[i] = sk;
-            var px0 = pixOf(kd, colorOf(id), gn, false, an), ph = 9 * px0.h / 24, pw = 9 * px0.w / 24, flat0 = kd === 'down' || kd === 'car';
+            var ph = 9 * px0.h / 28, pw = 9 * px0.w / 28, flat0 = kd === 'down' || kd === 'car';
             sprEl[i].setAttribute('href', px0.url); sprEl[i].setAttribute('width', pw.toFixed(2)); sprEl[i].setAttribute('height', ph.toFixed(2));
             sprEl[i].setAttribute('x', (-pw / 2).toFixed(2)); sprEl[i].setAttribute('y', (-ph * (flat0 ? 0.7 : 0.94)).toFixed(2));
           }

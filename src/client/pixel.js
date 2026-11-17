@@ -265,5 +265,152 @@
     cache[key] = { url: cv.toDataURL(), w: cv.width, h: cv.height };
     return cache[key];
   }
-  window.PIX = { soldier: soldier, thing: thing };
+
+  // ---------------- chibi soldiers (32×32): shapes → shaded materials → coloured outlines ----------------
+  // Light comes from the top-left; every material has 4 tones (highlight, base, shadow, dark) and the outline of a
+  // part is its own darkest tone, like hand-made pixel art. Cloth gets camo noise.
+  var MAT = {
+    skin: ['#f6cfa4', '#e3a878', '#bd7f55', '#7c4d32'],
+    eye: ['#3a4060', '#1c1f2b', '#11131b', '#07080c'],
+    glint: ['#ffffff', '#ffffff', '#dfe8ff', '#9fb0d0'],
+    boot: ['#6b5946', '#4a3c2f', '#33291f', '#1a140f'],
+    gun: ['#b4bdc8', '#6c7480', '#434952', '#1e2126'],
+    wood: ['#c99260', '#9a6a3d', '#6d4625', '#3d2614'],
+    lens: ['#d8f4ff', '#8fd0ea', '#4f93b3', '#24485a'],
+    strap: ['#5f553c', '#463e2b', '#322c1e', '#1d1911'],
+  };
+  var WOODLAND = { cloth: ['#9aa566', '#76824c', '#566036', '#323a1f'], pants: ['#86905a', '#646d42', '#48502f', '#2b311c'], pouch: ['#b0a774', '#8a8256', '#655e3c', '#3d3922'] };
+  var DESERTC = { cloth: ['#dccb98', '#b8a575', '#8c7b52', '#564b31'], pants: ['#cbb98a', '#a8966a', '#7d6f4a', '#4c432c'], pouch: ['#9a8a5f', '#776a46', '#564c31', '#332d1d'] };
+  var hx2 = function (h) { var n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+  var mixc = function (a, b, f) { var x = hx2(a), y = hx2(b); return '#' + x.map(function (v, i) { return ('0' + Math.round(v + (y[i] - v) * f).toString(16)).slice(-2); }).join(''); };
+  var tones = function (c) { return [mixc(c, '#ffffff', 0.35), c, mixc(c, '#1a1a10', 0.35), mixc(c, '#0a0a06', 0.65)]; };
+
+  function chibi(o) {
+    var dir = o.dir || 'S', pose = o.pose || 'idle', gun = o.gun || '', enemy = !!o.enemy;
+    var key = 'chibi' + dir + pose + gun + o.team + (enemy ? 'e' : '');
+    if (cache[key]) return cache[key];
+    var W = 32, H = 32, side = dir === 'E' || dir === 'W', back = dir === 'N';
+    var cam = enemy ? DESERTC : WOODLAND;
+    var helmetC = enemy ? '#8c7b52' : mixc(o.team || '#ffb703', '#5c6637', 0.45);
+    var mats = { helmet: tones(helmetC), band: tones(enemy ? '#7a3b2e' : (o.team || '#ffb703')), cloth: cam.cloth, pants: cam.pants, pouch: cam.pouch };
+    for (var k in MAT) mats[k] = MAT[k];
+    var grid = [];
+    for (var y = 0; y < H; y++) { grid.push([]); for (var x = 0; x < W; x++) grid[y].push(null); }
+    var bob = pose === 'walk1' || pose === 'walk2' ? 1 : 0;
+    var lean = side ? 1 : 0; // 3/4 view: features shift towards the facing side (we draw facing east, then mirror for west)
+    // ---- shape painters: put[material, light] per pixel ----
+    function put(x, y, mat, light) { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < W && y >= 0 && y < H) grid[y][x] = { m: mat, l: light }; }
+    function ell(cx, cy, rx, ry, mat) {
+      for (var y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (var x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+        var dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+        if (dx * dx + dy * dy <= 1) put(x, y, mat, -(dx * 0.65 + dy * 0.75));
+      }
+    }
+    function rect(x0, y0, w, h, mat, r) {
+      for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) {
+        if (r && ((x === x0 || x === x0 + w - 1) && (y === y0 || y === y0 + h - 1))) continue; // rounded corners
+        var dx = ((x + 0.5 - x0) / w - 0.5) * 2, dy = ((y + 0.5 - y0) / h - 0.5) * 2;
+        put(x, y, mat, -(dx * 0.65 + dy * 0.75));
+      }
+    }
+    function line(x0, y0, x1, y1, mat, light) {
+      var n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+      for (var i = 0; i <= n; i++) put(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, mat, light);
+    }
+    // ---- legs & boots (walk cycle: one leg forward/up) ----
+    var lA = pose === 'walk1' ? -1 : pose === 'walk2' ? 1 : 0;
+    var by = 24 - bob;
+    rect(11 + lean, by, 4, 4 + lA, 'pants', 1); rect(17 + lean, by, 4, 4 - lA, 'pants', 1);
+    rect(10 + lean, by + 4 + lA, 5, 3, 'boot', 1); rect(17 + lean, by + 4 - lA, 5, 3, 'boot', 1);
+    // ---- body: vest over a shirt, belt, pouches ----
+    var ty = 16 - bob;
+    rect(9 + lean, ty, 14, 9, 'cloth', 1);
+    if (!back) {
+      rect(11 + lean, ty + 1, 10, 6, 'pouch', 1);
+      line(16 + lean, ty + 1, 16 + lean, ty + 6, 'strap', -1);
+      put(12 + lean, ty + 4, 'strap', -1); put(19 + lean, ty + 4, 'strap', -1);
+    } else {
+      rect(10, ty - 1, 12, 9, 'pouch', 1); // backpack
+      line(12, ty + 3, 19, ty + 3, 'strap', -1);
+    }
+    line(9 + lean, ty + 8, 22 + lean, ty + 8, 'strap', -0.5);
+    // ---- arms ----
+    rect(6 + lean, ty + 1, 4, 6, 'cloth', 1); rect(22 + lean, ty + 1, 4, 6, 'cloth', 1);
+    ell(8 + lean, ty + 7.5, 1.6, 1.6, 'skin'); ell(24 + lean, ty + 7.5, 1.6, 1.6, 'skin');
+    // ---- head: a big chibi head under a helmet ----
+    var hy = 10 - bob;
+    if (!back) {
+      ell(16 + lean, hy + 2.8, 6.9, 5.3, 'skin');
+      // eyes: big, with a glint; a hint of a mouth
+      var ex = side ? [16, 20] : [12, 18];
+      for (var e = 0; e < 2; e++) { rect(ex[e], hy + 2, 2, 3, 'eye'); put(ex[e], hy + 2, 'glint', 1); }
+      put(15 + lean + (side ? 3 : 0), hy + 6, 'skin', -1); put(16 + lean + (side ? 3 : 0), hy + 6, 'skin', -1);
+    }
+    // helmet dome, the team band, goggles on the helmet
+    ell(16 + lean, hy - 3.4, 8.8, 5.6, 'helmet');
+    for (var bx = 7 + lean; bx <= 25 + lean; bx++) put(bx, hy + 0.6, 'band', 0.2);
+    if (!back) { rect(10 + lean + (side ? 2 : 0), hy - 5, 5, 2, 'lens'); rect(16 + lean + (side ? 2 : 0), hy - 5, 5, 2, 'lens'); put(15 + lean + (side ? 2 : 0), hy - 4, 'strap', -1); }
+    else ell(16, hy + 1, 6.4, 3.2, 'helmet');
+    // ---- gun, held diagonally across the body (front) or forward (side) ----
+    var G = { sr: 15, dmr: 13, ar: 12, lmg: 13, smg: 9, sg: 11, pistol: 5 }[gun];
+    if (G && !back) {
+      if (side) {
+        var gy = ty + 5;
+        line(14, gy, 14 + G + 3, gy, 'gun', 0.6); line(14, gy + 1, 14 + G, gy + 1, 'gun', -0.4);
+        rect(10, gy, 5, 3, gun === 'sr' || gun === 'dmr' ? 'wood' : 'gun', 1);
+        if (gun === 'sr' || gun === 'dmr') rect(18, gy - 2, 5, 2, 'gun', 1);
+        if (gun === 'ar' || gun === 'smg' || gun === 'lmg') rect(19, gy + 2, 2, 3, 'gun', -0.3);
+        if (gun === 'lmg') rect(15, gy + 2, 3, 2, 'gun', -0.3);
+        ell(15, gy + 2, 1.5, 1.5, 'skin'); ell(21, gy + 1.5, 1.4, 1.4, 'skin');
+      } else {
+        var x0 = 7, y0 = ty + 9, len = G + 4;
+        for (var i2 = 0; i2 < len; i2++) { put(x0 + i2, y0 - i2 * 0.42, 'gun', 0.5); put(x0 + i2, y0 + 1 - i2 * 0.42, 'gun', -0.5); }
+        rect(5, ty + 8, 4, 3, gun === 'sr' || gun === 'dmr' ? 'wood' : 'gun', 1);
+        ell(10, ty + 8, 1.6, 1.6, 'skin'); ell(17, ty + 5.5, 1.6, 1.6, 'skin');
+      }
+    }
+    // ---- shade, texture and outline ----
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    var g = cv.getContext('2d'), img = g.createImageData(W, H), seed = enemy ? 11 : 3;
+    var tone = function (c) { var l = c.l; return l > 0.5 ? 0 : l > -0.25 ? 1 : l > -0.75 ? 2 : 3; };
+    function setPx(x, y, hex, f) { var c = hx2(hex), i = (y * W + x) * 4; f = f || 0; img.data[i] = Math.max(0, Math.min(255, c[0] * (1 + f))); img.data[i + 1] = Math.max(0, Math.min(255, c[1] * (1 + f))); img.data[i + 2] = Math.max(0, Math.min(255, c[2] * (1 + f))); img.data[i + 3] = 255; }
+    for (var y2 = 0; y2 < H; y2++) for (var x2 = 0; x2 < W; x2++) {
+      var c = grid[y2][x2];
+      if (!c) {
+        // outline: the darkest tone of a neighbouring part
+        var nb = (grid[y2 - 1] && grid[y2 - 1][x2]) || (grid[y2 + 1] && grid[y2 + 1][x2]) || grid[y2][x2 - 1] || grid[y2][x2 + 1];
+        if (nb) setPx(x2, y2, mixc(mats[nb.m][3], '#000000', 0.35));
+        continue;
+      }
+      var ti = tone(c), f = 0;
+      // inner line where a part sits on another (darker edge below/right of a different material)
+      var up = grid[y2 - 1] && grid[y2 - 1][x2], lf = grid[y2][x2 - 1];
+      if ((up && up.m !== c.m && c.m !== 'glint' && up.m !== 'glint') || (lf && lf.m !== c.m && c.m === 'skin' && lf.m !== 'eye')) ti = Math.min(3, ti + 1);
+      if (c.m === 'cloth' || c.m === 'pants' || c.m === 'helmet' || c.m === 'pouch') {
+        var n = hash(x2, y2, seed), blot = hash(x2 >> 1, (y2 + 1) >> 1, seed + 7);
+        f = (n - 0.5) * 0.12 - (blot < 0.2 && ti < 3 ? 0.13 : 0);
+      }
+      setPx(x2, y2, mats[c.m][ti], f);
+    }
+    g.putImageData(img, 0, 0);
+    if (dir === 'W') { var m2 = document.createElement('canvas'); m2.width = W; m2.height = H; var mg2 = m2.getContext('2d'); mg2.translate(W, 0); mg2.scale(-1, 1); mg2.drawImage(cv, 0, 0); cv = m2; }
+    cache[key] = { url: cv.toDataURL(), w: W, h: H };
+    return cache[key];
+  }
+  // knocked: the chibi lying on its side
+  function downed(team, enemy, flip) {
+    var key = 'down' + team + (enemy ? 'e' : '') + (flip ? 'f' : '');
+    if (cache[key]) return cache[key];
+    var src = chibi({ dir: 'E', pose: 'idle', gun: '', team: team, enemy: enemy });
+    var im = new Image(); im.src = src.url;
+    var cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+    var res = { url: src.url, w: 32, h: 32 };
+    im.onload = function () {
+      var g = cv.getContext('2d'); g.translate(16, 22); g.rotate(flip ? -Math.PI / 2 : Math.PI / 2); g.translate(-16, -16); g.drawImage(im, 0, 0);
+      res.url = cv.toDataURL(); res.fresh = true;
+    };
+    cache[key] = res;
+    return res;
+  }
+  window.PIX = { soldier: chibi, soldierOld: soldier, thing: thing, downed: downed };
 })();
