@@ -23,7 +23,11 @@ export function extractDerived(events, ours, mapSize) {
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 8, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [] };
+  const out = { v: 9, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [], vr: [], cp: [], sw: [] };
+  // v9 — our vehicle rides vr: [t, p, cls, on] (cls 0 car · 1 motorbike · 2 bicycle · 3 boat · 4 glider · 5 buggy · 6 truck/armour),
+  // care packages landing cp: [t, x, y], our swims sw: [t, p, on]
+  const vrBuf = []; const swBuf = [];
+  const vcls = (id) => (/Motorbike|Scooter|Tuk|Snowmobile|Dirtbike/i.test(id) ? 1 : /Bicycle/i.test(id) ? 2 : /Boat|AquaRail|PG117|Airboat/i.test(id) ? 3 : /Glider/i.test(id) ? 4 : /Buggy|Rony|Mesta/i.test(id) ? 5 : /BRDM|Truck|Pickup|Food_Truck|Pillar|Blanc/i.test(id) ? 6 : 0);
   // v8 — real shots fired (LogPlayerAttack) by us and by the enemies who traded damage with us: sh: [t10, p, w, x, y]
   const shotBuf = [];
   // v6 — everyone else on the map. op: [ppIndex, tStart, tEnd, x0, y0, x1, y1, …], one point every 10 s from the landing
@@ -60,13 +64,26 @@ export function extractDerived(events, ours, mapSize) {
 
   for (const e of events) {
     switch (e._T) {
-      case 'LogVehicleLeave':
-        if (e.vehicle && e.vehicle.vehicleType === 'TransportAircraft' && e.character) {
+      case 'LogVehicleRide': case 'LogVehicleLeave': {
+        const c = e.character; const vid = e.vehicle && e.vehicle.vehicleId;
+        if (c && set.has(c.accountId) && vid && !/TransportAircraft|Parachute/.test(vid)) vrBuf.push([T(e), c.accountId, vcls(vid), e._T === 'LogVehicleRide' ? 1 : 0]);
+        if (e._T === 'LogVehicleLeave' && e.vehicle && e.vehicle.vehicleType === 'TransportAircraft' && e.character) {
           jumps.push([T(e), ...P(e.character.location)]);
           if (set.has(e.character.accountId)) pl(e.character).jump = [...P(e.character.location), T(e)];
           else othJump[e.character.accountId] = T(e);
         }
         break;
+      }
+      case 'LogCarePackageLand': {
+        const l = e.itemPackage && e.itemPackage.location;
+        if (l && out.cp.length < 40) out.cp.push([T(e), ...P(l)]);
+        break;
+      }
+      case 'LogSwimStart': case 'LogSwimEnd': {
+        const c = e.character;
+        if (c && set.has(c.accountId)) swBuf.push([T(e), c.accountId, e._T === 'LogSwimStart' ? 1 : 0]);
+        break;
+      }
       case 'LogParachuteLanding':
         if (set.has(e.character?.accountId)) pl(e.character).land ||= [...P(e.character.location), T(e)]; // first landing only (later parachutes: v8)
         else if (e.character) othLand[e.character.accountId] ??= T(e);
@@ -182,6 +199,8 @@ export function extractDerived(events, ours, mapSize) {
   for (const id of set) if (players[id]) pIdx({ accountId: id, name: players[id].name, teamId: players[id].team });
   for (const h of healBuf) if (ppIdx.has(h[1])) out.heal.push([h[0], ppIdx.get(h[1]), h[2]]);
   for (const g of gearBuf) if (ppIdx.has(g[1])) out.gear.push([g[0], ppIdx.get(g[1]), g[2], g[2] >= 2 ? wIdx(g[3]) : g[3]]);
+  for (const v of vrBuf) if (ppIdx.has(v[1]) && out.vr.length < 600) out.vr.push([v[0], ppIdx.get(v[1]), v[2], v[3]]);
+  for (const w of swBuf) if (ppIdx.has(w[1]) && out.sw.length < 600) out.sw.push([w[0], ppIdx.get(w[1]), w[2]]);
   // shots: ours always; an enemy's only within 15 s of damage they traded with us
   const near = {};
   for (const x of out.dmg) { for (const i of [x[1], x[2]]) (near[i] ||= []).push(x[0]); }
@@ -242,7 +261,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;
@@ -264,6 +283,13 @@ export function validDerived(d, allowedIds) {
     if (!ok(d.dmg, 2500, (x) => x.length === 11 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, P - 1) && isInt(x[3], 0, 1000) && isInt(x[4], 0, Wn - 1) && isInt(x[5], 0, 100) && (x[6] === 0 || x[6] === 1) && isInt(x[7]) && isInt(x[8]) && isInt(x[9]) && isInt(x[10]))) return false;
     if (!ok(d.heal, 1500, (x) => x.length === 3 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 100))) return false;
     if (!ok(d.gear, 1500, (x) => x.length === 4 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 3) && isInt(x[3], 0, x[2] >= 2 ? Wn - 1 : 3))) return false;
+  }
+  if (d.v >= 9) {
+    const P = d.pp.length;
+    const ok9 = (a, n, fn) => Array.isArray(a) && a.length <= n && a.every((x) => Array.isArray(x) && fn(x));
+    if (!ok9(d.vr, 600, (x) => x.length === 4 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 6) && (x[3] === 0 || x[3] === 1))) return false;
+    if (!ok9(d.cp, 40, (x) => x.length === 3 && isInt(x[0], 0, 100000) && isInt(x[1]) && isInt(x[2]))) return false;
+    if (!ok9(d.sw, 600, (x) => x.length === 3 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && (x[2] === 0 || x[2] === 1))) return false;
   }
   if (d.v >= 8) {
     const P = d.pp.length; const Wn = d.wp.length;

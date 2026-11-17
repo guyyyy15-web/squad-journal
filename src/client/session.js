@@ -385,9 +385,11 @@
     var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
     function pixOf(kind, color, gun, enemy, ang) {
       var dir = dirOf(ang || 0);
+      if (kind.indexOf('veh') === 0) { var vk = VEH[Number(kind.slice(3))] || 'jeep'; return PIX.thing(vk, color, enemy, vk !== 'plane' && dir === 'W'); }
+      if (kind === 'swim') { var sw2 = PIX.swim(color, enemy); if (sw2.fresh && sw2.ref) { sw2.fresh = false; var sy2 = document.getElementById(sw2.ref); if (sy2) sy2.firstChild.setAttribute('href', sw2.url); } return sw2; }
       if (kind === 'down') { var dd2 = PIX.downed(color, enemy, dir === 'W'); if (dd2.fresh && dd2.ref) { dd2.fresh = false; var sy = document.getElementById(dd2.ref); if (sy) sy.firstChild.setAttribute('href', dd2.url); } return dd2; }
       if (kind === 'car') return PIX.thing('jeep', color, enemy, dir === 'W');
-      if (kind === 'crate') return PIX.thing('crate', color, enemy);
+      if (kind === 'crate' || kind === 'drop') return PIX.thing(kind, color, enemy);
       return PIX.soldier({ dir: dir, pose: kind === 'walkA' ? 'walk1' : kind === 'walkB' ? 'walk2' : 'idle', gun: gun, team: color, enemy: enemy });
     }
     // each pixel image is defined once (<symbol>) and placed with <use>, so a frame never re-parses data URLs
@@ -405,7 +407,7 @@
     }
     // standing on (x, y): the sprite's feet on the spot, `size` = its height in map units
     function sprite(kind, color, gun, enemy, x, y, size, ang) {
-      var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 28, w = size * px.w / 28, flat = kind === 'down' || kind === 'car' || kind === 'crate';
+      var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 28, w = size * px.w / 28, flat = kind === 'down' || kind === 'car' || kind === 'crate' || kind === 'drop';
       return '<ellipse cx="' + f1(x) + '" cy="' + f1(y + size * 0.04) + '" rx="' + f1(w * 0.36) + '" ry="' + f1(size * 0.11) + '" fill="#000" fill-opacity=".4"/>'
         + '<use href="#' + pxRef(px) + '" x="' + f1(x - w / 2) + '" y="' + f1(y - h * (flat ? 0.7 : 0.94)) + '" width="' + f1(w) + '" height="' + f1(h) + '"/>';
     }
@@ -423,9 +425,14 @@
     };
     var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
     var squadIds = ids.filter(function (id) { return ours.has(id); });
+    // v9: which vehicle each of us is in, swimming, care packages
+    var VEH = ['jeep', 'moto', 'bicycle', 'boat', 'plane', 'jeep', 'truck'];
+    var stateAt = function (rows, pi, at) { var v = -1; for (var k = 0; k < rows.length; k++) { var r = rows[k]; if (r[0] > at) break; if (r[1] === pi) v = r[r.length - 1] ? (r.length === 4 ? r[2] : 1) : -1; } return v; };
+    var rides = (d.vr || []).slice().sort(function (a, b) { return a[0] - b[0]; }), swims = (d.sw || []).slice().sort(function (a, b) { return a[0] - b[0]; });
     // knocked sprites are drawn asynchronously (rotated); make them ready before they are needed
     squadIds.forEach(function (id) { PIX.downed(colorOf(id), false, false); PIX.downed(colorOf(id), false, true); });
     PIX.downed('#7d7452', true, false); PIX.downed('#7d7452', true, true);
+    squadIds.forEach(function (id) { PIX.swim(colorOf(id), false); });
     // Everyone else in the match (derived v6): faint dots; the squads we trade with turn red with a trail
     // from ~90 s before first contact, so you see them coming.
     var others = d.op || [], opBy = {}, foeT = {};
@@ -653,24 +660,26 @@
         pm[i].style.display = pos ? '' : 'none';
         if (pos) {
           // fan out markers that would sit on top of each other in a close-up
-          var mx = pos[0], my = pos[1], gap = u * 5;
+          var mx = pos[0], my = pos[1], gap = Math.min(u, 3.4) * 5;
           for (var oj = 0; oj < i; oj++) {
             var op = posAt(d.players[ids[oj]], t);
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
-          pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + u.toFixed(3) + ')');
+          pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + Math.min(u, 3.4).toFixed(3) + ')'); // capped on wide shots
           var inAir = p.jump && p.land && t >= p.jump[2] && t < p.land[2];
           chute[i].setAttribute('display', inAir ? '' : 'none');
           var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
-          var kd = inAir ? 'stand' : kindOf(pPrev, pos, dnO), gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
+          var vIn = pix !== undefined ? stateAt(rides, pix, t) : -1, swI = pix !== undefined ? stateAt(swims, pix, t) : -1;
+          var kd = inAir ? 'stand' : dnO ? 'down' : vIn >= 0 ? 'veh' + vIn : swI > 0 ? 'swim' : kindOf(pPrev, pos, dnO);
+          if (kd.indexOf('veh') === 0 && pPrev && Math.hypot(pos[0] - pPrev[0], pos[1] - pPrev[1]) > 0.3) moveFx.push(dustFx(pos, pPrev, u, true)); gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
           var px0 = pixOf(kd, colorOf(id), gn, false, an), sk = px0.url;
           if (sprKey[i] !== sk) {
             sprKey[i] = sk;
-            var ph = 9 * px0.h / 28, pw = 9 * px0.w / 28, flat0 = kd === 'down' || kd === 'car';
+            var flat0 = kd === 'down' || kd.indexOf('veh') === 0, sc0 = kd === 'veh4' ? 0.45 : 1, ph = 9 * sc0 * px0.h / 28, pw = 9 * sc0 * px0.w / 28;
             sprEl[i].setAttribute('href', px0.url); sprEl[i].setAttribute('width', pw.toFixed(2)); sprEl[i].setAttribute('height', ph.toFixed(2));
             sprEl[i].setAttribute('x', (-pw / 2).toFixed(2)); sprEl[i].setAttribute('y', (-ph * (flat0 ? 0.7 : 0.94)).toFixed(2));
           }
-          if (kd === 'car' || kd === 'walkA' || kd === 'walkB') moveFx.push(dustFx(pos, pPrev, u, kd === 'car'));
+          if (kd === 'walkA' || kd === 'walkB') moveFx.push(dustFx(pos, pPrev, u, kd === 'car'));
           var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
           tagEl[i].textContent = vs < 170 && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '') + (GUNTAG[gn] ? ' ' + GUNTAG[gn] : '')).trim() : '';
           var pi = model ? model.idx.get(id) : undefined;
@@ -780,6 +789,21 @@
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
       if (plane && t < lastLand) fxh.push(planeSvg(plane, u));
+      (d.cp || []).forEach(function (c2, ci) {
+        var age2 = t - c2[0], P2 = [c2[1], c2[2]];
+        if (age2 < -14 || age2 > 90) return;
+        if (P2[0] < view[0] - 20 || P2[0] > view[0] + view[2] + 20 || P2[1] < view[1] - 20 || P2[1] > view[1] + view[2] + 20) return;
+        if (age2 < 0) {
+          var alt = -age2 / 14 * u * 26, cnp = PIX.thing('canopy', '#e5383b'), drp = PIX.thing('drop', '#e5383b'), cw2 = u * 9, dw2 = u * 5;
+          fxh.push('<ellipse cx="' + f1(P2[0]) + '" cy="' + f1(P2[1]) + '" rx="' + f1(dw2 * 0.4 * (1 - alt / (u * 40))) + '" ry="' + f1(u * 0.6) + '" fill="#000" fill-opacity=".3"/>');
+          fxh.push('<use href="#' + pxRef(cnp) + '" x="' + f1(P2[0] - cw2 / 2) + '" y="' + f1(P2[1] - alt - u * 9) + '" width="' + f1(cw2) + '" height="' + f1(cw2 / 2) + '"/>');
+          fxh.push('<use href="#' + pxRef(drp) + '" x="' + f1(P2[0] - dw2 / 2) + '" y="' + f1(P2[1] - alt - u * 4.6) + '" width="' + f1(dw2) + '" height="' + f1(dw2) + '"/>');
+        } else {
+          fxh.push(sprite('drop', '#e5383b', '', false, P2[0], P2[1], u * 7, 0));
+          var now2 = performance.now() / 1000;
+          for (var k2 = 0; k2 < 6; k2++) { var ph2 = (now2 * 0.6 + k2 / 6 + ci * 0.13) % 1; fxh.push(sq(P2[0] + Math.sin(ph2 * 5 + k2) * u * 1.4, P2[1] - u * (3 + ph2 * 14), u * (1 + ph2 * 2.2), ph2 < 0.5 ? '#e5383b' : '#c46a6a', 0.55 * (1 - ph2) * (1 - age2 / 90))); }
+        }
+      });
       if (irp && irp.m.kind === 'death') fxh.push(killcamPath(irp.m, u));
       // knocked: a bleed-out ring that runs out when they die; a green ring while a teammate picks them up
       squadIds.forEach(function (id, k) {
@@ -1126,7 +1150,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=12');
+      var w = new Worker('/app/extract-worker.js?v=13');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -1152,7 +1176,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 8
+    var p = match.derived >= 9
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -1163,11 +1187,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 8)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 9)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 8)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 9)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

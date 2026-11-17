@@ -152,6 +152,121 @@
       '..............OOO...............',
       '................................',
     ],
+    // motorbike with rider, side view, facing east (24×18)
+    moto: [
+      '........................',
+      '..........OOOO..........',
+      '.........OhHHHO.........',
+      '.........OAAAAO.........',
+      '..........OSEO..........',
+      '.........OVVVVO.........',
+      '........OVVVVVVOO.......',
+      '.......OOVVVVVgggO......',
+      '......OHHHHLLLLHHHO.....',
+      '.....OHHHHHLLLHHHHHO....',
+      '..OOOOOdddOKKOdddOOOOO..',
+      '.ORRRRO..OKKO....ORRRRO.',
+      'ORrmrrRO..OO....ORrmrrRO',
+      'ORmmmmRO........ORmmmmRO',
+      'ORrmrrRO........ORrmrrRO',
+      '.ORRRRO..........ORRRRO.',
+      '..OOOO............OOOO..',
+      '........................',
+    ],
+    // bicycle with rider (22×18)
+    bicycle: [
+      '......................',
+      '.........OOOO.........',
+      '........OhHHHO........',
+      '........OAAAAO........',
+      '.........OSEO.........',
+      '........OVVVVO........',
+      '.......OVVVVVVO.......',
+      '.......OVVVVVgggO.....',
+      '........OLLLLO.Og.....',
+      '.......OLL.OLLO.g.....',
+      '..OOOO.OKO..OKO.OOOO..',
+      '.O....OgggggggggO...O.',
+      'O..O..OgO....OgO.O..O.',
+      'O.OmO.g........g.OmO.O',
+      'O..O..O........O..O..O',
+      '.O....O........O....O.',
+      '..OOOO..........OOOO..',
+      '......................',
+    ],
+    // boat, side view (32×14)
+    boat: [
+      '................................',
+      '...........OOOO.................',
+      '..........OhHHHO................',
+      '..........OAAAAO................',
+      '.........OOSEEOO................',
+      '...OOOOOOOVVVVVVOOOOOOOOOO......',
+      '..OuuuuuuuuuuuuuuuuuuuuuuuO.....',
+      '.OHHHHHHHHHHHHHHHHHHHHHHHHHOO...',
+      '.OHHHHHHHHHHHHHHHHHHHHHHHHHHHO..',
+      '..OdddddddddddddddddddddddddddO.',
+      '...OddddddddddddddddddddddddOO..',
+      '.ZZ.OOOOOOOOOOOOOOOOOOOOOOOO.Z..',
+      'Z..ZZ..Z...ZZ...Z..ZZ...Z..ZZ.Z.',
+      '................................',
+    ],
+    // armoured truck (32×20)
+    truck: [
+      '................................',
+      '................................',
+      '........OOOOOOOOOOOOO...........',
+      '.......OhhhhhhhhhhhhhO..........',
+      '.......OHHHHHHHHHHHHHO..........',
+      '......OOHHHGGHHHHHHHHOOOOOO.....',
+      '..OOOOHHHHHHHHHHHHHHHHHZZZHO....',
+      '.OhhhhhhhhhhhhhhhhhhhhhZZzHHO...',
+      '.OHHHHHHHHHHHHHHHHHHHHHHHHHHHO..',
+      '.OHHHHAAAAAAAAAAAAAAAAAAHHHHHYO.',
+      '.OHHHHHHHHHHHHHHHHHHHHHHHHHHHHO.',
+      '.OdddddddddddddddddddddddddddddO',
+      '..ORRRRO.ORRRRO.....ORRRRO.OOO..',
+      '.ORrmrrRORrmrrRO...ORrmrrRO.....',
+      '.ORmmmmRORmmmmRO...ORmmmmRO.....',
+      '.ORrmrrRORrmrrRO...ORrmrrRO.....',
+      '..ORRRRO.ORRRRO.....ORRRRO......',
+      '...OOOO...OOOO.......OOOO.......',
+      '................................',
+      '................................',
+    ],
+    // care package: a blue steel crate (16×16) and its parachute (24×12)
+    drop: [
+      '................',
+      '................',
+      '.OOOOOOOOOOOOOO.',
+      '.OZZZZZZZZZZZZO.',
+      '.OZzzzzzzzzzzZO.',
+      '.OZzOOOOOOOOzZO.',
+      '.OZzOYYYYYYOzZO.',
+      '.OZzOYOOOOYOzZO.',
+      '.OZzOYYYYYYOzZO.',
+      '.OZzOOOOOOOOzZO.',
+      '.OZzzzzzzzzzzZO.',
+      '.OZZZZZZZZZZZZO.',
+      '.OzzzzzzzzzzzzO.',
+      '.OOOOOOOOOOOOOO.',
+      '................',
+      '................',
+    ],
+    canopy: [
+      '........OOOOOOOO........',
+      '.....OOOYYYYYYYYOOO.....',
+      '...OOYYYYAAAAYYYYYYOO...',
+      '..OYYYAAAAAAAAAAYYYYYO..',
+      '.OYYYAAAAAAAAAAAAYYYYYO.',
+      '.OOOOOOOOOOOOOOOOOOOOOO.',
+      '.O.....O........O.....O.',
+      '..O.....O......O.....O..',
+      '...O.....O....O.....O...',
+      '....O.....O..O.....O....',
+      '.....O.....OO.....O.....',
+      '...........OO...........',
+    ],
     // jeep, side view, facing east (32×18)
     jeep: [
       '................................',
@@ -412,5 +527,21 @@
     cache[key] = res;
     return res;
   }
-  window.PIX = { soldier: chibi, soldierOld: soldier, thing: thing, downed: downed };
+  // swimming: head and shoulders above a ring of water
+  function swim(team, enemy) {
+    var key = 'swim' + team + (enemy ? 'e' : '');
+    if (cache[key]) return cache[key];
+    var src = chibi({ dir: 'S', pose: 'idle', gun: '', team: team, enemy: enemy });
+    var res = { url: src.url, w: 32, h: 32 };
+    var im = new Image(); im.src = src.url;
+    im.onload = function () {
+      var cv = document.createElement('canvas'); cv.width = 32; cv.height = 32; var g = cv.getContext('2d');
+      g.drawImage(im, 0, 0, 32, 19, 0, 6, 32, 19);
+      g.fillStyle = '#4e8fb0'; g.fillRect(4, 24, 24, 2); g.fillStyle = '#9fd3e6'; g.fillRect(6, 23, 4, 1); g.fillRect(14, 25, 6, 1); g.fillRect(23, 23, 3, 1);
+      res.url = cv.toDataURL(); res.fresh = true;
+    };
+    cache[key] = res;
+    return res;
+  }
+  window.PIX = { soldier: chibi, soldierOld: soldier, thing: thing, downed: downed, swim: swim };
 })();
