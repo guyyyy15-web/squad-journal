@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 6: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 7: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match; v7 drops their plane ride/parachute). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
@@ -68,6 +68,14 @@ GitHub does **not** deploy.
   (never red: red means knocked/killed) with a short fading 30 s trail from 90 s before first contact (steps > 25 units
   are not drawn). Our patches and enemies carry a floating HP bar. Map overlays use physical left/right (the map is LTR). Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
   `fightOf`, tested); RPG look uses the Press Start 2P font. Grid columns must be `minmax(0,1fr)` or they overflow.
+- **Cinematic layer** (replay.js, tested in test/cinema.test.js; drawn in session.js): `tensionCurve` (enemies within
+  ~250 m, hits, falls, build-up before a fight, teammates down, outside the zone, endgame) → `paceOf` = AUTO speed
+  (≈50× while looting, ~1× on hits; a 23-min match with 7 fights plays in < 4 min). Freeze 0.3–0.4 s on each knock/kill
+  of ours. Opening: `planeAt` + `dropShot` (plane, parachutes, landing). `stalk` shot creeps in when someone is within
+  90 units. Tracers by `weaponClass`, distance ruler, headshot reticle, `downedAt` bleed-out/revive rings, heals,
+  armour breaks. `bigMoments` → one instant REPLAY per firefight (best kill) and a KILLCAM for each of our deaths
+  (5 s back at 1.3×, tap to skip). Squad bar (HP/armour/DOWN/KIA), letterbox + vignette when tense, optional
+  synthesized sound (off by default, `sj_snd`). Never pauses for UI; no white flashes.
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
   (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move

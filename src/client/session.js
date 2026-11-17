@@ -384,7 +384,7 @@
     }
     function ring(p, r, frac, col, u) {
       return '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + f1(r) + '" fill="none" stroke="#05070a" stroke-opacity=".6" stroke-width="4" vector-effect="non-scaling-stroke"/>'
-        + '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + f1(r) + '" fill="none" stroke="' + col + '" stroke-width="2.5" pathLength="100" stroke-dasharray="' + (frac * 100).toFixed(1) + ' 100" transform="rotate(-90 ' + f1(p[0]) + ' ' + f1(p[1]) + ')" vector-effect="non-scaling-stroke"/>';
+        + '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + f1(r) + '" fill="none" stroke="' + col + '" stroke-width="' + f1(u * 0.6) + '" pathLength="100" stroke-dasharray="' + (frac * 100).toFixed(1) + ' 100" transform="rotate(-90 ' + f1(p[0]) + ' ' + f1(p[1]) + ')"/>';
     }
     function placeOf(pi, at) {
       var acc = d.pp[pi] && d.pp[pi][0];
