@@ -23,7 +23,9 @@ export function extractDerived(events, ours, mapSize) {
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 7, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [] };
+  const out = { v: 8, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [] };
+  // v8 — real shots fired (LogPlayerAttack) by us and by the enemies who traded damage with us: sh: [t10, p, w, x, y]
+  const shotBuf = [];
   // v6 — everyone else on the map. op: [ppIndex, tStart, tEnd, x0, y0, x1, y1, …], one point every 10 s from the landing
   // (PUBG logs every player's position about every 10 s) until death.
   const oth = {}; const othLand = {}; const othJump = {}; const othDead = {};
@@ -66,7 +68,7 @@ export function extractDerived(events, ours, mapSize) {
         }
         break;
       case 'LogParachuteLanding':
-        if (set.has(e.character?.accountId)) pl(e.character).land = [...P(e.character.location), T(e)];
+        if (set.has(e.character?.accountId)) pl(e.character).land ||= [...P(e.character.location), T(e)]; // first landing only (later parachutes: v8)
         else if (e.character) othLand[e.character.accountId] ??= T(e);
         break;
       case 'LogPlayerPosition': {
@@ -94,6 +96,13 @@ export function extractDerived(events, ours, mapSize) {
           lastZone = z; lastZone.w = w;
         }
         out.final = z.slice(1);
+        break;
+      }
+      case 'LogPlayerAttack': {
+        const a = e.attacker; const w = e.weapon && e.weapon.itemId;
+        if (a && a.accountId && w && /^Item_Weapon_/.test(w) && !/Grenade|SmokeBomb|FlashBang|Molotov|C4|StickyBomb|BluezoneGrenade|DecoyGrenade|Pan_|Machete|Sickle|Crowbar/.test(w)) {
+          shotBuf.push([T10(e), a.accountId, gun(w), ...(a.location ? P(a.location) : [0, 0])]);
+        }
         break;
       }
       case 'LogHeal': {
@@ -173,6 +182,17 @@ export function extractDerived(events, ours, mapSize) {
   for (const id of set) if (players[id]) pIdx({ accountId: id, name: players[id].name, teamId: players[id].team });
   for (const h of healBuf) if (ppIdx.has(h[1])) out.heal.push([h[0], ppIdx.get(h[1]), h[2]]);
   for (const g of gearBuf) if (ppIdx.has(g[1])) out.gear.push([g[0], ppIdx.get(g[1]), g[2], g[2] >= 2 ? wIdx(g[3]) : g[3]]);
+  // shots: ours always; an enemy's only within 15 s of damage they traded with us
+  const near = {};
+  for (const x of out.dmg) { for (const i of [x[1], x[2]]) (near[i] ||= []).push(x[0]); }
+  const ourIdxSet = new Set([...set].filter((id) => ppIdx.has(id)).map((id) => ppIdx.get(id)));
+  for (const sx of shotBuf) {
+    if (!ppIdx.has(sx[1])) continue;
+    const pi = ppIdx.get(sx[1]);
+    if (!ourIdxSet.has(pi) && !(near[pi] || []).some((t10) => Math.abs(t10 - sx[0]) <= 150)) continue;
+    out.sh.push([sx[0], pi, wIdx(sx[2]), sx[3], sx[4]]);
+    if (out.sh.length >= 8000) break;
+  }
   // everyone else (after the battle index is final, so heals/gear stay limited to the fighters)
   for (const id of Object.keys(oth).slice(0, 130)) {
     const { c } = oth[id];
@@ -222,7 +242,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || ![1, 2, 3, 4, 5, 6, 7].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;
@@ -244,6 +264,10 @@ export function validDerived(d, allowedIds) {
     if (!ok(d.dmg, 2500, (x) => x.length === 11 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, P - 1) && isInt(x[3], 0, 1000) && isInt(x[4], 0, Wn - 1) && isInt(x[5], 0, 100) && (x[6] === 0 || x[6] === 1) && isInt(x[7]) && isInt(x[8]) && isInt(x[9]) && isInt(x[10]))) return false;
     if (!ok(d.heal, 1500, (x) => x.length === 3 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 100))) return false;
     if (!ok(d.gear, 1500, (x) => x.length === 4 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 3) && isInt(x[3], 0, x[2] >= 2 ? Wn - 1 : 3))) return false;
+  }
+  if (d.v >= 8) {
+    const P = d.pp.length; const Wn = d.wp.length;
+    if (!Array.isArray(d.sh) || d.sh.length > 8000 || !d.sh.every((x) => Array.isArray(x) && x.length === 5 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, Wn - 1) && isInt(x[3]) && isInt(x[4]))) return false;
   }
   if (d.v >= 6) {
     const P = d.pp.length;

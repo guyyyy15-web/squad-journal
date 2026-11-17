@@ -236,6 +236,17 @@ h1,h2,.clan .cn{-webkit-mask-image:${WORN};-webkit-mask-size:240px;mask-image:${
 .battle{margin:8px 0 0;background:#0b0d12;border:3px solid #eef1f5;box-shadow:0 0 0 3px #0b0d12,0 0 0 5px var(--gold);padding:6px 8px}
 .battle .bh{display:flex;justify-content:space-between;font:9px/1 "Press Start 2P",monospace;color:var(--muted);margin-bottom:4px;direction:ltr}
 .battle .vsm{color:#ff6b6b}.battle .bg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.battle .side{min-width:0}
+/* desktop: a wide replay with the battle panel, feed and tables beside the map */
+@media (hover:hover){button:hover,.cam:hover{filter:brightness(1.18)}.mom:hover,.panel a:hover{filter:brightness(1.1)}.rbar .mk:hover::before{transform:scale(1.35)}}
+@media (min-width:1100px){
+ main:has(.match){max-width:1240px}
+ .mbody{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:22px;align-items:start}
+ .stage{min-width:0}.side{min-width:0;position:sticky;top:12px}
+ .stage .map{margin:12px 0 0;border:1px solid var(--line);border-radius:10px}
+ .side .battle{margin-top:12px}.side .feed{margin-top:12px}
+ .map .kf li{font-size:12px}.map .hud>*{font-size:11px}.map .bn .bt,.map .bn .bv{font-size:11px}.map .bn .bs{font-size:12px}
+ .map .sqb .sh{width:48px}.map .sqb .sg{font-size:8px}
+}
 @media (max-width:380px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}.medals{grid-template-columns:1fr}}
 `;
 
@@ -409,12 +420,14 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
       <div class="hd">${placeBadge(m.place)}<h3>${esc(t.matchN(i + 1))} · ${esc(mapName(m.map))}</h3><span class="muted small" style="margin-inline-start:auto">${fmtTime(m.created_at)}</span></div>
       ${m.place === 1 ? `<div class="winner">${esc(t.winner)} 🍗</div>` : ''}
       <div class="muted small">${esc(modeName(m.mode))} · ${esc(t.min(Math.round(m.duration / 60)))}</div>
+      <div class="mbody"><div class="stage">
       <div class="map" data-match="${esc(m.match_id)}" data-map="${esc(m.map)}" style="background-image:url(/maps/${esc(m.map)}.jpg)">
         <div class="ov">${esc(clientStrings(lang).loadOnScroll)}</div></div>
       <div class="rbar hide" data-rbar="${esc(m.match_id)}"></div>
       <div class="legend">${t.legend.map((x, j) => `<span>${['🪂', '✕', '<span style="color:#ff6b6b">●</span>', '◯', '┅'][j]} ${esc(x)}</span>`).join('')}</div>
+      </div><div class="side">
       <ul class="feed" data-feed="${esc(m.match_id)}"></ul>
-      ${teams}</div>`;
+      ${teams}</div></div></div>`;
   }).join('');
 
   const data = {
@@ -431,7 +444,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=9', '/app/session.js?v=44'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=10', '/app/session.js?v=46'], script: meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

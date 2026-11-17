@@ -49,7 +49,7 @@ test('matrices: revives and set-ups (assists + knock for a teammate)', () => {
 
 test('real telemetry: v5 fields (enemies, damage, HP, gear) and moments run', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
-  assert.equal(d.v, 7);
+  assert.equal(d.v, 8);
   // director data: damage with HP after the hit (never negative), heals and gear for the fighters
   assert.ok(d.dmg.length > 10 && d.dmg.every((x) => x[5] >= 0 && x[5] <= 100 && x[3] > 0));
   assert.ok(d.dmg.some((x) => x[5] < 100));

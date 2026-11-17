@@ -135,6 +135,10 @@ test('v6: everyone else on the map (op tracks) and opAt', () => {
     { _T: 'LogPlayerPosition', _D: D(68), elapsedTime: 68, character: ch('foe', 2, 16000, 8000) },
     { _T: 'LogPlayerPosition', _D: D(78), elapsedTime: 78, character: ch('foe', 2, 24000, 8000) },
     { _T: 'LogPlayerPosition', _D: D(78), elapsedTime: 78, character: ch('us', 1, 24000, 9000) },
+    { _T: 'LogParachuteLanding', _D: D(50), character: ch('us', 1, 2000, 2000) },
+    { _T: 'LogPlayerAttack', _D: D(80), attacker: ch('us', 1, 24000, 9000), weapon: { itemId: 'Item_Weapon_HK416_C' } },
+    { _T: 'LogPlayerAttack', _D: D(81), attacker: ch('us', 1, 24000, 9000), weapon: { itemId: 'Item_Weapon_Grenade_C' } },
+    { _T: 'LogParachuteLanding', _D: D(70), character: ch('us', 1, 3000, 3000) }, // a second parachute later: ignored
     { _T: 'LogPlayerKillV2', _D: D(85), victim: ch('foe', 2, 24000, 8000), killer: ch('us', 1, 24000, 9000) }];
   const d = extractDerived(tele, ['us'], 800000);
   assert.equal(d.op.length, 1);
@@ -146,5 +150,8 @@ test('v6: everyone else on the map (op tracks) and opAt', () => {
   assert.deepEqual(opAt(row, 84), [30, 10]);
   assert.equal(opAt(row, 59), null);
   assert.equal(opAt(row, 86), null);
+  assert.equal(d.players.us.land[2], 50, 'first landing kept');
+  assert.equal(d.sh.length, 1, 'one gun shot (grenades are not shots)');
+  assert.equal(d.wp[d.sh[0][2]], 'HK416');
   assert.equal(validDerived(JSON.parse(JSON.stringify(d)), new Set(['us'])), true);
 });

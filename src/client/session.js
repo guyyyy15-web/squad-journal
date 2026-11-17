@@ -272,6 +272,49 @@
     var tensAt = function (x) { return tension[Math.max(0, Math.min(tension.length - 1, Math.floor(x - t0)))] || 0; };
     var ourEv = d.events.filter(function (e) { return (e.k === 'kill' || e.k === 'knock') && (ours.has(e.a) || ours.has(e.v)); }).sort(function (a, b) { return a.t - b.t; });
     var wcMap = {};
+    var wcOf = function (w) { return wcMap[w] || (wcMap[w] = weaponClass(w)); };
+    // v8: every real shot. Shots logged in the same tenth of a second are spread at the gun's fire rate.
+    var RATE = { ar: 0.086, smg: 0.06, lmg: 0.075, dmr: 0.16, pistol: 0.13, sg: 0.3, sr: 0.5, other: 0.1, melee: 0.3, boom: 0.3 };
+    var shots = (d.sh || []).map(function (x) { return { t: x[0] / 10, p: x[1], w: (d.wp || [])[x[2]] || '', pos: [x[3], x[4]] }; });
+    (function () {
+      var k = 0;
+      while (k < shots.length) {
+        var j = k; while (j + 1 < shots.length && shots[j + 1].t === shots[k].t && shots[j + 1].p === shots[k].p) j++;
+        for (var q = k; q <= j; q++) shots[q].t += (q - k) * (RATE[wcOf(shots[q].w)] || 0.1);
+        k = j + 1;
+      }
+      shots.sort(function (a, b) { return a.t - b.t; });
+    })();
+    var hasShots = shots.length > 0;
+    // where a shot went: at the target of that shooter's nearest hit (±3 s), else at the closest opponent; misses scatter a little
+    function aimOf(sx, idx) {
+      if (sx.aim !== undefined) return sx.aim;
+      var best = null, bd = 3.01;
+      if (model) for (var i = 0; i < model.dmg.length; i++) { var h = model.dmg[i]; if (h.a === sx.p) { var dd = Math.abs(h.t - sx.t); if (dd < bd) { bd = dd; best = h.vp; } } }
+      if (!best) {
+        var mine = model && model.ourIdx.has(sx.p), bdist = 80;
+        var cand = mine ? others.map(function (r) { return opAt(r, sx.t); }) : squadIds.map(function (id) { return posAt(d.players[id], sx.t); });
+        cand.forEach(function (c) { if (c) { var dist = Math.hypot(c[0] - sx.pos[0], c[1] - sx.pos[1]); if (dist < bdist && dist > 0.5) { bdist = dist; best = c; } } });
+      }
+      if (best) {
+        var ang = Math.atan2(best[1] - sx.pos[1], best[0] - sx.pos[0]) + (((idx * 9301 + 49297) % 233280) / 233280 - 0.5) * 0.09;
+        var L = Math.hypot(best[0] - sx.pos[0], best[1] - sx.pos[1]) * 1.08;
+        best = [sx.pos[0] + Math.cos(ang) * L, sx.pos[1] + Math.sin(ang) * L];
+      }
+      sx.aim = best;
+      return best;
+    }
+    var shotStart = function (from) { var lo = 0, hi = shots.length; while (lo < hi) { var mid = (lo + hi) >> 1; if (shots[mid].t < from) lo = mid + 1; else hi = mid; } return lo; };
+    function shotFx(u) {
+      if (!hasShots) return '';
+      var out = '';
+      for (var i = shotStart(t - 0.8); i < shots.length && shots[i].t <= t; i++) {
+        var sx = shots[i], age = t - sx.t, aim = aimOf(sx, i), mine = model && model.ourIdx.has(sx.p);
+        if (aim) out += tracer({ ap: sx.pos, vp: aim, w: sx.w }, age, u, mine ? '#ffd25e' : '#ffb08a');
+        if (age < 0.07) out += '<rect x="' + f1(sx.pos[0] - u * 0.9) + '" y="' + f1(sx.pos[1] - u * 0.9) + '" width="' + f1(u * 1.8) + '" height="' + f1(u * 1.8) + '" fill="#fff3c4" transform="rotate(45 ' + f1(sx.pos[0]) + ' ' + f1(sx.pos[1]) + ')"/>';
+      }
+      return out;
+    }
     var breaks = (d.gear || []).filter(function (g) { return g[2] <= 1 && g[3] === 0 && (d.dmg || []).some(function (x) { return x[2] === g[1] && x[0] / 10 >= g[0] - 1.5 && x[0] / 10 <= g[0] + 0.5; }); });
     var mode = 'auto', slowmo = true, speeds = ['AUTO', 10, 20, 40, 80], si = 0, playing = true, t = Math.max(t0, clip ? clip[0] : startAt || t0), last = 0, raf = 0;
     var cur = cameraTarget(d, match.ours, t), snap = true;
@@ -338,7 +381,7 @@
     var lerp = function (a, b, f) { return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; };
     // a shot by weapon class: sniper = one long bright streak, AR = a fast round, SMG = short bursts, shotgun = a cone
     function tracer(hx, age, u, col) {
-      var a = hx.ap, v = hx.vp, wc = wcMap[hx.w] || (wcMap[hx.w] = weaponClass(hx.w));
+      var a = hx.ap, v = hx.vp, wc = wcOf(hx.w);
       if (!a[0] && !a[1]) return '';
       if (wc === 'boom') return age < 0.7 ? '<circle cx="' + v[0] + '" cy="' + v[1] + '" r="' + f1(u * (1 + age * 9)) + '" fill="rgba(255,179,71,' + (0.35 * (1 - age / 0.7)).toFixed(2) + ')" stroke="#ffb347" stroke-opacity="' + (1 - age / 0.7).toFixed(2) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>' : '';
       if (wc === 'sr' || wc === 'dmr') {
@@ -367,6 +410,14 @@
       if (age > 0.3) return '';
       var p2 = Math.min(1, age / 0.12);
       return line(lerp(a, v, Math.max(0, p2 - 0.35)), lerp(a, v, p2), col, age < 0.12 ? 1 : 1 - (age - 0.12) / 0.18, wc === 'lmg' ? 2.4 : 1.7);
+    }
+    function sparks(p, age, u, seed) {
+      var out = '', op = (1 - age / 0.25).toFixed(2), s2 = u * 0.55;
+      for (var k = 0; k < 5; k++) {
+        var an = ((seed * 7 + k * 13) % 31) / 31 * 6.283, r = u * (0.6 + age * 9);
+        out += '<rect x="' + f1(p[0] + Math.cos(an) * r - s2 / 2) + '" y="' + f1(p[1] + Math.sin(an) * r - s2 / 2) + '" width="' + f1(s2) + '" height="' + f1(s2) + '" fill="' + (k % 2 ? '#ffd25e' : '#ff8a5c') + '" fill-opacity="' + op + '"/>';
+      }
+      return out;
     }
     function reticle(p, age, u) {
       var sc = 1 + (1 - age / 0.6) * 1.3, r = u * 2 * sc, op = (1 - age / 0.6).toFixed(2), x = p[0], y = p[1];
@@ -561,7 +612,8 @@
           if (!model.ourIdx.has(hx.a)) seen[hx.a] = di;
           var hcol = model.ourIdx.has(hx.a) ? '#ffcf4d' : '#ff6b6b';
           var hage = t - hx.t;
-          if (hage < 0.8) { fxh.push(tracer(hx, hage, u, model.ourIdx.has(hx.a) ? '#ffd25e' : '#ffb08a')); if (hx.head && hage < 0.6) fxh.push(reticle(hx.vp, hage, u)); }
+          if (hage < 0.8) { if (!hasShots) fxh.push(tracer(hx, hage, u, model.ourIdx.has(hx.a) ? '#ffd25e' : '#ffb08a')); if (hx.head && hage < 0.6) fxh.push(reticle(hx.vp, hage, u)); }
+          if (hage < 0.25) fxh.push(sparks(hx.vp, hage, u, di));
           if (hage < 1.4 && (model.ourIdx.has(hx.a) || model.ourIdx.has(hx.v)) && (hx.ap[0] || hx.ap[1])) lastHit = hx;
           if (hage > 2.2) continue;
           // a burst on the same target (hits < 0.5 s apart) shows as one combo number
@@ -577,6 +629,7 @@
           if ((c.head || c.n > 2) && age < 1) fxh.push('<text x="' + c.vp[0] + '" y="' + (fy - u * 4.4) + '" font-size="' + (u * 2) + '" text-anchor="middle" fill="#fff" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.6) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + (c.head ? 'HEADSHOT' : 'x' + c.n) + '</text>');
         });
         if (lastHit) fxh.push(ruler(lastHit.ap, lastHit.vp, t - lastHit.t, u));
+        fxh.push(shotFx(u));
         fxh.push(lifeFx(u));
         Object.keys(seen).forEach(function (i) {
           var lx = model.dmg[seen[i]];
@@ -661,7 +714,12 @@
     }
     function hideBanner() { var bn = $('.bn', el); if (bn) bn.className = 'bn'; bannerUntil = 0; }
     function showBattle() {
-      if (!battle) { battle = document.createElement('div'); battle.className = 'battle'; el.parentNode.insertBefore(battle, el.nextSibling); }
+      if (!battle) {
+        battle = document.createElement('div'); battle.className = 'battle';
+        var side = card.querySelector('.side');
+        if (side && window.matchMedia('(min-width:1100px)').matches) side.insertBefore(battle, side.firstChild);
+        else el.parentNode.insertBefore(battle, el.nextSibling);
+      }
       battle.innerHTML = '<div class="bh"><span>' + esc(S.squad) + '</span><span class="vsm">VS</span><span>' + esc(S.enemy) + '</span></div><div class="bg"><div class="side us"></div><div class="side them"></div></div>';
       battle.classList.remove('hide');
       lastHp = {};
@@ -742,7 +800,8 @@
           }
           if (irp && t >= irp.until) endReplay();
           // gunfire
-          if (sfx.on) for (var gi = 0; gi < model.dmg.length; gi++) {
+          if (sfx.on && hasShots) for (var gs = shotStart(tPrev); gs < shots.length && shots[gs].t <= t; gs++) sfx.shot(wcOf(shots[gs].w), model.ourIdx.has(shots[gs].p));
+          else if (sfx.on) for (var gi = 0; gi < model.dmg.length; gi++) {
             var gx = model.dmg[gi];
             if (gx.t > t) break;
             if (gx.t > tPrev && (model.ourIdx.has(gx.a) || model.ourIdx.has(gx.v))) sfx.shot(weaponClass(gx.w), model.ourIdx.has(gx.a));
@@ -797,6 +856,16 @@
     if (opts.next) $('.nxt', bar).onclick = function () { opts.next(); };
     if (opts.label) { var tag = document.createElement('div'); tag.className = 'cliptag'; tag.textContent = opts.label; el.appendChild(tag); }
     active = ctl;
+    // keyboard (desktop): space play/pause, ←/→ 10 s (shift 30 s), F fullscreen, Esc close
+    var onKey = function (ev) {
+      if (active !== ctl || /INPUT|TEXTAREA|SELECT/.test((ev.target && ev.target.tagName) || '') && ev.target.type !== 'range') return;
+      if (ev.key === ' ') { ev.preventDefault(); pp.click(); }
+      else if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') { ev.preventDefault(); seek(t + (ev.key === 'ArrowRight' ? 1 : -1) * (ev.shiftKey ? 30 : 10)); }
+      else if (ev.key === 'f' || ev.key === 'F') $('.th', el).click();
+      else if (ev.key === 'Escape') ctl.stop();
+    };
+    document.addEventListener('keydown', onKey);
+    var stop0 = ctl.stop; ctl.stop = function (s2) { document.removeEventListener('keydown', onKey); stop0(s2); };
     document.documentElement.classList.add('replaying');
     draw(0);
     raf = requestAnimationFrame(frame);
@@ -938,7 +1007,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=11');
+      var w = new Worker('/app/extract-worker.js?v=12');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -964,7 +1033,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 7
+    var p = match.derived >= 8
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -975,11 +1044,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 7)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 8)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 7)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 8)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();
