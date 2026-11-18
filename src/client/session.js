@@ -273,7 +273,7 @@
     var marks = timelineMarks(d, match.ours);
     // ---- cinematic layer: auto pace from a tension curve, freeze frames, instant replays, sound
     var tension = tensionCurve(d, model, match.ours, t0, tEnd), paceNow = 10, freezeUntil = 0, irp = null, doneIR = {};
-    var moments = model ? bigMoments(d, model, match.ours, windows) : [];
+    var moments = []; // instant replays inside the replay broke its pacing (Guy): off
     var tensAt = function (x) { return tension[Math.max(0, Math.min(tension.length - 1, Math.floor(x - t0)))] || 0; };
     var ourEv = d.events.filter(function (e) { return (e.k === 'kill' || e.k === 'knock') && (ours.has(e.a) || ours.has(e.v)); }).sort(function (a, b) { return a.t - b.t; });
     var wcMap = {};
@@ -332,9 +332,17 @@
     svg.push('<circle class="zs" fill="rgba(59,139,235,.08)" stroke="#3b8beb" stroke-width="3" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<circle class="zw" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<defs class="pxd"></defs><g class="ops"></g>');
-    ids.forEach(function (id, i) { svg.push('<polyline class="tr" data-i="' + i + '" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-opacity=".75" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points=""/>'); });
     svg.push('<g class="fx"></g><g class="pms">');
-    ids.forEach(function (id, i) { svg.push('<g class="pm" data-i="' + i + '"><ellipse cx="0" cy=".4" rx="2.8" ry="1.1" fill="#000" fill-opacity=".45"/><ellipse cx="0" cy=".4" rx="3.1" ry="1.3" fill="none" stroke="' + esc(colorOf(id)) + '" stroke-width=".35"/><image class="spr" x="-3.75" y="-8.4" width="7.5" height="9" preserveAspectRatio="none" style="image-rendering:pixelated"/><path class="chute" display="none" d="M-4.4 -11.2Q0 -16.6 4.4 -11.2Z M-4.4 -11.2L-1.2 -7.4 M4.4 -11.2L1.2 -7.4" fill="' + esc(colorOf(id)) + '" fill-opacity=".85" stroke="#05070a" stroke-width=".35"/><g class="php" display="none"><rect x="-2.5" y="-10" width="5" height=".9" fill="#000" fill-opacity=".75"/><rect class="phf" x="-2.35" y="-9.85" width="4.7" height=".6"/></g><text class="pmn" y="3.1" font-size="1.4" text-anchor="middle" fill="#fff" stroke="#05070a" stroke-width=".6" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(nameOf(match, id)) + '</text><text class="pmt" y="4.6" font-size="1.05" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width=".45" paint-order="stroke" font-family="Press Start 2P, monospace"></text></g>'); });
+    ids.forEach(function (id, i) {
+      var nm = nameOf(match, id), nw = nm.length * 0.98 + 1.6, c = esc(colorOf(id));
+      svg.push('<g class="pm" data-i="' + i + '"><g class="ico" display="none">' + patchAt(id, 0, 0, 4.6) + '</g>'
+        + '<g class="spw"><ellipse cx="0" cy=".4" rx="2.8" ry="1.1" fill="#000" fill-opacity=".45"/><ellipse cx="0" cy=".4" rx="3.1" ry="1.3" fill="none" stroke="' + c + '" stroke-width=".35"/><image class="spr" x="-3.75" y="-8.4" width="7.5" height="9" preserveAspectRatio="none" style="image-rendering:pixelated"/><path class="chute" display="none" d="M-4.4 -11.2Q0 -16.6 4.4 -11.2Z M-4.4 -11.2L-1.2 -7.4 M4.4 -11.2L1.2 -7.4" fill="' + c + '" fill-opacity=".85" stroke="#05070a" stroke-width=".35"/></g>'
+        + '<g class="php" display="none"><rect x="-2.6" y="-10.2" width="5.2" height="1.1" fill="#000" fill-opacity=".8"/><rect class="phf" x="-2.4" y="-10" width="4.8" height=".7"/></g>'
+        + '<g class="lbl"><rect x="' + (-nw / 2).toFixed(2) + '" y="1.1" width="' + nw.toFixed(2) + '" height="2.5" rx=".7" fill="' + c + '" stroke="#05070a" stroke-width=".3"/>'
+        + '<text class="pmn" y="2.95" font-size="1.75" text-anchor="middle" fill="#0b0d10" font-family="Rubik, sans-serif" font-weight="800">' + esc(nm) + '</text>'
+        + '<image class="wic" x="' + (nw / 2 + 0.4).toFixed(2) + '" y="1.45" width="4.4" height="1.7" preserveAspectRatio="none" style="image-rendering:pixelated" display="none"/>'
+        + '<text class="pmt" y="5.3" font-size="1.15" text-anchor="middle" fill="#eef1f5" stroke="#05070a" stroke-width=".5" paint-order="stroke" font-family="Press Start 2P, monospace"></text></g></g>');
+    });
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
@@ -368,6 +376,8 @@
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
     var chute = pm.map(function (g) { return g.querySelector('.chute'); });
     var sprEl = pm.map(function (g) { return g.querySelector('.spr'); }), tagEl = pm.map(function (g) { return g.querySelector('.pmt'); });
+    var icoEl = pm.map(function (g) { return g.querySelector('.ico'); }), spwEl = pm.map(function (g) { return g.querySelector('.spw'); }), lblEl = pm.map(function (g) { return g.querySelector('.lbl'); }), wicEl = pm.map(function (g) { return g.querySelector('.wic'); });
+    var dispPos = [], spriteMode = true, modeKey = '', wicKey = [];
     var sprKey = [], faceOf = {};
     var GUNTAG = { sr: 'SR', dmr: 'DMR', ar: 'AR', lmg: 'LMG', smg: 'SMG', sg: 'SG', pistol: 'PST', boom: '', melee: '', other: '' };
     // the gun in hand: the last shot within 20 s, else the last gun picked up
@@ -425,7 +435,6 @@
       var w = u * 3.6, fill = h.state ? 0.12 : h.hp / 100;
       return '<rect x="' + (x - w / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(2) + '" height="' + (u * 0.8).toFixed(2) + '" fill="#000" fill-opacity=".75"/><rect x="' + (x - w / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (w * fill).toFixed(2) + '" height="' + (u * 0.8).toFixed(2) + '" fill="' + hpCol(h) + '"/>';
     };
-    var trails = ids.map(function (_, i) { return el.querySelector('.tr[data-i="' + i + '"]'); });
     var squadIds = ids.filter(function (id) { return ours.has(id); });
     // v9: which vehicle each of us is in, swimming, care packages
     var VEH = ['jeep', 'moto', 'bicycle', 'boat', 'plane', 'jeep', 'truck'];
@@ -447,7 +456,12 @@
     var f1 = function (v) { return v.toFixed(1); };
     var line = function (a, b, col, op, w, extra) { return '<line x1="' + f1(a[0]) + '" y1="' + f1(a[1]) + '" x2="' + f1(b[0]) + '" y2="' + f1(b[1]) + '" stroke="' + col + '" stroke-opacity="' + Math.max(0, op).toFixed(2) + '" stroke-width="' + w + '" stroke-linecap="round" vector-effect="non-scaling-stroke"' + (extra || '') + '/>'; };
     var lerp = function (a, b, f) { return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; };
-    // a shot by weapon class: sniper = one long bright streak, AR = a fast round, SMG = short bursts, shotgun = a cone
+    // a round in flight: a short bright body with a pointed tip
+    function round(a, b, col, op, w, u) {
+      var L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, dx = (b[0] - a[0]) / L, dy = (b[1] - a[1]) / L, hs = u * 0.55;
+      return line(a, b, col, op, w) + '<path d="M' + f1(b[0] + dx * hs * 1.6) + ' ' + f1(b[1] + dy * hs * 1.6) + 'L' + f1(b[0] - dy * hs) + ' ' + f1(b[1] + dx * hs) + 'L' + f1(b[0] + dy * hs) + ' ' + f1(b[1] - dx * hs) + 'Z" fill="' + col + '" fill-opacity="' + Math.max(0, op).toFixed(2) + '"/>';
+    }
+    // a shot by weapon class: sniper = a dashed streak with a fast round, AR = rounds in flight, SMG = short bursts, shotgun = a cone
     function tracer(hx, age, u, col) {
       var a = hx.ap, v = hx.vp, wc = wcOf(hx.w);
       if (!a[0] && !a[1]) return '';
@@ -455,7 +469,8 @@
       if (wc === 'sr' || wc === 'dmr') {
         var life = wc === 'sr' ? 0.75 : 0.45;
         if (age > life) return '';
-        return line(a, v, '#fff3c4', 1 - age / life, wc === 'sr' ? 2.8 : 1.8) + (age < 0.2 ? '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + f1(u * 1.1) + '" fill="#fff3c4" fill-opacity="' + (1 - age / 0.2).toFixed(2) + '"/>' : '');
+        var pr = Math.min(1, age / 0.09);
+        return line(a, lerp(a, v, pr), '#fff3c4', (1 - age / life) * 0.7, wc === 'sr' ? 2 : 1.4, ' stroke-dasharray="5 4" stroke-dashoffset="' + (-age * 60).toFixed(1) + '"') + (pr < 1 ? round(lerp(a, v, Math.max(0, pr - 0.12)), lerp(a, v, pr), '#fff3c4', 1, wc === 'sr' ? 2.6 : 2, u) : '') + (age < 0.2 ? '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + f1(u * 1.1) + '" fill="#fff3c4" fill-opacity="' + (1 - age / 0.2).toFixed(2) + '"/>' : '');
       }
       if (wc === 'sg') {
         if (age > 0.25) return '';
@@ -470,14 +485,14 @@
           if (hk < 0 || hk > 0.16) continue;
           var p1 = Math.min(1, hk / 0.07), jx = (k - 1) * u * 0.35;
           var pA = lerp(a, v, Math.max(0, p1 - 0.25)), pB = lerp(a, v, p1);
-          o2 += line([pA[0], pA[1] + jx], [pB[0], pB[1] + jx], col, 1 - hk / 0.16, 1.3);
+          o2 += round([pA[0], pA[1] + jx], [pB[0], pB[1] + jx], col, 1 - hk / 0.16, 1.3, u * 0.8);
         }
         return o2;
       }
       // ar / lmg: a round travelling from the muzzle to the target
       if (age > 0.3) return '';
       var p2 = Math.min(1, age / 0.12);
-      return line(lerp(a, v, Math.max(0, p2 - 0.35)), lerp(a, v, p2), col, age < 0.12 ? 1 : 1 - (age - 0.12) / 0.18, wc === 'lmg' ? 2.4 : 1.7);
+      return round(lerp(a, v, Math.max(0, p2 - 0.22)), lerp(a, v, p2), col, age < 0.12 ? 1 : 1 - (age - 0.12) / 0.18, wc === 'lmg' ? 2.4 : 1.7, u);
     }
     var sq = function (x, y, s2, col, op) { return '<rect x="' + f1(x - s2 / 2) + '" y="' + f1(y - s2 / 2) + '" width="' + f1(s2) + '" height="' + f1(s2) + '" fill="' + col + '" fill-opacity="' + Math.max(0, op).toFixed(2) + '"/>'; };
     // pixel explosion: a hot core, a ring of fire squares, then dark smoke that rises
@@ -606,6 +621,7 @@
       return '<li class="' + (e.k === 'kill' ? (ours.has(e.v) ? 'dd' : 'kl') : 'kn') + '">' + (e.a ? A : '') + ' <span>' + (e.k === 'kill' ? '▸' : '◐') + '</span> ' + w + ' ' + V + '</li>';
     }
     function draw(realDt) {
+      var wasSnap = snap;
       // camera
       // ---- director camera: pick a shot, hold action shots briefly, cut on big jumps, ease zoom and position apart
       var plane = t < lastLand ? planeAt(d, match.ours, t, planeV) : null;
@@ -657,23 +673,36 @@
       if (z && z.warn) { zw.setAttribute('cx', z.warn[0]); zw.setAttribute('cy', z.warn[1]); zw.setAttribute('r', z.warn[2]); } else zw.setAttribute('r', 0);
       // players
       var moveFx = [];
+      // sprites when the camera is close, unit patches when it is far (with a little hysteresis)
+      if (spriteMode && vs > 230) spriteMode = false; else if (!spriteMode && vs < 190) spriteMode = true;
+      var mk2 = spriteMode ? 's' : 'i';
+      if (mk2 !== modeKey) {
+        modeKey = mk2;
+        pm.forEach(function (g, k) { icoEl[k].setAttribute('display', spriteMode ? 'none' : ''); spwEl[k].setAttribute('display', spriteMode ? '' : 'none'); lblEl[k].setAttribute('transform', spriteMode ? 'scale(1.55)' : 'translate(0 1.4) scale(1.15)'); php[k].setAttribute('transform', spriteMode ? '' : 'translate(0 6.4)'); });
+      }
+      var mScale = spriteMode ? us : Math.min(u, 6) * 0.8, kSm = 1 - Math.exp(-(realDt || 0.016) * 9);
       ids.forEach(function (id, i) {
         var p = d.players[id], pos = posAt(p, t);
         pm[i].style.display = pos ? '' : 'none';
         if (pos) {
           // fan out markers that would sit on top of each other in a close-up
-          var mx = pos[0], my = pos[1], gap = us * 6;
+          var mx = pos[0], my = pos[1], gap = mScale * 6;
           for (var oj = 0; oj < i; oj++) {
             var op = posAt(d.players[ids[oj]], t);
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
-          pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + us.toFixed(3) + ')');
+          // eased marker position: no stepping between telemetry points; snaps on seeks and big jumps
+          var dp = dispPos[i];
+          if (!dp || wasSnap || Math.hypot(dp[0] - mx, dp[1] - my) > 40) dp = dispPos[i] = [mx, my];
+          else { dp[0] += (mx - dp[0]) * kSm; dp[1] += (my - dp[1]) * kSm; }
+          pm[i].setAttribute('transform', 'translate(' + dp[0].toFixed(2) + ' ' + dp[1].toFixed(2) + ') scale(' + mScale.toFixed(3) + ')');
           var inAir = p.jump && p.land && t >= p.jump[2] && t < p.land[2];
           chute[i].setAttribute('display', inAir ? '' : 'none');
           var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
           var vIn = pix !== undefined ? stateAt(rides, pix, t) : -1, swI = pix !== undefined ? stateAt(swims, pix, t) : -1;
           var kd = inAir ? 'stand' : dnO ? 'down' : vIn >= 0 ? 'veh' + vIn : swI > 0 ? 'swim' : kindOf(pPrev, pos, dnO);
-          if (kd.indexOf('veh') === 0 && pPrev && Math.hypot(pos[0] - pPrev[0], pos[1] - pPrev[1]) > 0.3) moveFx.push(dustFx(pos, pPrev, u, true)); gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
+          var gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
+          if (spriteMode && kd.indexOf('veh') === 0 && pPrev && Math.hypot(pos[0] - pPrev[0], pos[1] - pPrev[1]) > 0.3) moveFx.push(dustFx(pos, pPrev, u, true));
           var px0 = pixOf(kd, colorOf(id), gn, false, an), sk = px0.url;
           if (sprKey[i] !== sk) {
             sprKey[i] = sk;
@@ -681,9 +710,11 @@
             sprEl[i].setAttribute('href', px0.url); sprEl[i].setAttribute('width', pw.toFixed(2)); sprEl[i].setAttribute('height', ph.toFixed(2));
             sprEl[i].setAttribute('x', (-pw / 2).toFixed(2)); sprEl[i].setAttribute('y', (-ph * (flat0 ? 0.7 : 0.94)).toFixed(2));
           }
-          if (kd === 'walkA' || kd === 'walkB') moveFx.push(dustFx(pos, pPrev, u, kd === 'car'));
+          if (spriteMode && (kd === 'walkA' || kd === 'walkB')) moveFx.push(dustFx(pos, pPrev, u, false));
+          var gIc = gn && PIX.gun(gn);
+          if (wicKey[i] !== gn) { wicKey[i] = gn; if (gIc) { wicEl[i].setAttribute('href', gIc.url); wicEl[i].setAttribute('display', ''); } else wicEl[i].setAttribute('display', 'none'); }
           var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
-          tagEl[i].textContent = vs < 170 && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '') + (GUNTAG[gn] ? ' ' + GUNTAG[gn] : '')).trim() : '';
+          tagEl[i].textContent = spriteMode && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '')).trim() : '';
           var pi = model ? model.idx.get(id) : undefined;
           if (pi !== undefined) {
             var hp = hpAt(model, pi, t);
@@ -693,10 +724,6 @@
             php[i].setAttribute('opacity', hp.state === 1 ? (Math.floor(performance.now() / 300) % 2 ? '1' : '.35') : '1');
           } else php[i].setAttribute('display', 'none');
         }
-        var pts = p.land && t >= p.land[2] ? [p.land[0] + ',' + p.land[1]] : [];
-        for (var q = 0; q < p.path.length && p.path[q][0] <= t; q++) pts.push(p.path[q][1] + ',' + p.path[q][2]);
-        if (pos && pts.length) pts.push(pos[0].toFixed(1) + ',' + pos[1].toFixed(1));
-        trails[i].setAttribute('points', pts.join(' '));
       });
       // events: flashes + callouts on the map, kill feed in the corner
       var fxh = [], lbh = [], recent = [];
@@ -764,7 +791,8 @@
           diam[i] = 1;
           var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
           var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
-          fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea));
+          if (spriteMode) fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea));
+          else fxh.push('<path d="M' + f1(pos[0]) + ' ' + f1(pos[1] - u * 1.6) + 'L' + f1(pos[0] + u * 1.6) + ' ' + f1(pos[1]) + 'L' + f1(pos[0]) + ' ' + f1(pos[1] + u * 1.6) + 'L' + f1(pos[0] - u * 1.6) + ' ' + f1(pos[1]) + 'Z" fill="' + (eDn ? '#ff4d4d' : '#dfe3ea') + '" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
           fxh.push(hpBar(pos[0], pos[1] - us * 10, us, hh));
           var eGr = gearAt(model, ip, t);
           if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + us * 2.4) + '" font-size="' + f1(us * 1.3) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
@@ -785,7 +813,8 @@
             oh.push('<line x1="' + a2[0].toFixed(1) + '" y1="' + a2[1].toFixed(1) + '" x2="' + b2[0].toFixed(1) + '" y2="' + b2[1].toFixed(1) + '" stroke="#dfe3ea" stroke-opacity="' + (0.08 + 0.42 * si2 / tp.length).toFixed(2) + '" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>');
           }
           var hp0 = opAt(orow, t - 1);
-          oh.push('<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>');
+          oh.push(spriteMode ? '<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>'
+            : '<circle cx="' + f1(opos[0]) + '" cy="' + f1(opos[1]) + '" r="' + f1(u * 0.9) + '" fill="#dfe3ea" stroke="#000" stroke-width="1.2" vector-effect="non-scaling-stroke"/>');
           if (model) oh.push(hpBar(opos[0], opos[1] - us * 9, us, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
@@ -825,6 +854,7 @@
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
       if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
     }
+    function gunImg(w) { var ic = w && PIX.gun(weaponClass(w)); return ic ? '<img class="gi" src="' + ic.url + '" alt="">' : ''; }
     function name(i) { var p = model.pp[i]; return member(p[0]) ? member(p[0]).nick : p[1]; }
     function fighterRow(i, at, ours) {
       var h = hpAt(model, i, at), g = gearAt(model, i, at), p = model.pp[i], m = member(p[0]);
@@ -833,7 +863,7 @@
       var st = h.state === 2 ? '<b class="kia">KIA</b>' : h.state === 1 ? '<b class="dn">DOWN</b>' : '<b>' + h.hp + '</b>';
       return '<div class="fr' + (h.state ? ' out' : '') + '" data-i="' + i + '">' + icon + '<div class="fn"><div class="row sp" style="flex-wrap:nowrap"><span class="nm">' + esc(name(i)) + '</span><span class="hpn">' + st + '</span></div>'
         + '<div class="hpb"><u style="width:' + (h.state ? 0 : h.hp) + '%" class="' + (h.hp > 50 ? 'g' : h.hp > 25 ? 'y' : 'r') + '"></u></div>'
-        + '<div class="gr">' + (g.helmet ? 'H' + g.helmet + ' ' : '') + (g.vest ? 'V' + g.vest + ' ' : '') + esc(gun || '') + '</div></div></div>';
+        + '<div class="gr">' + gunImg(fight && fight.mainWeapon[i] ? fight.mainWeapon[i] : g.guns.length ? (d.wp || [])[g.guns[g.guns.length - 1]] : '') + (g.helmet ? 'H' + g.helmet + ' ' : '') + (g.vest ? 'V' + g.vest + ' ' : '') + esc(gun || '') + '</div></div></div>';
     }
     // ENGAGEMENT / RESULT: a small banner over the map that fades by itself; the replay never stops for it.
     var bannerUntil = 0;
@@ -900,7 +930,7 @@
         var dn = !dead && downedAt(d, id, t);
         return '<div class="sq' + (dead ? ' kia' : dn ? ' dn' : '') + '">' + (m ? patchSvg(m.emblem, m.color, 13) : patchSvg('chevrons', GUEST, 13))
           + '<span class="sv"><span class="sh"><u style="width:' + (h.state ? (dn ? Math.round(dn.bleed * 100) : 0) : h.hp) + '%;background:' + (dead ? '#555' : dn ? '#ff4d4d' : hpCol(h)) + '"></u></span>'
-          + '<span class="sg">' + (dead ? 'KIA' : dn ? 'DOWN' : (g.helmet ? 'H' + g.helmet : '·') + ' ' + (g.vest ? 'V' + g.vest : '·')) + '</span></span></div>';
+          + '<span class="sg">' + (dead ? 'KIA' : dn ? 'DOWN' : (i !== undefined && gunOf(i, t) && PIX.gun(gunOf(i, t)) ? '<img class="gi" src="' + PIX.gun(gunOf(i, t)).url + '" alt="">' : '') + (g.helmet ? 'H' + g.helmet : '·') + ' ' + (g.vest ? 'V' + g.vest : '·')) + '</span></span></div>';
       }).join('');
     }
     function frame(ts) {

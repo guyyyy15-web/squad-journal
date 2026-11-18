@@ -88,6 +88,10 @@ GitHub does **not** deploy.
 - **Session page = replays first:** hero with ▶ place badges (`data-play`, jump into that match's replay), highlights
   as a swipe carousel (`.momrow`), then the matches (big ▶ on each map), and MVP/medals/logs/narrator folded in one
   `<details class="debrief">`. Sprite scale `us = min(u, 3.4) × 0.62` (≈5.5% of the frame in close-ups, capped wide).
+- **Replay markers (Guy's call):** no instant replays/killcams inside the replay (they broke the pacing; `moments = []`);
+  no walking trails; pixel sprites only when the camera is close (view < 190 units, back to unit patches > 230);
+  marker positions are eased each frame (snap on seeks / jumps > 40 units); a name pill in the member's colour with a
+  pixel gun icon (`PIX.gun`) next to it; tracers are rounds in flight (pointed tips, dashed sniper streaks).
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
   (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move

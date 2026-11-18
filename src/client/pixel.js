@@ -543,5 +543,26 @@
     cache[key] = res;
     return res;
   }
-  window.PIX = { soldier: chibi, soldierOld: soldier, thing: thing, downed: downed, swim: swim };
+  // weapon icons (side view, 18×7) for tags, the squad bar and the battle panel
+  var GUNI = {
+    sr: ['......OOOOO.......', '.....OmmmmmO......', 'OOOOOOOOOOOOOOOOOO', 'OwwwwwwOGgggggggggO', 'OOOwwwOOGGOOOOOOOO', '...OOOO.OO........', '..................'],
+    dmr: ['.......OOOO.......', '......OmmmmO......', 'OOOOOOOOOOOOOOOOO.', 'OwwwwwOGGgggggggO.', 'OOOwwOOGGGOOOOOO..', '...OO.OGGO........', '......OOO.........'],
+    ar: ['..................', '.......OOO........', 'OOOOOOOOgOOOOOOOO.', 'OGGGGGGGgggggggGO.', 'OOOGGOOGGGOOOOOO..', '...OOO.OGGO.......', '.......OOO........'],
+    lmg: ['..................', '......OOOO........', 'OOOOOOOOggOOOOOOOO', 'OGGGGGGGGgggggggGO', 'OOOGGOGGGGGOOOOOO.', '...OOOOWWWWO......', '......OOOOO.......'],
+    smg: ['..................', '..................', '..OOOOOOOOOOOO....', '..OGGGGgggggGO....', '..OOGOOOGGOOO.....', '....OO.OGGO.......', '.......OOO........'],
+    sg: ['..................', '..................', 'OOOOOOOOOOOOOOOOO.', 'OwwwwwOGGGGGGGGGO.', 'OOwwwOOWWWWWOOOO..', '..OOOO.OOOOO......', '..................'],
+    pistol: ['..................', '......OOOOOOO.....', '......OgggggO.....', '......OGOOOOO.....', '......OGGO........', '......OOOO........', '..................'],
+  };
+  var GPAL = { O: '#0b0d10', G: '#3a3f46', g: '#8b95a1', w: '#a8743f', W: '#6d4625', m: '#9fd3e6' };
+  function gunIcon(cls) {
+    var key = 'gun' + cls;
+    if (cache[key]) return cache[key];
+    var rows = GUNI[cls];
+    if (!rows) return null;
+    var cv = document.createElement('canvas'); cv.width = 18; cv.height = 7; var g = cv.getContext('2d');
+    rows.forEach(function (r, y) { for (var x = 0; x < r.length; x++) { var c = GPAL[r[x]]; if (c) { g.fillStyle = c; g.fillRect(x, y, 1, 1); } } });
+    cache[key] = { url: cv.toDataURL(), w: 18, h: 7 };
+    return cache[key];
+  }
+  window.PIX = { soldier: chibi, soldierOld: soldier, thing: thing, downed: downed, swim: swim, gun: gunIcon };
 })();
