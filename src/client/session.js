@@ -413,6 +413,19 @@
     var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
     // the sprite's game state at time t: helmet/vest level, hurt or knocked eyes, healing or reviving
     var pp2acc = function (i) { return d.pp && d.pp[i] ? d.pp[i][0] : ''; };
+    // body language: a hit flashes the sprite for ~150 ms (real time); a shot kicks it back a hair along the aim
+    var hitAge = function (pi) { var a = 1e9, nowH = pnow(); for (var k = pops.length - 1; k >= 0; k--) if (pops[k].v === pi) { a = Math.min(a, nowH - pops[k].born); } return a; };
+    var recoil = function (pi) {
+      for (var k = shotStart(t) - 1; k >= 0 && shots[k].t > t - 0.09; k--) if (shots[k].p === pi) { var a = aimOf(shots[k], k); if (a) { var L = Math.hypot(a[0] - shots[k].pos[0], a[1] - shots[k].pos[1]) || 1; return [-(a[0] - shots[k].pos[0]) / L, -(a[1] - shots[k].pos[1]) / L]; } }
+      return null;
+    };
+    // a knock is a fall, not a cut: tip over during the first 0.45 s (real time)
+    var knockedAt = {};
+    var fallTilt = function (key, down) {
+      if (!down) { delete knockedAt[key]; return 0; }
+      if (knockedAt[key] === undefined) knockedAt[key] = pnow();
+      return Math.min(1, (pnow() - knockedAt[key]) / 450);
+    };
     // keep an enemy sprite off our soldiers (their eased positions this frame)
     function nudge(p, gap) {
       var x = p[0], y = p[1];
@@ -809,6 +822,7 @@
           pm[i].setAttribute('transform', 'translate(' + dp[0].toFixed(2) + ' ' + dp[1].toFixed(2) + ') scale(' + mScale.toFixed(3) + ')');
           var inAir = p.jump && p.land && t >= p.jump[2] && t < p.land[2];
           chute[i].setAttribute('display', inAir ? '' : 'none');
+          if (inAir) chute[i].setAttribute('transform', 'rotate(' + (Math.sin(pnow() / 520 + i) * 7).toFixed(1) + ' 0 -6)');
           var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
           var vIn = pix !== undefined ? stateAt(rides, pix, t) : -1, swI = pix !== undefined ? stateAt(swims, pix, t) : -1;
           var kd = inAir ? 'stand' : dnO ? 'down' : vIn >= 0 ? 'veh' + vIn : swI > 0 ? 'swim' : kindOf(pPrev, pos, dnO);
@@ -830,6 +844,13 @@
           if (lblEl[i].getAttribute('transform') !== lblT) lblEl[i].setAttribute('transform', lblT);
           var showSpr = !rider && spriteMode, showIco = !rider && !spriteMode;
           if (spwEl[i].getAttribute('display') !== (showSpr ? '' : 'none')) spwEl[i].setAttribute('display', showSpr ? '' : 'none');
+          if (showSpr) {
+            var ha = pix !== undefined ? hitAge(pix) : 1e9, rc = pix !== undefined ? recoil(pix) : null, ft = fallTilt(id, !!dnO);
+            var op1 = ha < 150 ? '.35' : '1';
+            if (sprEl[i].getAttribute('opacity') !== op1) sprEl[i].setAttribute('opacity', op1);
+            var tf = (rc ? 'translate(' + (rc[0] * 0.5).toFixed(2) + ' ' + (rc[1] * 0.5).toFixed(2) + ')' : '') + (ft > 0 && ft < 1 ? ' rotate(' + (90 * (1 - ft)).toFixed(0) + ' 0 -2)' : '');
+            if (sprEl[i].getAttribute('transform') !== tf) sprEl[i].setAttribute('transform', tf);
+          }
           if (icoEl[i].getAttribute('display') !== (showIco ? '' : 'none')) icoEl[i].setAttribute('display', showIco ? '' : 'none');
           if (wicKey[i] !== gn) { wicKey[i] = gn; if (gIc) { wicEl[i].setAttribute('href', gIc.url); wicEl[i].setAttribute('display', ''); } else wicEl[i].setAttribute('display', 'none'); }
           var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
@@ -914,7 +935,8 @@
           var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
           if (spriteMode) pos = nudge(pos, us * 6);
           var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
-          if (spriteMode) fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea, stateOf(ip, pp2acc(ip), t)));
+          if (spriteMode) { var eh = hitAge(ip) < 150, erc = recoil(ip), epos = erc ? [pos[0] + erc[0] * us * 0.5, pos[1] + erc[1] * us * 0.5] : pos;
+            fxh.push((eh ? '<g opacity=".35">' : '<g>') + sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, epos[0], epos[1], us * 9, ea, stateOf(ip, pp2acc(ip), t)) + '</g>'); }
           else fxh.push('<path d="M' + f1(pos[0]) + ' ' + f1(pos[1] - u * 1.6) + 'L' + f1(pos[0] + u * 1.6) + ' ' + f1(pos[1]) + 'L' + f1(pos[0]) + ' ' + f1(pos[1] + u * 1.6) + 'L' + f1(pos[0] - u * 1.6) + ' ' + f1(pos[1]) + 'Z" fill="' + (eDn ? '#ff4d4d' : '#dfe3ea') + '" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
           fxh.push(hpBar(pos[0], pos[1] - us * 10, us, hh));
           var eGr = gearAt(model, ip, t);
@@ -1049,8 +1071,13 @@
     }
     function updateBattle() {
       if (!battle || !fight) return;
-      $('.us', battle).innerHTML = fight.us.map(function (i) { return fighterRow(i, t, true); }).join('');
-      $('.them', battle).innerHTML = fight.them.map(function (i) { return fighterRow(i, t, false); }).join('');
+      // repaint only when something in the panel actually changed (HP, gear, state)
+      var bh = fight.us.map(function (i) { return fighterRow(i, t, true); }).join('') + '|' + fight.them.map(function (i) { return fighterRow(i, t, false); }).join('');
+      if (bh === battle._key) return;
+      battle._key = bh;
+      var parts2 = bh.split('|');
+      $('.us', battle).innerHTML = parts2[0];
+      $('.them', battle).innerHTML = parts2[1];
       battle.querySelectorAll('.fr').forEach(function (r) {
         var i = r.dataset.i, h = hpAt(model, i, t), val = h.state ? -1 : h.hp;
         if (lastHp[i] !== undefined && val < lastHp[i]) r.classList.add('hit');
@@ -1112,7 +1139,7 @@
     // squad bar: HP, state and armour of each of us, always on screen
     function squadBar() {
       if (!model) { sqb.classList.add('hide'); return; }
-      sqb.innerHTML = squadIds.map(function (id) {
+      var html = squadIds.map(function (id) {
         var i = model.idx.get(id), m = member(id), h = i === undefined ? { hp: 100, state: 0 } : hpAt(model, i, t), g = i === undefined ? { helmet: 0, vest: 0 } : gearAt(model, i, t);
         var dead = d.players[id].death && t >= d.players[id].death[2];
         if (dead) h = { hp: 0, state: 2 };
@@ -1121,6 +1148,7 @@
           + '<span class="sv"><span class="sh"><u style="width:' + (h.state ? (dn ? Math.round(dn.bleed * 100) : 0) : h.hp) + '%;background:' + (dead ? '#555' : dn ? '#ff4d4d' : hpCol(h)) + '"></u></span>'
           + '<span class="sg">' + (dead ? 'KIA' : dn ? 'DOWN' : (i !== undefined && gunOf(i, t) && PIX.gun(gunOf(i, t)) ? '<img class="gi" src="' + PIX.gun(gunOf(i, t)).url + '" alt="">' : '') + (g.helmet ? 'H' + g.helmet : '·') + ' ' + (g.vest ? 'V' + g.vest : '·')) + '</span></span></div>';
       }).join('');
+      if (html !== sqb._key) { sqb._key = html; sqb.innerHTML = html; }
     }
     function frame(ts) {
       var realDt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016; last = ts;

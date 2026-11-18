@@ -127,6 +127,9 @@ GitHub does **not** deploy.
 - **Replay polish:** enemies are nudged off our soldiers (`nudge`), enemy names under the fighters, a knock merged into
   the kill line, the frame shifts away from the feed/banner in fights, a minimap when zoomed in (< 300 units), timeline
   icons (☠ ◐ ✕ ✚ ✈ ▣) over a tension strip, drifting cloud shadows, a pixel gun flash over our kills.
+- **Body language:** a hit blinks the sprite (opacity, ~150 ms real time — no CSS filters, they cost frames), a shot kicks
+  it back along the aim (`recoil`), a knock tips the soldier over in 0.45 s (`fallTilt`), parachutes sway. The squad bar
+  and battle panel repaint only when their HTML changes.
 - **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
 - **Big screen:** ⛶ / "Fullscreen" chip / F → theater + real fullscreen where the browser allows it (phones try a
