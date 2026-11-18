@@ -11,7 +11,7 @@ import * as R from './replay.js';
 import { lookPlayer, lookMatch, matchRow, publicSession } from './look.js';
 import { combatStats, aggregate, COMBAT_V } from './stats.js';
 import { summarize, SUMMARY_V } from './summary.js';
-import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
+import { extractDerived, validDerived, MAP_SIZE, DERIVED_V } from './telemetry.js';
 import SESSION_JS from './client/session.js';
 import PIXEL_JS from './client/pixel.js';
 
@@ -257,15 +257,18 @@ onmessage = async function (e) {
     if (!res.ok) throw new Error(String(res.status));
     var reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     var parts = [], n = 0, last = 0;
+    // the stored telemetry is gzip (~1/11 of the JSON); downloading is ~70% of the work, parsing and extracting the rest
+    var est = Number(res.headers.get('Content-Length') || 0) * 11 || 15e6;
     for (;;) {
       var r = await reader.read();
       if (r.done) break;
       parts.push(r.value); n += r.value.length;
-      if (n - last > 1e6) { last = n; postMessage({ progress: (n / 1e6).toFixed(0) }); }
+      if (n - last > 5e5) { last = n; postMessage({ progress: (n / 1e6).toFixed(0), pct: Math.min(68, Math.round(n / est * 68)) }); }
     }
-    postMessage({ parsing: (n / 1e6).toFixed(0) });
+    postMessage({ parsing: (n / 1e6).toFixed(0), pct: 72 });
     var events = JSON.parse(parts.join(''));
     parts = null;
+    postMessage({ pct: 88 });
     postMessage({ done: extractDerived(events, e.data.ours, MAP_SIZE[e.data.map] || 816000) });
   } catch (err) { postMessage({ error: String(err && err.message || err) }); }
 };`;
@@ -488,6 +491,19 @@ export default {
           if (!ps) return notFoundPage(lang);
           return sessionPage({ lang, session: ps.session, summary: ps.summary, members: ps.members, origin: url.origin, ogVer: '0', ogReady: true,
             derivedIds: new Map(), clan: null, path: path + url.search, pub: { name: ps.name, tele: ps.tele } });
+        }
+        if (path === '/api/pending') {
+          // newest matches that still need the browser-side analysis (any visitor's browser prepares them in the background)
+          const rows = (await env.DB.prepare(`SELECT m.match_id, m.map FROM matches m JOIN session_matches sm ON sm.match_id = m.match_id
+            LEFT JOIN derived d ON d.match_id = m.match_id WHERE m.created_at > ? AND (d.match_id IS NULL OR json_extract(d.json, '$.v') < ?)
+            ORDER BY m.created_at DESC LIMIT 2`).bind(Date.now() - 16 * 86400000, DERIVED_V).all()).results;
+          const out = [];
+          for (const r of rows) {
+            const ours = (await env.DB.prepare(`SELECT account_id FROM participants WHERE match_id = ? AND team_id IN (SELECT p2.team_id FROM participants p2
+              JOIN members mb ON mb.account_id = p2.account_id AND mb.active = 1 WHERE p2.match_id = ?)`).bind(r.match_id, r.match_id).all()).results.map((x) => x.account_id);
+            if (ours.length) out.push({ id: r.match_id, map: r.map, ours });
+          }
+          return new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
         }
         if (path === '/stats') {
           const db = env.DB;

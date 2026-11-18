@@ -1377,20 +1377,22 @@
   }
 
   // ---------- loading: derived data for every match ----------
-  function overlay(el, text) {
+  function overlay(el, text, pct) {
     if (!el) return;
     var ov = $('.ov', el);
     if (!ov) { ov = document.createElement('div'); ov.className = 'ov'; el.appendChild(ov); }
-    ov.textContent = text;
+    if (pct === undefined) { ov.textContent = text; return; }
+    ov.innerHTML = '<div class="prep"><div class="pt">' + esc(fmt(S.preparing, { n: pct })) + '</div><div class="pbar"><u style="width:' + pct + '%"></u></div><div class="muted small">' + esc(text || '') + '</div></div>';
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=15');
+      var w = new Worker('/app/extract-worker.js?v=16');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
-        if (m.progress) overlay(el, S.downloading + ' ' + m.progress + 'MB');
-        else if (m.parsing) overlay(el, fmt(S.parsing, { n: m.parsing }));
+        if (m.progress) overlay(el, S.downloading + ' ' + m.progress + 'MB', m.pct);
+        else if (m.parsing) overlay(el, fmt(S.parsing, { n: m.parsing }), m.pct);
+        else if (m.pct) overlay(el, '', m.pct);
         else if (m.error) {
           w.terminate();
           if (!retried) { overlay(el, S.retry); setTimeout(function () { analyze(match, el, true).then(resolve); }, 2500); return; }

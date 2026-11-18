@@ -126,6 +126,8 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .rbar .mk.kill{color:#ff6b6b}.rbar .mk.revive{color:#7ee2a8}
 .rbar .tic{position:absolute;top:-4px;margin-inline-start:-6px;font:11px/22px var(--mono);color:#cfd5dd;font-style:normal;pointer-events:none;text-shadow:0 0 3px #000}.rbar .tic.cp{color:#ff8a8a}
 .rbar .tens{position:absolute;left:0;right:0;bottom:-2px;width:100%;height:12px;pointer-events:none}
+.map .prep{width:min(80%,280px);text-align:center}.map .prep .pt{font:12px/1.5 "Press Start 2P",monospace;color:var(--gold2);margin-bottom:8px}
+.map .pbar{height:10px;border:2px solid #eef1f5;background:#0b0d12;padding:1px}.map .pbar u{display:block;height:100%;background:repeating-linear-gradient(90deg,var(--gold) 0 6px,#c98a00 6px 8px);transition:width .3s steps(8)}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -397,6 +399,10 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
       <div class="row muted" style="margin-top:8px">${placeBadge(r.place)} ${esc(mapName(r.map))} · ${r.kills} ${esc(t.kills)} · ${Math.round(r.damage)} ${esc(t.damage)}</div></div>`;
   }).join('')}` : '';
 
+  const prepScript = `(function(){var c=navigator.connection;if(c&&c.saveData)return;var go=function(){fetch('/api/pending').then(function(r){return r.json()}).then(function(list){
+var one=function(i){if(i>=list.length)return;var m=list[i],w=new Worker('/app/extract-worker.js?v=16');w.onmessage=function(e){var x=e.data;if(x.done||x.error){w.terminate();
+if(x.done)fetch('/api/derived/'+encodeURIComponent(m.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x.done)}).catch(function(){}).then(function(){one(i+1)});else one(i+1);}};
+w.postMessage({url:'/t/'+encodeURIComponent(m.id),ours:m.ours,map:m.map});};one(0);}).catch(function(){});};(window.requestIdleCallback||function(f){setTimeout(f,2500)})(go);})();`;
   return page(lang, t.brand, `${top(lang, '/', false, clan)}${nav(lang, 'sessions')}
     <div style="margin:22px 0 8px"><span class="tag">FIELD JOURNAL // ${t.season} ${new Date().getFullYear()}</span>
     ${clanBlock(clan)}
@@ -409,7 +415,7 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
     </div>
     ${status.last_activity && Date.now() - status.last_activity < 75 * 60000 ? `<div class="panel live"><span class="livedot"></span><b>${esc(t.live)}</b><span class="muted small">${esc(t.liveText(ago(lang, status.last_activity)))}</span></div>` : ''}
     <h2>${esc(t.sessions)} <span class="muted small" style="margin-inline-start:auto;font-family:var(--body)">${status.last_poll ? esc(t.updated(ago(lang, status.last_poll))) : ''}</span></h2>
-    ${sessions.length ? cards : empty}${rec}`, { script: meScript + LIVE_WATCH('reload'), og: { image: `${origin}/og/default.jpg`, title: clan?.name ? `${t.brand} · [${clan.tag}] ${clan.name}` : t.brand } });
+    ${sessions.length ? cards : empty}${rec}`, { script: meScript + LIVE_WATCH('reload') + prepScript, og: { image: `${origin}/og/default.jpg`, title: clan?.name ? `${t.brand} · [${clan.tag}] ${clan.name}` : t.brand } });
 }
 
 const METAL = { killer: 'gold', sniper: 'gold', angel: 'gold', headshot: 'gold', knocker: 'silver', assist: 'silver', pharmacy: 'silver',
@@ -501,7 +507,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=8', '/app/session.js?v=86'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=8', '/app/session.js?v=87'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

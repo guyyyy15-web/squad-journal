@@ -106,3 +106,8 @@ test('extractDerived is self-contained (shipped to the browser as source)', () =
   const fn = new Function(`return (${extractDerived.toString()})`)();
   assert.deepEqual(fn(tele, OURS, MAP_SIZE.Tiger_Main), extractDerived(tele, OURS, MAP_SIZE.Tiger_Main));
 });
+
+test('DERIVED_V matches what extractDerived writes', async () => {
+  const { DERIVED_V } = await import('../src/telemetry.js');
+  assert.equal(extractDerived(tele, OURS, MAP_SIZE.Tiger_Main).v, DERIVED_V);
+});

@@ -2,6 +2,9 @@
 // extractDerived runs in the browser (inside a Web Worker, shipped via Function#toString), so it must stay
 // self-contained: no imports, no closures over module variables. validDerived runs in the Worker on upload.
 
+/** Current extractDerived output version (the server uses it to find matches still to analyse). */
+export const DERIVED_V = 11;
+
 /** Map sizes in centimetres (telemetry units). */
 export const MAP_SIZE = {
   Baltic_Main: 816000, Erangel_Main: 816000, Desert_Main: 816000, Tiger_Main: 816000, Kiki_Main: 816000,
