@@ -2,13 +2,14 @@
 import { tick, drain, rebuildSessions, getSettings, enqueue, saveTotals, markWarm } from './collector.js';
 import { pubg } from './pubg.js';
 import { parsePlayers, cleanProfile, validIgn, mapName, DEFAULT_SETTINGS } from './logic.js';
-import { lookPage, homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
+import { statsPage, lookPage, homePage, sessionPage, joinPage, adminPage, page, ago, modeName, ogInfo, notFoundPage, hallPage, profilePage, mapsPage } from './html.js';
 import { mergeHall, hallSlice } from './hall.js';
 import { factsOf, prompt, checkNumbers, cleanRecap, isLang, NARRATOR_MODEL, DAILY_CAP } from './narrator.js';
 import { S, langOf } from './i18n.js';
 import { findMoments, squadMatrices } from './moments.js';
 import * as R from './replay.js';
 import { lookPlayer, lookMatch, matchRow, publicSession } from './look.js';
+import { combatStats, aggregate, COMBAT_V } from './stats.js';
 import { summarize, SUMMARY_V } from './summary.js';
 import { extractDerived, validDerived, MAP_SIZE } from './telemetry.js';
 import SESSION_JS from './client/session.js';
@@ -203,6 +204,13 @@ async function warm(env) {
     await recap(env, r);
     return 'recap';
   }
+  const c = await db.prepare(`SELECT d.match_id, m.map, d.json FROM derived d JOIN matches m ON m.match_id = d.match_id
+    LEFT JOIN combat c ON c.match_id = d.match_id WHERE (c.v IS NULL OR c.v < ?) AND json_extract(d.json, '$.v') >= 8 LIMIT 1`).bind(COMBAT_V).first();
+  if (c) {
+    const card = combatStats(JSON.parse(c.json), MAP_SIZE[c.map] || 816000);
+    await db.prepare('INSERT OR REPLACE INTO combat (match_id, v, json) VALUES (?, ?, ?)').bind(c.match_id, COMBAT_V, JSON.stringify(card)).run();
+    return 'combat';
+  }
   await hallData(env);
   await db.prepare(`UPDATE settings SET value = json_set(value, '$.warm', json('false')) WHERE key = 'poll_state'`).run();
   return 'hall';
@@ -310,6 +318,7 @@ async function putDerived(env, id, req) {
       WHERE json_extract(derived.json, '$.v') < json_extract(excluded.json, '$.v')`).bind(id, text),
     env.DB.prepare('UPDATE matches SET processed_level = 2 WHERE match_id = ? AND processed_level < 2').bind(id),
   ]);
+  await markWarm(env.DB);
   return json({ ok: true });
 }
 
@@ -479,6 +488,18 @@ export default {
           if (!ps) return notFoundPage(lang);
           return sessionPage({ lang, session: ps.session, summary: ps.summary, members: ps.members, origin: url.origin, ogVer: '0', ogReady: true,
             derivedIds: new Map(), clan: null, path: path + url.search, pub: { name: ps.name, tele: ps.tele } });
+        }
+        if (path === '/stats') {
+          const db = env.DB;
+          const [members, cards, rows] = await Promise.all([
+            db.prepare('SELECT account_id, nickname, color, emoji, active FROM members WHERE active = 1').all(),
+            db.prepare('SELECT c.match_id, c.json, m.map, m.created_at FROM combat c JOIN matches m ON m.match_id = c.match_id').all(),
+            db.prepare(`SELECT p.account_id, p.match_id, p.place, p.kills, p.damage, p.time_survived, m.created_at, sm.session_id FROM participants p
+              JOIN members mb ON mb.account_id = p.account_id AND mb.active = 1 JOIN matches m ON m.match_id = p.match_id
+              JOIN session_matches sm ON sm.match_id = p.match_id`).all(),
+          ]);
+          const a = aggregate(cards.results.map((r) => ({ match_id: r.match_id, map: r.map, created_at: r.created_at, card: JSON.parse(r.json) })), rows.results, members.results);
+          return statsPage({ lang, path, stats: a, members: members.results, matches: cards.results.length, clan: await clanOf(db) });
         }
         if (path === '/maps') {
           const kind = url.searchParams.get('kind') === 'death' ? 'death' : 'land';

@@ -90,6 +90,15 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .qplay{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:4px 10px 4px 4px;border-radius:999px;border:1px solid rgba(242,169,0,.45);background:rgba(242,169,0,.1);color:var(--gold2);cursor:pointer}
 .qplay b{font-size:13px}
 .gi{width:27px;height:10.5px;image-rendering:pixelated;vertical-align:-1px;margin-inline-end:4px}.map .sqb .gi{width:18px;height:7px;margin-inline-end:3px}
+.sgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}@media (min-width:700px){.sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (min-width:1100px){main:has(.sgrid){max-width:1100px}.sgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+.brow{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr) auto;gap:8px;align-items:center;min-height:30px;font-size:14px}.brow .bn{display:flex;gap:6px;align-items:center;min-width:0;overflow:hidden;white-space:nowrap}
+.brow .bt,.arow .bt{display:block;height:8px;background:#0b0e12;border-radius:4px;overflow:hidden;min-width:30px}.brow .bt u,.arow .bt u{display:block;height:100%;border-radius:4px}
+.arow .bt u{background:var(--gold)}.bv{font-weight:700;font-size:14px;text-align:end}
+.arow{display:grid;grid-template-columns:30px 76px minmax(0,1fr) 40px;gap:6px;align-items:center;min-height:24px;font-size:13px}.arow .an{color:var(--muted)}
+.wst{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:10px 0 6px;text-align:center}.wst b{display:block;font-size:18px}.wst span{font-size:10px;color:var(--muted);line-height:1.2;display:block}
+.arsenal{margin-top:8px}.trend{width:100%;height:96px;display:block;margin-top:6px}.tv{display:flex;justify-content:space-between;align-items:baseline}.tv b{font-size:20px;color:var(--gold2)}
+.big{font:700 34px/1.1 var(--mono);color:var(--gold2);margin:6px 0}.st i{display:block;font-style:normal;margin-top:2px}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -462,7 +471,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
 }
 
 /** Tabs under the tape: sessions | hall of fame. */
-export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a><a href="/maps" class="${active === 'maps' ? 'on' : ''}">🗺 ${esc(S[lang].navMaps)}</a><a href="/look" class="${active === 'look' ? 'on' : ''}">🔎 ${esc(S[lang].lookNav)}</a></nav>`;
+export const nav = (lang, active) => `<nav class="tabs"><a href="/" class="${active === 'sessions' ? 'on' : ''}">${esc(S[lang].navSessions)}</a><a href="/hall" class="${active === 'hall' ? 'on' : ''}">🏆 ${esc(S[lang].navHall)}</a><a href="/maps" class="${active === 'maps' ? 'on' : ''}">🗺 ${esc(S[lang].navMaps)}</a><a href="/stats" class="${active === 'stats' ? 'on' : ''}">📊 ${esc(S[lang].navStats)}</a><a href="/look" class="${active === 'look' ? 'on' : ''}">🔎 ${esc(S[lang].lookNav)}</a></nav>`;
 
 /** /maps — per-map heatmap of where we land (or die), filterable by player. */
 export function mapsPage({ lang, maps, map, kind, points, members, clan }) {
@@ -708,4 +717,81 @@ a.innerHTML='<div class="row sp" style="flex-wrap:nowrap;gap:10px"><span class="
 }).catch(function(){a.remove()})});})();` : '';
   return page(lang, `${t.lookTitle} · ${t.brand}`, `${top(lang, path)}${nav(lang, 'look')}<h1 style="margin-top:18px;font-family:var(--head)">${esc(t.lookTitle)}</h1>
     <p class="muted">${esc(t.lookIntro)}</p>${form}${err}${list}<p class="muted small" style="margin-top:18px">${esc(t.lookPrivacy)}</p>`, { script });
+}
+
+// ---- /stats: combat intel ----
+const CLS_NAME = { sr: 'Sniper', dmr: 'DMR', ar: 'AR', lmg: 'LMG', smg: 'SMG', sg: 'Shotgun', pistol: 'Pistol', boom: 'Explosives', melee: 'Melee', other: 'Other' };
+const fmtN = (t, s, o) => s.replace(/\{(\w+)\}/g, (_, k) => (o[k] == null ? '' : o[k]));
+/** One series over sessions: a 2 px line, dots with a hover title, first/last values labelled. */
+function trendChart(points, key, unit, invert) {
+  if (points.length < 2) return '';
+  const W = 320; const H = 96; const pad = 14;
+  const vals = points.map((p) => p[key]);
+  const lo = Math.min(...vals); const hi = Math.max(...vals); const span = hi - lo || 1;
+  const X = (i) => pad + i * (W - pad * 2) / (points.length - 1);
+  const Y = (v) => { const f = (v - lo) / span; return pad + (invert ? f : 1 - f) * (H - pad * 2); };
+  const pts = points.map((p, i) => `${X(i).toFixed(1)},${Y(p[key]).toFixed(1)}`).join(' ');
+  const last = points[points.length - 1];
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" preserveAspectRatio="none">
+    <line x1="${pad}" x2="${W - pad}" y1="${H - pad + 4}" y2="${H - pad + 4}" stroke="var(--line)" stroke-width="1"/>
+    <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    ${points.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p[key]).toFixed(1)}" r="${i === points.length - 1 ? 4 : 3}" fill="${i === points.length - 1 ? 'var(--gold)' : '#0b0e12'}" stroke="var(--gold)" stroke-width="2" vector-effect="non-scaling-stroke"><title>${esc(fmtDate(p.at))}: ${p[key]}${unit}</title></circle>`).join('')}
+  </svg><div class="tv"><span class="muted small" dir="ltr">${esc(fmtDate(points[0].at))}: ${points[0][key]}${unit}</span><b dir="ltr">${last[key]}${unit}</b></div>`;
+}
+export function statsPage({ lang, path, stats, members, matches, clan }) {
+  const t = S[lang];
+  const byId = new Map(members.map((m) => [m.account_id, m]));
+  const P = stats.players.filter((p) => byId.has(p.id)).sort((a, b) => b.dmg - a.dmg);
+  const who = (id) => { const m = byId.get(id); return m ? `${pt(m, 18)}<b>${esc(m.nickname)}</b>` : ''; };
+  // a per-player bar list (member colour + name, so identity never rides on colour alone)
+  const bars = (title, key, unit = '', note = '') => {
+    const rows = P.filter((p) => p[key] !== null && p[key] !== undefined);
+    if (!rows.length) return '';
+    const max = Math.max(...rows.map((p) => p[key])) || 1;
+    return `<div class="sbox"><div class="kicker">${esc(title)}</div>${note ? `<div class="muted small">${esc(note)}</div>` : ''}${rows.slice().sort((a, b) => b[key] - a[key]).map((p) => {
+      const m = byId.get(p.id);
+      return `<div class="brow"><span class="bn">${who(p.id)}</span><span class="bt"><u style="width:${Math.max(2, p[key] / max * 100).toFixed(1)}%;background:${esc(m.color)}"></u></span><span class="bv num" dir="ltr">${p[key]}${unit}</span></div>`;
+    }).join('')}</div>`;
+  };
+  const f = stats.fights;
+  const tile = (big, label, sub) => `<div class="st"><b>${big}</b><span>${esc(label)}</span>${sub ? `<i class="muted small">${esc(sub)}</i>` : ''}</div>`;
+  const first = f.n ? `<h2>${esc(t.stFirst)} <span class="tag">FIRST SHOT</span></h2><div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+      ${tile(f.firstUsRate === null ? '—' : f.firstUsRate + '%', t.stFirstUs, fmtN(t, t.stWon, { p: f.firstUsRate ?? '—', n: f.firstUs }))}
+      ${tile(f.firstThemRate === null ? '—' : f.firstThemRate + '%', t.stFirstThem, fmtN(t, t.stWon, { p: f.firstThemRate ?? '—', n: f.firstThem }))}</div>
+    <p class="muted small">${esc(fmtN(t, t.stFights, { n: f.n, d: Math.round(f.dealt / f.n), t: Math.round(f.taken / f.n) }))}</p>` : '';
+  const tr = stats.trend;
+  const trends = tr.length >= 2 ? `<h2>${esc(t.stTrend)} <span class="tag">TRENDS</span></h2><div class="sgrid">
+      <div class="sbox"><div class="kicker">${esc(t.stPlace)}</div><div class="muted small">${esc(t.stLower)}</div>${trendChart(tr, 'place', '', true)}</div>
+      <div class="sbox"><div class="kicker">${esc(t.stKills)}</div>${trendChart(tr, 'kills', '')}</div>
+      <div class="sbox"><div class="kicker">${esc(t.stDmg)}</div>${trendChart(tr, 'dmg', '')}</div>
+      <div class="sbox"><div class="kicker">${esc(t.stTop10)}</div>${trendChart(tr, 'top10', '%')}</div></div>` : '';
+  const weaponCards = `<h2>${esc(t.stWeapons)} <span class="tag">WEAPONS</span></h2><div class="sgrid">${P.map((p) => `<div class="sbox wcard">
+      <div class="row" style="gap:6px;flex-wrap:nowrap">${who(p.id)}</div>
+      <div class="wst"><div><b class="num">${p.acc ?? '—'}${p.acc !== null ? '%' : ''}</b><span>${esc(t.stAcc)}</span></div><div><b class="num">${p.headPct ?? '—'}${p.headPct !== null ? '%' : ''}</b><span>${esc(t.stHead)}</span></div>
+        <div><b class="num">${p.dist ?? '—'}${p.dist !== null ? 'm' : ''}</b><span>${esc(t.stDist)}</span></div><div><b class="num">${p.long}m</b><span>${esc(t.stLong)}</span></div></div>
+      <div class="muted small">${esc(fmtN(t, t.stShots, { h: p.hits, s: p.shots }))}</div>
+      ${p.fav ? `<div class="small" style="margin-top:4px"><span class="muted">${esc(t.stFav)}:</span> <span data-gun="${esc(p.fav)}"></span><b dir="ltr">${esc(p.fav)}</b></div>` : ''}
+      <div class="arsenal">${Object.entries(p.cls).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, v]) => {
+        const tot = Object.values(p.cls).reduce((s, x) => s + x, 0) || 1;
+        return `<div class="arow"><span data-cls="${esc(c)}"></span><span class="an">${esc(CLS_NAME[c] || c)}</span><span class="bt"><u style="width:${(v / tot * 100).toFixed(1)}%"></u></span><span class="bv num">${Math.round(v / tot * 100)}%</span></div>`;
+      }).join('')}</div></div>`).join('')}</div>`;
+  const profile = `<h2>${esc(t.stProfile)} <span class="tag">PROFILE</span></h2><div class="sgrid">
+      ${bars(t.stKd, 'kd')}${bars(t.stTtk, 'ttk', 's', t.stLower)}${bars(t.stTrade, 'trade')}${bars(t.stDealt, 'dmg')}${bars(t.stTaken, 'taken', '', t.stLower)}${bars(t.stRev, 'revives')}${bars(t.stRevd, 'revived')}${bars(t.stSurv, 'surviveMin', "'")}</div>`;
+  const move = `<h2>${esc(t.stMove)} <span class="tag">MOVEMENT</span></h2><div class="sgrid">
+      ${bars(t.stHot, 'hot')}${bars(t.stFirstFight, 'firstFight', 's')}${bars(t.stVeh, 'vehMin', "'")}${bars(t.stZone, 'outZoneMin', "'", t.stLower)}</div>`;
+  const pairs = stats.pairs.length ? `<h2>${esc(t.stPairs)} <span class="tag">CHEMISTRY</span></h2><div class="sbox">${stats.pairs.filter((x) => byId.has(x.a) && byId.has(x.b)).slice(0, 8).map((x) => `<div class="brow"><span class="bn">${who(x.a)} + ${who(x.b)}</span><span class="muted small">${esc(fmtN(t, t.stGames, { n: x.n }))} · top 10 ${x.top10}%</span><span class="bv num" dir="ltr">#${x.place}</span></div>`).join('')}</div>` : '';
+  const dz = stats.deaths;
+  const dTot = Object.values(dz.by).reduce((s, x) => s + x, 0);
+  const enemy = dTot ? `<h2>${esc(t.stEnemy)} <span class="tag">ENEMY INTEL</span></h2><div class="sgrid">
+      <div class="sbox"><div class="kicker">${esc(t.stDeathBy)}</div>${Object.entries(dz.by).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="arow"><span data-cls="${esc(c)}"></span><span class="an">${esc(CLS_NAME[c] || c)}</span><span class="bt"><u style="width:${(v / dTot * 100).toFixed(1)}%"></u></span><span class="bv num">${v}</span></div>`).join('')}</div>
+      <div class="sbox"><div class="kicker">${esc(t.stDeathDist)}</div><div class="big num" dir="ltr">${dz.median ?? '—'}${dz.median !== null ? 'm' : ''}</div>
+        <div class="kicker" style="margin-top:10px">${esc(t.stDeathTeam)}</div>${Object.entries(dz.team).sort().map(([k, v]) => `<div class="arow"><span class="an" dir="ltr">${esc(k)} × </span><span class="bt"><u style="width:${(v / dTot * 100).toFixed(1)}%"></u></span><span class="bv num">${v}</span></div>`).join('')}</div>
+      <div class="sbox"><div class="kicker">${esc(t.stKillers)}</div>${dz.killers.map(([n, v]) => `<div class="brow"><span class="bn" dir="ltr"><b>${esc(n)}</b></span><span class="bv num">×${v}</span></div>`).join('')}</div></div>` : '';
+  const body = matches ? `${first}${trends}${weaponCards}${profile}${move}${pairs}${enemy}` : `<p class="muted">${esc(t.stNone)}</p>`;
+  const script = `window.addEventListener('load',function(){if(!window.PIX)return;var W={sr:1,dmr:1,ar:1,lmg:1,smg:1,sg:1,pistol:1};
+var cls=function(w){w=String(w).toLowerCase();return /kar98|m24|awm|mosin|win94|lynx|dragunov/.test(w)?'sr':/mini14|sks|slr|mk14|mk12|vss|qbu|fnfal|dmr/.test(w)?'dmr':/s12k|s1897|s686|saiga|dbs|o12|sawnoff/.test(w)?'sg':/m249|dp28|mg3/.test(w)?'lmg':/uzi|ump|vector|tommy|thompson|bizon|mp5|mp9|p90|js9/.test(w)?'smg':/p92|p1911|p18|r1895|r45|deagle|skorpion/.test(w)?'pistol':'ar'};
+var put=function(el,c){var ic=W[c]&&PIX.gun(c);if(ic)el.innerHTML='<img class="gi" src="'+ic.url+'" alt="">'};
+document.querySelectorAll('[data-cls]').forEach(function(e){put(e,e.dataset.cls)});document.querySelectorAll('[data-gun]').forEach(function(e){put(e,cls(e.dataset.gun))});});`;
+  return page(lang, `${t.stTitle} · ${t.brand}`, `${top(lang, path, false, clan)}${nav(lang, 'stats')}<h1 style="margin-top:18px;font-family:var(--head)">${esc(t.stTitle)}</h1>
+    <p class="muted">${esc(fmtN(t, t.stSub, { n: matches }))}</p>${body}`, { scripts: ['/app/pixel.js?v=6'], script });
 }

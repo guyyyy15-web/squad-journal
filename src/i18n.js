@@ -39,6 +39,13 @@ export const awardText = (lang, a) => (AWARD_TEXT[lang][a.id] || (() => ''))(a.v
 /** Strings used by the server pages and (a subset, see CLIENT_KEYS) by the browser. */
 export const S = {
   en: {
+    navStats: 'Stats', stTitle: 'Combat intel', stSub: 'Counted from every shot, hit and step in the telemetry of {n} matches.',
+    stFirst: 'Who shoots first', stFirstUs: 'we opened fire', stFirstThem: 'they opened fire', stWon: 'clean wins in {p}% of {n} fights', stFights: '{n} firefights · {d} dealt vs {t} taken per fight',
+    stTrend: 'Trends by session', stPlace: 'Average place', stKills: 'Kills per game', stDmg: 'Damage per game', stTop10: 'Top 10 rate', stLower: 'lower is better',
+    stWeapons: 'Accuracy & weapons', stAcc: 'Accuracy', stHead: 'Headshots', stDist: 'Avg fight distance', stLong: 'Longest hit', stFav: 'Favourite gun', stShots: '{h} hits out of {s} shots',
+    stArsenal: 'What everyone fires (share of damage)', stProfile: 'Combat profile', stKd: 'Knocks per time downed', stTtk: 'Time to knock', stTrade: 'Damage dealt per damage taken', stDealt: 'Dealt per game', stTaken: 'Taken per game', stRev: 'Revives given', stRevd: 'Revived by mates', stSurv: 'Survival per game',
+    stMove: 'Landing & movement', stHot: 'Enemies around the landing', stFirstFight: 'Landing → first fight', stVeh: 'Minutes in vehicles', stZone: 'Minutes outside the zone',
+    stPairs: 'Squad chemistry (average place together)', stGames: '{n} games', stEnemy: 'How we die', stDeathBy: 'Killed by', stDeathDist: 'Median distance of our deaths', stDeathTeam: 'Size of the squad that got us', stKillers: 'Most wanted', stNone: 'Not enough data yet',
     lookNav: 'Look up', lookTitle: 'Replay any PUBG match', lookIntro: 'Type a PUBG (Steam) name and watch their last matches as a cinematic replay: the drop, every fight, every shot, in retro pixels.', lookPh: 'PUBG name (exact)', lookGo: 'Find', lookBusy: 'Too many look-ups right now. Try again in a minute.', lookNone: 'No Steam player with that name (names are case-sensitive).', lookName: 'That does not look like a PUBG name.', lookNoMatches: 'No matches in the last 14 days.', lookRecent: 'Last matches of {n}', lookWatch: 'Watch replay', lookPrivacy: 'Public data from the official PUBG API. The replay is analysed in your browser; nothing about this player is stored.', lookOther: 'Look up another player', lookLoading: 'Loading…',
     dir: 'ltr', brand: 'Squad Journal', allSessions: 'All sessions', otherLang: 'עברית', footer: 'Squad Journal · built on the PUBG API · not affiliated with KRAFTON', season: 'SEASON', sessions: 'Sessions', matches: 'Matches', chickens: 'Chicken dinners', kills: 'Kills', damage: 'Damage',
     updated: (a) => `synced ${a}`, games: (n) => `${n} games`, best: 'Best', bestPlace: 'Best place', carriedTheNight: 'Carried the night:',
@@ -77,6 +84,13 @@ export const S = {
     agoNow: 'just now', agoMin: (m) => `${m} min ago`, agoHour: (h) => (h === 1 ? '1 hour ago' : `${h} hours ago`), agoDay: (d) => (d === 1 ? 'yesterday' : `${d} days ago`),
   },
   he: {
+    navStats: 'סטטיסטיקה', stTitle: 'מודיעין קרבי', stSub: 'נספר מכל ירייה, פגיעה וצעד בטלמטריה של {n} משחקים.',
+    stFirst: 'מי יורה ראשון', stFirstUs: 'אנחנו פתחנו באש', stFirstThem: 'הם פתחו באש', stWon: 'ניצחון נקי ב-{p}% מ-{n} קרבות', stFights: '{n} קרבות · {d} נזק שנתנו מול {t} שספגנו בממוצע לקרב',
+    stTrend: 'מגמות לפי ערב', stPlace: 'מקום ממוצע', stKills: 'הריגות למשחק', stDmg: 'נזק למשחק', stTop10: 'אחוז טופ 10', stLower: 'נמוך יותר = טוב יותר',
+    stWeapons: 'דיוק ונשקים', stAcc: 'דיוק', stHead: 'פגיעות ראש', stDist: 'מרחק קרב ממוצע', stLong: 'הפגיעה הכי רחוקה', stFav: 'הנשק המועדף', stShots: '{h} פגיעות מתוך {s} יריות',
+    stArsenal: 'במה כל אחד יורה (חלק מהנזק)', stProfile: 'פרופיל קרבי', stKd: 'נוקים לכל נפילה', stTtk: 'זמן עד נוק', stTrade: 'נזק שנתן לכל נזק שספג', stDealt: 'נזק למשחק', stTaken: 'ספג למשחק', stRev: 'החייאות שנתן', stRevd: 'הוקם ע״י חברים', stSurv: 'הישרדות למשחק',
+    stMove: 'נחיתה ותנועה', stHot: 'אויבים סביב הנחיתה', stFirstFight: 'מנחיתה לקרב הראשון', stVeh: 'דקות ברכבים', stZone: 'דקות מחוץ לאזור',
+    stPairs: 'כימיה בסקוואד (מקום ממוצע ביחד)', stGames: '{n} משחקים', stEnemy: 'איך אנחנו מתים', stDeathBy: 'נהרגנו מ…', stDeathDist: 'מרחק חציוני של המוות שלנו', stDeathTeam: 'גודל הסקוואד שהוריד אותנו', stKillers: 'המבוקשים', stNone: 'עוד אין מספיק נתונים',
     lookNav: 'חיפוש', lookTitle: 'ריפליי לכל משחק PUBG', lookIntro: 'מקלידים שם PUBG (Steam) וצופים במשחקים האחרונים שלו כריפליי קולנועי: הצניחה, כל קרב, כל ירייה, בפיקסלים רטרו.', lookPh: 'שם ב-PUBG (מדויק)', lookGo: 'חיפוש', lookBusy: 'יותר מדי חיפושים כרגע. נסו שוב בעוד דקה.', lookNone: 'אין שחקן Steam בשם הזה (יש הבדל בין אותיות גדולות לקטנות).', lookName: 'זה לא נראה כמו שם ב-PUBG.', lookNoMatches: 'אין משחקים ב-14 הימים האחרונים.', lookRecent: 'המשחקים האחרונים של {n}', lookWatch: 'לצפייה בריפליי', lookPrivacy: 'מידע ציבורי מה-API הרשמי של PUBG. הריפליי מנותח בדפדפן שלכם; שום דבר על השחקן לא נשמר.', lookOther: 'לחפש שחקן אחר', lookLoading: 'טוען…',
     dir: 'rtl', brand: 'יומן הסקוואד', allSessions: 'כל הסשנים', otherLang: 'English', footer: 'יומן הסקוואד · נבנה מנתוני PUBG API · לא קשור ל־KRAFTON', season: 'SEASON', sessions: 'סשנים', matches: 'משחקים', chickens: 'צ׳יקנים', kills: 'הריגות', damage: 'נזק',
     updated: (a) => `עודכן ${a}`, games: (n) => `${n} משחקים`, best: 'שיא', bestPlace: 'מקום הכי טוב', carriedTheNight: 'סחב את הערב:',

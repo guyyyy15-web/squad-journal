@@ -92,6 +92,12 @@ GitHub does **not** deploy.
   no walking trails; pixel sprites only when the camera is close (view < 190 units, back to unit patches > 230);
   marker positions are eased each frame (snap on seeks / jumps > 40 units); a name pill in the member's colour with a
   pixel gun icon (`PIX.gun`) next to it; tracers are rounds in flight (pointed tips, dashed sniper streaks).
+- **Stats** (`/stats`, `src/stats.js`, tested): `combatStats(derived, mapSize)` → a ~2–5 KB combat card per match in D1
+  `combat` (migration 0003; `COMBAT_V`, now 2), computed by `warm()` one per cron run (never in a page request; backfill
+  locally with a script + `wrangler d1 execute --file`). `aggregate()` merges cards with members' PUBG stats: first shot
+  vs clean-win rate (no one of ours lost and dealt ≥ taken), session trends, accuracy (hits/shots), headshot %, fight
+  distance, damage by weapon class, knock ratio, time to knock, trade ratio, revives, landing heat, time to first fight,
+  vehicle and out-of-zone minutes, pair chemistry, how we die. Charts: one series each, bars in member colours + names.
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
   (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move
