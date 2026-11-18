@@ -99,6 +99,13 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .wst{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:10px 0 6px;text-align:center}.wst b{display:block;font-size:18px}.wst span{font-size:10px;color:var(--muted);line-height:1.2;display:block}
 .arsenal{margin-top:8px}.trend{width:100%;height:96px;display:block;margin-top:6px}.tv{display:flex;justify-content:space-between;align-items:baseline}.tv b{font-size:20px;color:var(--gold2)}
 .big{font:700 34px/1.1 var(--mono);color:var(--gold2);margin:6px 0}.st i{display:block;font-style:normal;margin-top:2px}
+.map .battle.onmap{position:absolute;left:6px;right:104px;bottom:6px;margin:0;z-index:3;max-height:46%;overflow:hidden;padding:4px 6px;border-width:2px;box-shadow:0 0 0 2px #0b0d12,0 0 0 3px var(--gold);background:rgba(11,13,18,.9)}
+.map .battle.onmap .bh{font-size:7px;margin-bottom:2px}.map .battle.onmap .bg{gap:6px}.map .battle.onmap .fr{padding:1px 0;gap:4px}
+.map .battle.onmap .fr .nm{font-size:9px}.map .battle.onmap .fr .hpn{font-size:7px}.map .battle.onmap .fr .hpb{height:4px}.map .battle.onmap .fr .gr{font-size:6px}
+.map .battle.onmap .fr .patch,.map .battle.onmap .fr .foe{width:14px;height:16px;font-size:11px}.map .battle.onmap .gi{width:18px;height:7px}
+.map .battle.onmap{max-height:30%;padding:3px 5px}.map .battle.onmap .bh,.map .battle.onmap .fr .gr{display:none}.map .battle.onmap .fr{padding:0}.map .battle.onmap .fr .hpb{margin-top:1px}
+.map.cine .bn{top:calc(6% + 46px)}
+.map .bn .bz{font:9px/1.3 "Press Start 2P",monospace;color:#9fd3e6}.map .hud .h-ar{color:#9fd3e6}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -442,7 +449,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
       ${m.place === 1 ? `<div class="winner">${esc(t.winner)} 🍗</div>` : ''}
       <div class="muted small">${esc(modeName(m.mode))} · ${esc(t.min(Math.round(m.duration / 60)))}</div>
       <div class="mbody"><div class="stage">
-      <div class="map" data-match="${esc(m.match_id)}" data-map="${esc(m.map)}" style="background-image:url(/maps/${esc(m.map)}.jpg)">
+      <div class="map" data-match="${esc(m.match_id)}" data-map="${esc(m.map)}" style="background-image:url(/maps/${esc(m.map)}.jpg?v=2)">
         <div class="ov">${esc(clientStrings(lang).loadOnScroll)}</div></div>
       <div class="rbar hide" data-rbar="${esc(m.match_id)}"></div>
       <div class="legend">${t.legend.map((x, j) => `<span>${['🪂', '✕', '<span style="color:#ff6b6b">●</span>', '◯', '┅'][j]} ${esc(x)}</span>`).join('')}</div>
@@ -466,7 +473,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=67'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=70'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 
@@ -489,7 +496,7 @@ export function mapsPage({ lang, maps, map, kind, points, members, clan }) {
   const hot = kind === 'death' ? '229,56,59' : '242,169,0';
   const svg = `<svg class="mp" viewBox="${box.map((v) => Math.round(v)).join(' ')} ${Math.round(box[2])}" xmlns="http://www.w3.org/2000/svg">
     <defs><radialGradient id="heat"><stop offset="0" stop-color="rgb(${hot})" stop-opacity=".55"/><stop offset="1" stop-color="rgb(${hot})" stop-opacity="0"/></radialGradient></defs>
-    <image href="/maps/${esc(map)}.jpg" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/><rect width="1000" height="1000" fill="rgba(5,7,10,.35)"/>
+    <image href="/maps/${esc(map)}.jpg?v=2" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/><rect width="1000" height="1000" fill="rgba(5,7,10,.35)"/>
     ${pts.map((p) => `<g class="hp" data-acc="${esc(p.account_id)}"><circle cx="${p.x}" cy="${p.y}" r="${u * 9}" fill="url(#heat)"/><circle cx="${p.x}" cy="${p.y}" r="${u * 0.9}" fill="${esc(byId.get(p.account_id).color)}" stroke="#000" stroke-width="${u * 0.3}"/></g>`).join('')}
   </svg>`;
   const who = [...new Set(pts.map((p) => p.account_id))].map((id) => byId.get(id));

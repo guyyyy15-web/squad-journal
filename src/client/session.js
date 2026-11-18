@@ -60,7 +60,7 @@
     return [Math.max(0, Math.min(1000 - size, cx - size / 2)), Math.max(0, Math.min(1000 - size, cy - size / 2)), size];
   }
   function baseLayers(match, d, tilesHtml) {
-    var out = ['<image href="/maps/' + esc(match.map) + '.jpg" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>', '<g class="tiles">' + (tilesHtml || '') + '</g>',
+    var out = ['<image href="/maps/' + esc(match.map) + '.jpg?v=2" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none"/>', '<g class="tiles">' + (tilesHtml || '') + '</g>',
       '<rect x="0" y="0" width="1000" height="1000" fill="rgba(5,7,10,.2)"/>'];
     if (d.plane) out.push('<line x1="' + d.plane[0][0] + '" y1="' + d.plane[0][1] + '" x2="' + d.plane[1][0] + '" y2="' + d.plane[1][1] + '" stroke="#fff" stroke-opacity=".6" stroke-width="2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke"/>');
     return out;
@@ -77,7 +77,7 @@
     var x0 = Math.max(0, Math.floor(box[0] / TILE)), x1 = Math.min(7, Math.floor((box[0] + box[2]) / TILE));
     var y0 = Math.max(0, Math.floor(box[1] / TILE)), y1 = Math.min(7, Math.floor((box[1] + box[2]) / TILE));
     for (var ty = y0; ty <= y1; ty++) for (var tx = x0; tx <= x1; tx++) {
-      out.push('<image data-k="' + tx + '_' + ty + '" href="/maps/hi/' + esc(code) + '/' + tx + '_' + ty + '.jpg" x="' + (tx * TILE - 0.2) + '" y="' + (ty * TILE - 0.2) + '" width="' + (TILE + 0.4) + '" height="' + (TILE + 0.4) + '" preserveAspectRatio="none"/>');
+      out.push('<image data-k="' + tx + '_' + ty + '" href="/maps/hi/' + esc(code) + '/' + tx + '_' + ty + '.jpg?v=2" x="' + (tx * TILE - 0.2) + '" y="' + (ty * TILE - 0.2) + '" width="' + (TILE + 0.4) + '" height="' + (TILE + 0.4) + '" preserveAspectRatio="none"/>');
     }
     return out.join('');
   }
@@ -245,12 +245,15 @@
   // Uses posAt, zoneAt, aliveAt, phaseAt, timelineMarks, actionNear, cameraTarget from /app/lib.js.
   var active = null; // one running replay at a time
   var view = [0, 0, 1000];
-  function label(x, y, u, text, color) {
-    // keep the callout inside the current frame (rough width: 1.35 units per character at this size)
-    var half = Math.min(view[2] / 2, text.length * u * 0.7);
-    x = Math.max(view[0] + half + u, Math.min(view[0] + view[2] - half - u, x));
-    y = Math.max(view[1] + u * 3, y);
-    return '<text x="' + x + '" y="' + y + '" font-size="' + (u * 1.9) + '" text-anchor="middle" fill="' + color + '" stroke="#05070a" stroke-width="' + (u * 0.7) + '" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(text) + '</text>';
+  // Callouts are collected per frame and laid out as RPG ribbons that never sit on top of each other.
+  var ribs = [];
+  function label(x, y, u, text, color, gun) { ribs.push({ x: x, y: y, u: u, text: text, color: color, gun: gun || '' }); return ''; }
+  // Place names from telemetry ("yasnayapolyana" → "Yasnaya Polyana")
+  var PLACE = { yasnayapolyana: 'Yasnaya Polyana', georgopol: 'Georgopol', pochinki: 'Pochinki', rozhok: 'Rozhok', mylta: 'Mylta', militarybase: 'Military Base', schoolapartments: 'School', shootingrange: 'Shooting Range', mylta_power: 'Mylta Power', lipovka: 'Lipovka', primorsk: 'Primorsk', novorepnoye: 'Novorepnoye', zharki: 'Zharki', severny: 'Severny', kameshki: 'Kameshki', gatka: 'Gatka', stalber: 'Stalber', ferrypier: 'Ferry Pier', quarry: 'Quarry', boatyard: 'Boatyard', ruins: 'Ruins', mansion: 'Mansion', prison: 'Prison', hospital: 'Hospital', school: 'School', farm: 'Farm', shelter: 'Shelter', waterTown: 'Water Town', dekamesto: 'Deka Mesto', podvosto: 'Podvosto', dobromesto: 'Dobro Mesto', krichas: 'Krichas', vihar: 'Vihar', cosmodrome: 'Cosmodrome', hotsprings: 'Hot Springs', jadenacity: 'Jadena City', meyran: 'Mey Ran', neonfactory: 'Neon Factory', ladrillera: 'La Cobreria', losleones: 'Los Leones', elpozo: 'El Pozo', sanmartin: 'San Martin', bootcamp: 'Bootcamp', paradise: 'Paradise Resort', ruins_sanhok: 'Ruins' };
+  function placeName(z) {
+    if (!z || /event|spot/i.test(z)) return '';
+    if (PLACE[z]) return PLACE[z];
+    return String(z).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
   function shortW(e) { return e.w ? ' · ' + weapon(e.w) + (e.d ? ' ' + e.d + 'm' : '') : ''; }
   // opts: { clip: [s, e], label, next: fn } — clip mode loops the window (or moves on to `next`).
@@ -329,7 +332,8 @@
     var cur = cameraTarget(d, match.ours, t), snap = true;
 
     var svg = ['<svg class="mp" xmlns="http://www.w3.org/2000/svg" viewBox="' + cur.join(' ') + ' ' + cur[2] + '">'].concat(baseLayers(match, d));
-    svg.push('<circle class="zs" fill="rgba(59,139,235,.08)" stroke="#3b8beb" stroke-width="3" vector-effect="non-scaling-stroke" r="0"/>');
+    svg.push('<path class="zout" fill="rgba(36,92,214,.24)" fill-rule="evenodd" d=""/>');
+    svg.push('<circle class="zs" fill="none" stroke="#5aa2ff" stroke-width="3" stroke-opacity=".9" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<circle class="zw" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" r="0"/>');
     svg.push('<defs class="pxd"></defs><g class="ops"></g>');
     svg.push('<g class="fx"></g><g class="pms">');
@@ -346,7 +350,7 @@
     svg.push('</g><g class="lb"></g></svg>');
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
-      + '<div class="hud"><b class="clock">0:00</b><span class="h-sq"></span><span class="h-left"></span><span class="h-ph"></span></div><div class="h-sm hide">SLOW-MO</div>'
+      + '<div class="hud"><b class="clock">0:00</b><span class="h-sq"></span><span class="h-left"></span><span class="h-ph"></span><span class="h-ar"></span></div><div class="h-sm hide">SLOW-MO</div>'
       + '<ol class="kf" aria-live="polite"></ol><div class="vig"></div><i class="lbx t"></i><i class="lbx b"></i><div class="tn"></div><div class="sqb"></div><button type="button" class="irb hide"></button>'
       + '<div class="tools"><button type="button" class="th" aria-label="' + esc(S.theater) + '">⛶</button><button type="button" class="cl" aria-label="' + esc(S.stop) + '">✕</button></div>';
 
@@ -371,8 +375,8 @@
     bar.innerHTML = '<div class="rrow" dir="ltr"><button type="button" class="pp" aria-label="play/pause">❚❚</button><div class="trk"><div class="tl">' + bands + tl + '</div><input type="range" min="' + Math.floor(t0) + '" max="' + Math.ceil(tEnd) + '" step="1" aria-label="time"></div><button type="button" class="ghost spd" aria-label="speed">AUTO</button></div><div class="cams">' + (opts.next ? '<button type="button" class="cam on nxt">⏭ ' + esc(S.next) + '</button>' : '') + '<button type="button" class="cam lnk" aria-label="' + esc(S.shareMoment) + '">🔗</button>' + (CLIP_ENABLED ? '<button type="button" class="cam clp" aria-label="' + esc(S.clip) + '">🎬</button>' : '') + chips + '</div>';
 
     var range = $('input', bar), pp = $('.pp', bar), spb = $('.spd', bar);
-    var svgEl = $('svg.mp', el), tileG = $('.tiles', el), zs = $('.zs', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
-    var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), sm: $('.h-sm', el) };
+    var svgEl = $('svg.mp', el), tileG = $('.tiles', el), zs = $('.zs', el), zout = $('.zout', el), zw = $('.zw', el), fx = $('.fx', el), lb = $('.lb', el), kf = $('.kf', el);
+    var hud = { clock: $('.clock', el), sq: $('.h-sq', el), left: $('.h-left', el), ph: $('.h-ph', el), ar: $('.h-ar', el), sm: $('.h-sm', el) };
     var pm = ids.map(function (_, i) { return el.querySelector('.pm[data-i="' + i + '"]'); });
     var chute = pm.map(function (g) { return g.querySelector('.chute'); });
     var sprEl = pm.map(function (g) { return g.querySelector('.spr'); }), tagEl = pm.map(function (g) { return g.querySelector('.pmt'); });
@@ -613,6 +617,26 @@
         + '<path d="M' + f1(last[0] + Math.cos(an) * u * 2) + ' ' + f1(last[1] + Math.sin(an) * u * 2) + 'L' + f1(last[0] + Math.cos(an + 2.5) * u * 1.6) + ' ' + f1(last[1] + Math.sin(an + 2.5) * u * 1.6) + 'L' + f1(last[0] + Math.cos(an - 2.5) * u * 1.6) + ' ' + f1(last[1] + Math.sin(an - 2.5) * u * 1.6) + 'Z" fill="#eef1f5"/>'
         + label(tr[0][0], tr[0][1] - u * 2.5, u, 'KILLCAM · ' + (mo.e.an || '?') + shortW(mo.e), '#eef1f5');
     }
+    // lay the ribbons out: newest last, pushed upwards until they no longer overlap, max 4
+    function ribbons(u) {
+      var list = ribs.slice(-4), placed = [], out = '', h = u * 3, pad = u * 0.8;
+      list.sort(function (a, b) { return b.y - a.y; });
+      list.forEach(function (r) {
+        var ic = r.gun && PIX.gun(r.gun), w = r.text.length * u * 0.98 + pad * 2 + (ic ? u * 5 : 0);
+        var x = Math.max(view[0] + u, Math.min(view[0] + view[2] - w - u, r.x - w / 2)), y = Math.max(view[1] + u * 7, r.y - h);
+        for (var k = 0; k < 6; k++) {
+          var hit = placed.filter(function (q) { return x < q.x + q.w && x + w > q.x && y < q.y + h && y + h > q.y; })[0];
+          if (!hit) break;
+          y = hit.y - h - u * 0.5;
+        }
+        placed.push({ x: x, y: y, w: w });
+        out += '<g><rect x="' + f1(x) + '" y="' + f1(y) + '" width="' + f1(w) + '" height="' + f1(h) + '" rx="' + f1(u * 0.6) + '" fill="#0b0d12" fill-opacity=".86" stroke="' + r.color + '" stroke-opacity=".7" stroke-width="1" vector-effect="non-scaling-stroke"/>'
+          + '<rect x="' + f1(x) + '" y="' + f1(y) + '" width="' + f1(u * 0.5) + '" height="' + f1(h) + '" fill="' + r.color + '"/>'
+          + (ic ? '<use href="#' + pxRef(ic) + '" x="' + f1(x + pad) + '" y="' + f1(y + h / 2 - u * 0.95) + '" width="' + f1(u * 4.6) + '" height="' + f1(u * 1.8) + '"/>' : '')
+          + '<text x="' + f1(x + pad + (ic ? u * 5 : 0)) + '" y="' + f1(y + h * 0.68) + '" font-size="' + f1(u * 1.7) + '" fill="#eef1f5" font-family="Rubik, sans-serif" font-weight="700">' + esc(r.text) + '</text></g>';
+      });
+      return out;
+    }
     function feedLine(e) {
       var A = '<b style="color:' + esc(colorOf(e.a)) + '">' + esc(nameOf(match, e.a, e.an)) + '</b>';
       var V = '<b style="color:' + esc(colorOf(e.v)) + '">' + esc(nameOf(match, e.v, e.vn)) + '</b>';
@@ -667,9 +691,17 @@
       hud.left.textContent = al ? 'ALIVE ' + al[0] : '';
       var ph = phaseAt(d, t);
       hud.ph.textContent = ph ? 'P' + ph : '';
+      var area = '';
+      for (var ai2 = ourEv.length - 1; ai2 >= 0; ai2--) { if (ourEv[ai2].t <= t && t - ourEv[ai2].t < 90 && ourEv[ai2].z) { area = ourEv[ai2].z; break; } }
+      if (!area) squadIds.some(function (id) { var pz = d.players[id]; if (pz.lz && pz.land && t >= pz.land[2] && t - pz.land[2] < 240) { area = pz.lz; return true; } return false; });
+      hud.ar.textContent = placeName(area).toUpperCase();
       // zones
       var z = zoneAt(d, t);
-      if (z) { zs.setAttribute('cx', z.safe[0]); zs.setAttribute('cy', z.safe[1]); zs.setAttribute('r', z.safe[2]); }
+      if (z) {
+        zs.setAttribute('cx', z.safe[0]); zs.setAttribute('cy', z.safe[1]); zs.setAttribute('r', z.safe[2]);
+        var zr = z.safe[2], zx = z.safe[0], zy = z.safe[1];
+        zout.setAttribute('d', 'M-3000 -3000H4000V4000H-3000Z M' + (zx - zr).toFixed(1) + ' ' + zy.toFixed(1) + 'a' + zr.toFixed(1) + ' ' + zr.toFixed(1) + ' 0 1 0 ' + (2 * zr).toFixed(1) + ' 0a' + zr.toFixed(1) + ' ' + zr.toFixed(1) + ' 0 1 0 ' + (-2 * zr).toFixed(1) + ' 0Z');
+      } else zout.setAttribute('d', '');
       if (z && z.warn) { zw.setAttribute('cx', z.warn[0]); zw.setAttribute('cy', z.warn[1]); zw.setAttribute('r', z.warn[2]); } else zw.setAttribute('r', 0);
       // players
       var moveFx = [];
@@ -726,7 +758,7 @@
         }
       });
       // events: flashes + callouts on the map, kill feed in the corner
-      var fxh = [], lbh = [], recent = [];
+      var fxh = [], lbh = [], recent = []; ribs = [];
       d.events.forEach(function (e) {
         var age = t - e.t;
         if (age < 0) return;
@@ -734,7 +766,7 @@
         if (!mine && e.k !== 'revive') return;
         if (e.k === 'kill' && ours.has(e.v)) {
           fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], us * 7, 0) + smokeFx(e.vp, age, u, (e.t % 7) / 7));
-          if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + shortW(e), '#ff8a8a'));
+          if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + (e.d ? ' ' + e.d + 'm' : ''), '#ff8a8a', weaponClass(e.w || '')));
         } else if (age > 8) {
           if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
         } else {
@@ -743,8 +775,8 @@
           fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.2) + '" fill="' + col + '"/>');
           if (e.ap && e.k !== 'revive') fxh.push('<line x1="' + e.ap[0] + '" y1="' + e.ap[1] + '" x2="' + e.vp[0] + '" y2="' + e.vp[1] + '" stroke="' + col + '" stroke-opacity="' + (1 - f) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>');
           var txt = e.k === 'revive' ? nameOf(match, e.a, e.an) + ' ✚ ' + nameOf(match, e.v, e.vn)
-            : nameOf(match, e.a, e.an) + (e.k === 'kill' ? ' ▸ ' : ' ◐ ') + nameOf(match, e.v, e.vn) + shortW(e);
-          lbh.push(label(e.vp[0], e.vp[1] - u * 3.4, u, txt, col === '#ff4d4d' ? '#ffb3b3' : col));
+            : nameOf(match, e.a, e.an) + (e.k === 'kill' ? ' ▸ ' : ' ◐ ') + nameOf(match, e.v, e.vn) + (e.d ? ' ' + e.d + 'm' : '');
+          lbh.push(label(e.vp[0], e.vp[1] - u * 3.4, u, txt, col === '#ff4d4d' ? '#ff6b6b' : col, e.k === 'revive' ? '' : weaponClass(e.w || '')));
         }
         if (age <= 14) recent.push(e);
       });
@@ -849,7 +881,7 @@
         fxh.push(ring(ps, u * 2.4, dn.bleed, '#ff4d4d', u));
       });
       fx.innerHTML = moveFx.join('') + fxh.join('');
-      lb.innerHTML = lbh.join('');
+      lb.innerHTML = lbh.join('') + ribbons(u);
       var shown = recent.slice(-2);
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
       if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
@@ -872,7 +904,8 @@
       if (!bn) { bn = document.createElement('div'); bn.className = 'bn'; el.appendChild(bn); }
       if (kind === 'intro') {
         var foes = fight.them.map(function (i) { return name(i); });
-        bn.innerHTML = '<b class="bt">ENGAGEMENT</b> <span class="bv">' + fight.us.length + ' VS ' + (fight.them.length || '?') + '</span>'
+        var fz = ''; d.events.some(function (e2) { if (e2.t >= curW.s && e2.t <= curW.e && e2.z) { fz = placeName(e2.z); return !!fz; } return false; });
+        bn.innerHTML = '<b class="bt">ENGAGEMENT</b> <span class="bv">' + fight.us.length + ' VS ' + (fight.them.length || '?') + '</span>' + (fz ? '<span class="bz"> · ' + esc(fz.toUpperCase()) + '</span>' : '')
           + (foes.length ? '<div class="bs" dir="ltr">' + esc(foes.slice(0, 3).join(' · ') + (foes.length > 3 ? ' +' + (foes.length - 3) : '')) + '</div>' : '');
       } else {
         var w = curW, mv = fight.mvp, mm = mv !== null ? member(model.pp[mv][0]) : null;
@@ -889,7 +922,7 @@
         battle = document.createElement('div'); battle.className = 'battle';
         var side = card.querySelector('.side');
         if (side && window.matchMedia('(min-width:1100px)').matches) side.insertBefore(battle, side.firstChild);
-        else el.parentNode.insertBefore(battle, el.nextSibling);
+        else { battle.className = 'battle onmap'; el.appendChild(battle); } // phones: on the map, so the fight and the panel are seen together
       }
       battle.innerHTML = '<div class="bh"><span>' + esc(S.squad) + '</span><span class="vsm">VS</span><span>' + esc(S.enemy) + '</span></div><div class="bg"><div class="side us"></div><div class="side them"></div></div>';
       battle.classList.remove('hide');
@@ -1063,7 +1096,7 @@
     if (!mime) return Promise.reject(new Error('unsupported'));
     var W = 720, REAL = 9, t0 = Math.max(0, tc - 10), t1 = tc + 8;
     var ours = new Set(match.ours), ids = Object.keys(d.players);
-    return Promise.all([loadImg('/maps/' + match.map + '.jpg'), document.fonts ? document.fonts.load('40px "Black Ops One"') : null]
+    return Promise.all([loadImg('/maps/' + match.map + '.jpg?v=2'), document.fonts ? document.fonts.load('40px "Black Ops One"') : null]
       .concat(ids.map(function (id) { var m = member(id); return img(patchSvg(m ? m.emblem : 'chevrons', colorOf(id), 64)); })))
       .then(function (res) {
         var mapImg = res[0], patches = res.slice(2);
@@ -1182,7 +1215,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=13');
+      var w = new Worker('/app/extract-worker.js?v=14');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -1208,7 +1241,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 9
+    var p = match.derived >= 10
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -1219,11 +1252,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 9)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 10)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 9)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 10)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

@@ -21,9 +21,11 @@ export function extractDerived(events, ours, mapSize) {
   for (const e of events) { if (e._T === 'LogMatchStart') { t0 = Date.parse(e._D); break; } }
   if (!t0 && events.length) t0 = Date.parse(events[0]._D);
   const T = (e) => Math.max(0, Math.round((Date.parse(e._D) - t0) / 1000));
+  // v10: the named area a character is in ("pochinki"), and whether a victim was a bot (ai.* accounts)
+  const Z = (c) => (c && Array.isArray(c.zone) && c.zone[0] ? String(c.zone[0]).slice(0, 32) : '');
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 9, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [], vr: [], cp: [], sw: [] };
+  const out = { v: 10, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [], vr: [], cp: [], sw: [] };
   // v9 — our vehicle rides vr: [t, p, cls, on] (cls 0 car · 1 motorbike · 2 bicycle · 3 boat · 4 glider · 5 buggy · 6 truck/armour),
   // care packages landing cp: [t, x, y], our swims sw: [t, p, on]
   const vrBuf = []; const swBuf = [];
@@ -85,13 +87,13 @@ export function extractDerived(events, ours, mapSize) {
         break;
       }
       case 'LogParachuteLanding':
-        if (set.has(e.character?.accountId)) pl(e.character).land ||= [...P(e.character.location), T(e)]; // first landing only (later parachutes: v8)
+        if (set.has(e.character?.accountId) && !pl(e.character).land) { pl(e.character).land = [...P(e.character.location), T(e)]; if (Z(e.character)) pl(e.character).lz = Z(e.character); } // first landing only (v8)
         else if (e.character) othLand[e.character.accountId] ??= T(e);
         break;
       case 'LogPlayerPosition': {
         const c = e.character;
         if (!c || !(e.elapsedTime > 0)) break;
-        if (set.has(c.accountId)) pl(c).path.push([T(e), ...P(c.location)]);
+        if (set.has(c.accountId)) { const me = pl(c); me.path.push([T(e), ...P(c.location)]); if (me.land && !me.lz && Z(c)) me.lz = Z(c); }
         else if (c.accountId) {
           (oth[c.accountId] ||= { c: { accountId: c.accountId, name: c.name, teamId: c.teamId }, pts: [] }).pts.push([T(e), ...P(c.location)]);
         }
@@ -162,7 +164,7 @@ export function extractDerived(events, ours, mapSize) {
         }
         if ((a && set.has(a.accountId)) || (v && set.has(v.accountId))) {
           out.events.push({ t: T(e), k: 'knock', a: a?.accountId || '', an: a?.name || '', at: a?.teamId || 0, v: v.accountId, vn: v.name, vt: v.teamId || 0,
-            ap: a ? P(a.location) : null, vp: P(v.location), w: W(e), d: Math.round((e.distance || 0) / 100) });
+            ap: a ? P(a.location) : null, vp: P(v.location), w: W(e), d: Math.round((e.distance || 0) / 100), z: Z(v), b: /^ai\./.test(v.accountId) ? 1 : 0 });
         }
         break;
       }
@@ -181,7 +183,7 @@ export function extractDerived(events, ours, mapSize) {
             ap: k ? P(k.location) : null, vp: P(v.location), w: W(e.killerDamageInfo || e.finishDamageInfo),
             d: D(e.killerDamageInfo || e.finishDamageInfo),
             km: e.dBNOMaker && set.has(e.dBNOMaker.accountId) ? e.dBNOMaker.accountId : '',
-            as: (e.assists_AccountId || []).filter((id) => set.has(id)).slice(0, 4) });
+            as: (e.assists_AccountId || []).filter((id) => set.has(id)).slice(0, 4), z: Z(v), b: /^ai\./.test(v.accountId) ? 1 : 0 });
         }
         break;
       }
@@ -261,7 +263,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;
@@ -272,6 +274,7 @@ export function validDerived(d, allowedIds) {
     const p = d.players[id];
     if (!str(p.name) || !Number.isInteger(p.team)) return false;
     for (const k of ['land', 'death', 'jump']) if (p[k] != null && !isPt(p[k], 3)) return false;
+    if (p.lz !== undefined && !str(p.lz, 32)) return false;
     if (!Array.isArray(p.path) || p.path.length > 400 || !p.path.every((x) => isPt(x, 3))) return false;
   }
   if (d.events.length > 400) return false;
@@ -317,6 +320,8 @@ export function validDerived(d, allowedIds) {
     if (e.d !== undefined && !isInt(e.d, 0, 10000)) return false;
     if (e.vt !== undefined && !isInt(e.vt, 0, 100000)) return false;
     if (e.at !== undefined && !isInt(e.at, 0, 100000)) return false;
+    if (e.z !== undefined && !str(e.z, 32)) return false;
+    if (e.b !== undefined && e.b !== 0 && e.b !== 1) return false;
     if (e.km !== undefined && !(str(e.km) && (e.km === '' || allowedIds.has(e.km)))) return false;
     if (e.as !== undefined && !(Array.isArray(e.as) && e.as.length <= 4 && e.as.every((id) => allowedIds.has(id)))) return false;
   }

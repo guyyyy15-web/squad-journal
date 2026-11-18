@@ -90,7 +90,7 @@ test('extractDerived on real telemetry', () => {
 test('validDerived rejects junk and foreign players', () => {
   const d = extractDerived(tele, OURS, MAP_SIZE.Tiger_Main);
   assert.equal(validDerived(d, new Set(OURS.slice(1))), false);
-  assert.equal(validDerived({ ...d, v: 10 }, new Set(OURS)), false);
+  assert.equal(validDerived({ ...d, v: 11 }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, sh: [[1, 999, 0, 1, 1]] }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, op: [[0, 10, 5, 1, 1]] }, new Set(OURS)), false);
   assert.equal(validDerived({ ...d, op: [[0, 10, 20, 1, 1, 2]] }, new Set(OURS)), false);

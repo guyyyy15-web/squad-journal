@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 9: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match; v7 drops their plane ride/parachute; v8 `sh` = real shots fired [t10, p, w, x, y] by us and the enemies who traded damage with us (±15 s), and only the first parachute landing counts; v9 `vr` our vehicle rides [t, p, cls 0 car·1 moto·2 bicycle·3 boat·4 glider·5 buggy·6 truck, on], `cp` care packages landing [t, x, y], `sw` our swims [t, p, on]). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 10: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match; v7 drops their plane ride/parachute; v8 `sh` = real shots fired [t10, p, w, x, y] by us and the enemies who traded damage with us (±15 s), and only the first parachute landing counts; v9 `vr` our vehicle rides [t, p, cls 0 car·1 moto·2 bicycle·3 boat·4 glider·5 buggy·6 truck, on], `cp` care packages landing [t, x, y], `sw` our swims [t, p, on]; v10 events carry `z` = the named area of the victim ("pochinki") and `b` = 1 for a bot (ai.* account), players carry `lz` = where they landed). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
@@ -98,6 +98,11 @@ GitHub does **not** deploy.
   vs clean-win rate (no one of ours lost and dealt ≥ taken), session trends, accuracy (hits/shots), headshot %, fight
   distance, damage by weapon class, knock ratio, time to knock, trade ratio, revives, landing heat, time to first fight,
   vehicle and out-of-zone minutes, pair chemistry, how we die. Charts: one series each, bars in member colours + names.
+- **Maps are text-free** (pubg/api-assets `*_No_Text_High_Res`, tiles + the 819 px base in R2; URLs carry `?v=2`), so
+  our own labels are the only text on the map. Callouts are RPG ribbons (`ribbons()`: gun icon, names, distance; max 4,
+  stacked so they never overlap). Outside the safe zone is shaded blue (`.zout`, even-odd path). The HUD shows the area
+  name (`placeName`), so does the ENGAGEMENT banner. On phones the battle panel sits on the map (`.battle.onmap`:
+  names + HP only); on desktop it stays in the side column.
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
   (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move
