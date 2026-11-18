@@ -14,6 +14,7 @@ import { summarize, SUMMARY_V } from './summary.js';
 import { extractDerived, validDerived, MAP_SIZE, DERIVED_V } from './telemetry.js';
 import SESSION_JS from './client/session.js';
 import PIXEL_JS from './client/pixel.js';
+import MUXER_JS from './client/mp4-muxer.js';
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
@@ -467,6 +468,7 @@ export default {
         if (path === '/app/lib.js') return asset(LIB_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/session.js') return asset(SESSION_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/pixel.js') return asset(PIXEL_JS, 'text/javascript; charset=utf-8', 31536000);
+        if (path === '/app/mp4-muxer.js') return asset(MUXER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/app/extract-worker.js') return asset(WORKER_JS, 'text/javascript; charset=utf-8', 31536000);
         if (path === '/api/status') return json(await status(env));
         // ---- public look-up (any PUBG player; nothing stored) ----

@@ -38,6 +38,9 @@
 
   // Video clips are hidden until they work the way Guy wants (the recorder below stays in place).
   var CLIP_ENABLED = /[?&]clip=1/.test(location.search);
+  // The replay reads time through pnow(): the wall clock normally, a virtual clock while a video is rendered frame by frame.
+  var VCLOCK = null;
+  var pnow = function () { return VCLOCK !== null ? VCLOCK : performance.now(); };
   var data = {}; // match id → derived
   SJ.matches.forEach(function (m, i) { m.n = i + 1; });
 
@@ -471,7 +474,7 @@
     function kindOf(p0, p1, dn) {
       if (dn) return 'down';
       var sp = p0 && p1 ? Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) : 0;
-      return sp > 2.4 ? 'car' : sp > 0.12 ? (Math.floor(performance.now() / 160) % 2 ? 'walkA' : 'walkB') : 'stand';
+      return sp > 2.4 ? 'car' : sp > 0.12 ? (Math.floor(pnow() / 160) % 2 ? 'walkA' : 'walkB') : 'stand';
     }
     var php = pm.map(function (g) { return g.querySelector('.php'); }), phf = pm.map(function (g) { return g.querySelector('.phf'); });
     var hpCol = function (h) { return h.state ? '#ff4d4d' : h.hp > 50 ? '#3ddc97' : h.hp > 25 ? '#ffcf4d' : '#ff4d4d'; };
@@ -565,7 +568,7 @@
     // dust kicked up behind someone moving (more and bigger for vehicles)
     function dustFx(p, p0, u, big) {
       if (!p0) return '';
-      var dx = p[0] - p0[0], dy = p[1] - p0[1], L = Math.hypot(dx, dy) || 1, out = '', now = performance.now() / 1000;
+      var dx = p[0] - p0[0], dy = p[1] - p0[1], L = Math.hypot(dx, dy) || 1, out = '', now = pnow() / 1000;
       for (var k = 0; k < (big ? 6 : 3); k++) {
         var ph = (now * (big ? 3 : 2) + k / (big ? 6 : 3)) % 1, back = u * (1 + ph * (big ? 7 : 3));
         out += sq(p[0] - dx / L * back + Math.sin(k * 2.1) * u * ph, p[1] - dy / L * back + u * 0.3, u * (big ? 1.6 : 0.8) * (0.6 + ph), '#b9a77a', 0.5 * (1 - ph));
@@ -575,7 +578,7 @@
     // smoke drifting up from a loot crate for a while
     function smokeFx(p, age, u, seed) {
       if (age < 0 || age > 25) return '';
-      var out = '', now = performance.now() / 1000;
+      var out = '', now = pnow() / 1000;
       for (var k = 0; k < 4; k++) {
         var ph = (now * 0.5 + k / 4 + seed) % 1;
         out += sq(p[0] + Math.sin(ph * 6 + k) * u * 0.8, p[1] - u * (3 + ph * 7), u * (0.9 + ph * 1.4), '#8b8f94', 0.45 * (1 - ph) * (1 - age / 25));
@@ -704,15 +707,17 @@
       var shot = mode === 'full' ? { box: [0, 0, 1000], kind: 'wide' } : irp ? irp.shot : (mode === 'auto' && dropShot(d, match.ours, t, plane)) || directorShot(d, model, match.ours, t, mode === 'auto' ? '' : mode);
       if (shot.kind === 'kill' || shot.kind === 'duel' || shot.kind === 'approach') { held = { shot: shot, t: t }; }
       else if (held && t - held.t < 2.5 && t >= held.t && shot.kind === 'follow') shot = held.shot; // let the moment breathe
-      var target = shot.box, nowMs = performance.now();
+      var target = shot.box, nowMs = pnow();
       var ccx = cur[0] + cur[2] / 2, ccy = cur[1] + cur[2] / 2, tcx = target[0] + target[2] / 2, tcy = target[1] + target[2] / 2;
       if (snap) { cur = target.slice(); snap = false; } else {
         // smooth only: a long move pulls back a little on the way (zoom out → glide → zoom in), never a jump
         var dt = realDt || 0.016, kill = shot.kind === 'kill', far = Math.hypot(tcx - ccx, tcy - ccy);
         var creep = shot.kind === 'stalk' || shot.kind === 'drop' || shot.kind === 'replay';
         var tsz = far > cur[2] * 0.7 && shot.kind !== 'plane' ? Math.max(target[2], Math.min(1000, far * 1.2)) : target[2];
-        var kp = 1 - Math.exp(-dt * (kill ? 3.5 : creep ? 1.6 : 2.4));
-        var kz = 1 - Math.exp(-dt * (tsz < cur[2] ? (kill ? 3 : creep ? 0.9 : 1.8) : 2.2)); // the slow push-in before contact
+        var calm = opts.calm ? 0.45 : 1;
+        if (opts.calm) tsz = Math.max(tsz, 45);
+        var kp = 1 - Math.exp(-dt * (kill ? 3.5 : creep ? 1.6 : 2.4) * calm);
+        var kz = 1 - Math.exp(-dt * (tsz < cur[2] ? (kill ? 3 : creep ? 0.9 : 1.8) : 2.2) * calm); // the slow push-in before contact
         var ncx = ccx + (tcx - ccx) * kp, ncy = ccy + (tcy - ccy) * kp, ns = cur[2] + (tsz - cur[2]) * kz;
         cur = [ncx - ns / 2, ncy - ns / 2, ns];
       }
@@ -724,7 +729,8 @@
         if (t - hh.t > 0.3) break;
         if (model.ourIdx.has(hh.a) || model.ourIdx.has(hh.v)) { shake = Math.max(shake, cur[2] * 0.01 * (1 - (t - hh.t) / 0.3)); if (hh.head) punch = 0.94; }
       }
-      if (performance.now() < freezeUntil) punch = Math.min(punch, 0.9);
+      if (opts.calm) { shake = 0; punch = 1; }
+      if (pnow() < freezeUntil && !opts.calm) punch = Math.min(punch, 0.9);
       var frameShift = (phase === 'fight' || bannerUntil) ? 1 : 0;
       offX += ((frameShift ? -0.06 : 0) - offX) * Math.min(1, (realDt || 0.016) * 2);
       offY += ((frameShift ? -0.03 : 0) - offY) * Math.min(1, (realDt || 0.016) * 2);
@@ -834,7 +840,7 @@
             php[i].setAttribute('display', '');
             phf[i].setAttribute('width', (4.7 * (hp.state ? 0.12 : hp.hp / 100)).toFixed(2));
             phf[i].setAttribute('fill', hpCol(hp));
-            php[i].setAttribute('opacity', hp.state === 1 ? (Math.floor(performance.now() / 300) % 2 ? '1' : '.35') : '1');
+            php[i].setAttribute('opacity', hp.state === 1 ? (Math.floor(pnow() / 300) % 2 ? '1' : '.35') : '1');
           } else php[i].setAttribute('display', 'none');
           if (rider) php[i].setAttribute('display', 'none');
         }
@@ -884,7 +890,7 @@
           if (c && hx.t - c.last < 0.5) { c.sum += hx.dmg; c.last = hx.t; c.n++; c.head = c.head || hx.head; c.vp = hx.vp; }
           else { c = combos[hx.v] = { sum: hx.dmg, last: hx.t, n: 1, head: hx.head, vp: hx.vp, col: hcol }; shown.push(c); }
         }
-        var nowP = performance.now();
+        var nowP = pnow();
         pops = pops.filter(function (c) { return nowP - c.born < POP_MS; });
         pops.forEach(function (c) {
           var age = (nowP - c.born) / POP_MS * 1.6; // 0..1.6 as before, but in real time: readable at any speed
@@ -967,7 +973,7 @@
           fxh.push('<use href="#' + pxRef(drp) + '" x="' + f1(P2[0] - dw2 / 2) + '" y="' + f1(P2[1] - alt - u * 4.6) + '" width="' + f1(dw2) + '" height="' + f1(dw2) + '"/>');
         } else {
           fxh.push(sprite('drop', '#e5383b', '', false, P2[0], P2[1], us * 7, 0));
-          var now2 = performance.now() / 1000;
+          var now2 = pnow() / 1000;
           for (var k2 = 0; k2 < 6; k2++) { var ph2 = (now2 * 0.6 + k2 / 6 + ci * 0.13) % 1; fxh.push(sq(P2[0] + Math.sin(ph2 * 5 + k2) * u * 1.4, P2[1] - u * (3 + ph2 * 14), u * (1 + ph2 * 2.2), ph2 < 0.5 ? '#e5383b' : '#c46a6a', 0.55 * (1 - ph2) * (1 - age2 / 90))); }
         }
       });
@@ -984,7 +990,7 @@
         var pi = model ? model.idx.get(e.v) : undefined, ps = (pi !== undefined && opBy[pi] && opAt(opBy[pi], t)) || e.vp;
         fxh.push(ring(ps, u * 2.4, dn.bleed, '#ff4d4d', u));
       });
-      var nowG = performance.now();
+      var nowG = pnow();
       gunFlash = gunFlash.filter(function (g) { return nowG - g.born < 1400; });
       gunFlash.forEach(function (g) {
         var ic = PIX.gun(g.c), a = (nowG - g.born) / 1400;
@@ -1158,7 +1164,7 @@
           }
           if (irp && irp.ph === 'play' && t >= irp.until) endReplay();
           // a gun flash over the victim when one of ours gets a kill
-          for (var gk = 0; gk < ourEv.length; gk++) { var ge = ourEv[gk]; if (ge.k === 'kill' && ours.has(ge.a) && !ours.has(ge.v) && ge.t > tPrev && ge.t <= t) gunFlash.push({ p: ge.vp, c: weaponClass(ge.w || ''), born: performance.now() }); }
+          for (var gk = 0; gk < ourEv.length; gk++) { var ge = ourEv[gk]; if (ge.k === 'kill' && ours.has(ge.a) && !ours.has(ge.v) && ge.t > tPrev && ge.t <= t) gunFlash.push({ p: ge.vp, c: weaponClass(ge.w || ''), born: pnow() }); }
           // gunfire
           if (sfx.on && hasShots) for (var gs = shotStart(tPrev); gs < shots.length && shots[gs].t <= t; gs++) sfx.shot(wcOf(shots[gs].w), model.ourIdx.has(shots[gs].p));
           else if (sfx.on) for (var gi = 0; gi < model.dmg.length; gi++) {
@@ -1173,8 +1179,8 @@
           if (hx3.t <= tPrev) continue;
           var col3 = model.ourIdx.has(hx3.a) ? '#ffcf4d' : '#ff6b6b', prev3 = null;
           for (var q3 = pops.length - 1; q3 >= 0; q3--) if (pops[q3].v === hx3.v && hx3.t - pops[q3].gt < 0.6) { prev3 = pops[q3]; break; }
-          if (prev3) { prev3.sum += hx3.dmg; prev3.n++; prev3.head = prev3.head || hx3.head; prev3.gt = hx3.t; prev3.vp = hx3.vp; prev3.born = performance.now(); }
-          else pops.push({ v: hx3.v, sum: hx3.dmg, n: 1, head: hx3.head, vp: hx3.vp, col: col3, gt: hx3.t, born: performance.now() });
+          if (prev3) { prev3.sum += hx3.dmg; prev3.n++; prev3.head = prev3.head || hx3.head; prev3.gt = hx3.t; prev3.vp = hx3.vp; prev3.born = pnow(); }
+          else pops.push({ v: hx3.v, sum: hx3.dmg, n: 1, head: hx3.head, vp: hx3.vp, col: col3, gt: hx3.t, born: pnow() });
         }
         if (clip && !irp && t >= clip[1] && phase !== 'fight' && !(bannerUntil && $('.bn.result', el))) {
           introduced = {};
@@ -1191,7 +1197,7 @@
       }
       if (ts - lastSq > 150) { lastSq = ts; squadBar(); }
       draw(realDt);
-      raf = requestAnimationFrame(frame);
+      if (!opts.manual) raf = requestAnimationFrame(frame);
     }
     function seek(x) { pops = []; var ec = $('.endcard', el); if (ec) ec.remove(); if (irp) { irp = null; irb.classList.add('hide'); } t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
@@ -1247,7 +1253,8 @@
     var stop0 = ctl.stop; ctl.stop = function (s2) { document.removeEventListener('keydown', onKey); stop0(s2); };
     document.documentElement.classList.add('replaying');
     draw(0);
-    raf = requestAnimationFrame(frame);
+    if (!opts.manual) raf = requestAnimationFrame(frame);
+    ctl.step = function (ms) { VCLOCK = (VCLOCK || 0) + ms; frame(VCLOCK); };
     return ctl;
   }
 
@@ -1388,7 +1395,8 @@
     document.body.appendChild(box);
     var body = $('.cl-body', box), cancelled = false;
     $('.x', box).onclick = function () { cancelled = true; box.remove(); if (active) active.stop(); };
-    if (!mime || !HTMLCanvasElement.prototype.captureStream) { body.textContent = S.clipNoSupport; return; }
+    var offline = !!(window.VideoEncoder && window.VideoFrame);
+    if (!offline && (!mime || !HTMLCanvasElement.prototype.captureStream)) { body.textContent = S.clipNoSupport; return; }
     var windows = actionWindows(d, match.ours).slice().sort(function (a, b) { return b.score - a.score; }).slice(0, 3).sort(function (a, b) { return a.s - b.s; });
     if (!windows.length) { body.textContent = S.noMoments; return; }
     var W = 720, H = 1000, MAPY = 112, MS = 720;
@@ -1412,8 +1420,14 @@
       return { w: w, head: 'FIREFIGHT' + (z ? ' AT ' + placeName(z).toUpperCase() : '') + ' · ' + new Set(match.ours).size + ' VS ' + (nf || '?'), ticker: lines.length ? 'BREAKING: ' + lines.join('   ◆   ') : 'BREAKING: SHOTS FIRED' };
     });
     // images inside the SVG must be inline for the canvas: the base map once, the sharp tiles as they come
-    var inl = {};
-    var toData = function (url) { if (inl[url] !== undefined) return; inl[url] = null; fetch(url).then(function (r) { return r.blob(); }).then(function (b) { var fr = new FileReader(); fr.onload = function () { inl[url] = fr.result; }; fr.readAsDataURL(b); }).catch(function () {}); };
+    var inl = {}, inlP = {};
+    var toData = function (url) {
+      if (inlP[url]) return inlP[url];
+      inl[url] = null;
+      inlP[url] = fetch(url).then(function (r) { return r.blob(); }).then(function (b) { return new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { inl[url] = fr.result; res(); }; fr.onerror = function () { res(); }; fr.readAsDataURL(b); }); }).catch(function () {});
+      return inlP[url];
+    };
+    var missing = [];
     toData('/maps/' + match.map + '.jpg?v=2');
     var frameSvg = function () {
       var svg = $('svg.mp', el);
@@ -1421,7 +1435,7 @@
       var str = new XMLSerializer().serializeToString(svg);
       str = str.replace(/<image([^>]*?) href="(\/maps\/[^"]+)"([^>]*?)\/?>/g, function (m0, a, url, b) {
         if (inl[url]) return '<image' + a + ' href="' + inl[url] + '"' + b + '/>';
-        toData(url); return '';
+        missing.push(toData(url)); return '';
       });
       return str.replace('<svg ', '<svg width="' + MS + '" height="' + MS + '" preserveAspectRatio="xMidYMid slice" ');
     };
@@ -1452,7 +1466,7 @@
       g.fillStyle = '#7d8590'; g.font = '11px ' + pixel; g.fillText('SQUAD JOURNAL · ' + (SJ.title || ''), 20, H - 24);
     }
     function heliFrame(now) {
-      var wob = Math.sin(now / 170) * 2 + Math.sin(now / 53) * 0.8;
+      var wob = Math.sin(now / 1100) * 1.2 + Math.sin(now / 430) * 0.4; // a slow, gentle hover
       if (lastImg) { g.save(); g.beginPath(); g.rect(0, MAPY, W, MS); g.clip(); g.drawImage(lastImg, wob - 6, MAPY - 6 + wob * 0.6, MS + 12, MS + 12); g.restore(); }
       // camera reticle: corner brackets, a centre cross, altitude and zoom readout
       g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 3;
@@ -1480,13 +1494,11 @@
       (d.dmg || []).forEach(function (x) { var a = d.pp[x[1]] && d.pp[x[1]][0], v = d.pp[x[2]] && d.pp[x[2]][0]; if (ours.has(a) && !ours.has(v)) dmg += x[3]; });
       return { big: place === 1 ? 'WINNER WINNER CHICKEN DINNER' : 'FINISHED #' + place, lines: [kills + ' KILLS · ' + Math.round(dmg) + ' DAMAGE', windows.length + ' FIREFIGHTS ON TAPE', 'REPORTING FROM ' + mapName] };
     };
-    var stream = cv.captureStream(30), chunks = [], rec;
-    try { rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 }); } catch (e) { body.textContent = S.clipNoSupport; return; }
-    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-    rec.onstop = function () {
-      if (cancelled) return;
+    var showResult = function (blob) {
+      VCLOCK = null;
       if (active) active.stop();
-      var blob = new Blob(chunks, { type: mime.split(';')[0] }), ext = /mp4/.test(blob.type) ? 'mp4' : 'webm';
+      if (cancelled) return;
+      var ext = /mp4/.test(blob.type) ? 'mp4' : 'webm';
       var file = new File([blob], 'squad-news-match-' + match.n + '.' + ext, { type: blob.type }), url = URL.createObjectURL(blob);
       body.innerHTML = '<video src="' + url + '" controls playsinline autoplay muted loop style="width:100%;max-height:60vh;border-radius:10px;background:#000"></video><div class="row" style="margin-top:10px"><button type="button" class="btn sh" style="flex:1">📤 ' + esc(S.clipShare) + '</button><a class="btn ghost" download="' + esc(file.name) + '" href="' + url + '">⬇ ' + esc(S.clipSave) + '</a></div>';
       var sh = $('.sh', body);
@@ -1494,27 +1506,86 @@
       else sh.remove();
       window.SJ.lastNews = blob;
     };
-    var startClip = function (i) {
+    var fail = function () { VCLOCK = null; if (active) active.stop(); if (!cancelled) body.textContent = S.failed; };
+    var startClip = function (i, manual) {
       cur = i;
       var w = windows[i];
       el.scrollIntoView({ block: 'center' });
-      replay(match, el, d, w.s, { clip: [w.s, w.e], auto: true, next: function () { if (i + 1 < windows.length) startClip(i + 1); else { phase = 'outro'; phaseAt = performance.now(); } } });
+      replay(match, el, d, w.s, { clip: [w.s, w.e], auto: true, calm: true, manual: manual, next: function () { if (i + 1 < windows.length) startClip(i + 1, manual); else { phase = 'outro'; phaseAt = pnow(); } } });
     };
+    var progress = function () { body.textContent = fmt(S.newsMaking, { n: Math.min(99, Math.round((phase === 'intro' ? 0 : phase === 'outro' ? windows.length : cur + 0.5) / (windows.length + 0.5) * 100)) }); };
+    var outro = function (now) { var sm = summary(); header(now); card(now, sm.lines, sm.big); lower(now, { head: 'END OF REPORT', ticker: 'BREAKING: ' + sm.big + '   ◆   ' + sm.lines.join('   ◆   ') }); };
+
+    if (offline) {
+      // Frame by frame: the replay advances exactly 1/30 s per frame on a virtual clock, every frame is complete (sharp
+      // tiles waited for), and each one is encoded with its own timestamp → a smooth 30 fps video on any device.
+      var FPS = 30, DT = 1000 / FPS;
+      var loadMuxer = function () { return window.Mp4Muxer ? Promise.resolve() : new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = '/app/mp4-muxer.js?v=1'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); }); };
+      var pickCodec = function () {
+        var list = ['avc1.640028', 'avc1.4d0028', 'avc1.42001f'], k = 0;
+        var next = function () {
+          if (k >= list.length) return Promise.reject(new Error('unsupported'));
+          var c = list[k++];
+          return VideoEncoder.isConfigSupported({ codec: c, width: W, height: H, bitrate: 2500000, framerate: FPS }).then(function (r) { return r.supported ? c : next(); }, next);
+        };
+        return next();
+      };
+      var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+      (async function () {
+        await loadMuxer();
+        var codec = await pickCodec();
+        var muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H }, fastStart: 'in-memory' });
+        var encErr = null;
+        var enc = new VideoEncoder({ output: function (chunk, meta) { muxer.addVideoChunk(chunk, meta); }, error: function (e) { encErr = e; } });
+        enc.configure({ codec: codec, width: W, height: H, bitrate: 2500000, framerate: FPS });
+        var n = 0;
+        var emit = async function () {
+          var f = new VideoFrame(cv, { timestamp: Math.round(n * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+          enc.encode(f, { keyFrame: n % 60 === 0 }); f.close(); n++;
+          while (enc.encodeQueueSize > 4) await wait(4);
+          if (encErr) throw encErr;
+        };
+        VCLOCK = 0;
+        for (var k = 0; k < FPS * 2.2 && !cancelled; k++) { VCLOCK += DT; header(VCLOCK); card(VCLOCK, ['MATCH ' + match.n + ' · ' + mapName, windows.length + ' FIREFIGHTS COMING UP'], 'LIVE FROM THE BATTLEFIELD'); lower(VCLOCK, null); await emit(); }
+        phase = 'play'; startClip(0, true);
+        var cap = FPS * 240;
+        while (phase === 'play' && !cancelled && n < cap) {
+          if (active && active.step) active.step(DT);
+          missing = [];
+          var str = frameSvg();
+          if (missing.length) { await Promise.all(missing); missing = []; str = frameSvg(); }
+          if (str) { var im = await loadSvg(str); if (im) lastImg = im; }
+          header(VCLOCK); heliFrame(VCLOCK); lower(VCLOCK, fightInfo[cur]);
+          await emit();
+          if (n % 15 === 0) progress();
+        }
+        for (var k2 = 0; k2 < FPS * 3.5 && !cancelled; k2++) { VCLOCK += DT; outro(VCLOCK); await emit(); }
+        await enc.flush(); enc.close(); muxer.finalize();
+        showResult(new Blob([muxer.target.buffer], { type: 'video/mp4' }));
+      })().catch(function () { fail(); });
+      return;
+    }
+
+    // fallback (no WebCodecs): record the screen in real time
+    var stream = cv.captureStream(30), chunks = [], rec;
+    try { rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 }); } catch (e) { body.textContent = S.clipNoSupport; return; }
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = function () { showResult(new Blob(chunks, { type: mime.split(';')[0] })); };
     rec.start(500);
     var busy = false;
     (function loop() {
       if (cancelled) { try { rec.stop(); } catch (e) {} return; }
       var now = performance.now();
-      body.textContent = fmt(S.newsMaking, { n: Math.min(99, Math.round(((phase === 'intro' ? 0 : phase === 'outro' ? windows.length : cur + 0.5)) / (windows.length + 0.5) * 100)) });
+      progress();
       if (phase === 'intro') {
         header(now); card(now, ['MATCH ' + match.n + ' · ' + mapName, windows.length + ' FIREFIGHTS COMING UP'], 'LIVE FROM THE BATTLEFIELD'); lower(now, null);
-        if (now - phaseAt > 2200) { phase = 'play'; startClip(0); }
+        if (now - phaseAt > 2200) { phase = 'play'; startClip(0, false); }
       } else if (phase === 'play') {
         if (!busy) { var str = frameSvg(); if (str) { busy = true; loadSvg(str).then(function (im) { if (im) lastImg = im; busy = false; }); } }
         header(now); heliFrame(now); lower(now, fightInfo[cur]);
       } else if (phase === 'outro') {
-        var sm = summary(); header(now); card(now, sm.lines, sm.big); lower(now, { head: 'END OF REPORT', ticker: 'BREAKING: ' + sm.big + '   ◆   ' + sm.lines.join('   ◆   ') });
-        if (now - phaseAt > 3500) { done = true; rec.stop(); return; }
+        outro(now);
+        if (now - phaseAt > 3500) { rec.stop(); return; }
       }
       requestAnimationFrame(loop);
     })();

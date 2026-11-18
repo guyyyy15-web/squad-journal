@@ -117,7 +117,11 @@ GitHub does **not** deploy.
 - **News reel** (`newsReel()`, 📺 on each match): the match's top 3 fights by score play in clip mode while every frame's
   SVG (images inlined as data URLs; tiles fetched on demand) is drawn into a 720×1000 canvas with a "live from the news
   chopper" frame — LIVE header, heli-cam wobble, reticle, game clock/ALT readout, headline per fight, BREAKING ticker —
-  plus an intro and a summary card; recorded with MediaRecorder (mp4 where supported), shared or saved, nothing uploaded.
+  plus an intro and a summary card, shared or saved, nothing uploaded. **Rendered frame by frame**, not recorded live:
+  the replay runs in `manual` + `calm` mode on a virtual clock (`VCLOCK`/`pnow()`; `ctl.step(1000/30)`), every frame
+  waits for its sharp tiles, and WebCodecs `VideoEncoder` + vendored `src/client/mp4-muxer.js` (MIT, loaded only then)
+  write a steady 30 fps H.264 MP4 at 2.5 Mbps (measured: 0 dropped frames). Calm = no shake/punch, gentler camera, no
+  shot tighter than 45 units, slow hover. Browsers without WebCodecs fall back to MediaRecorder in real time.
 - **Loading:** pixel progress bar with % (the worker estimates from the gzip size × 11); the home page prepares new
   matches in the background (`/api/pending` → up to 2 matches below `DERIVED_V`, analysed in the visitor's browser).
 - **Replay polish:** enemies are nudged off our soldiers (`nudge`), enemy names under the fighters, a knock merged into
