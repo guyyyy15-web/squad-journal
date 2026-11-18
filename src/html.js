@@ -128,6 +128,12 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .rbar .tens{position:absolute;left:0;right:0;bottom:-2px;width:100%;height:12px;pointer-events:none}
 .map .prep{width:min(80%,280px);text-align:center}.map .prep .pt{font:12px/1.5 "Press Start 2P",monospace;color:var(--gold2);margin-bottom:8px}
 .map .pbar{height:10px;border:2px solid #eef1f5;background:#0b0d12;padding:1px}.map .pbar u{display:block;height:100%;background:repeating-linear-gradient(90deg,var(--gold) 0 6px,#c98a00 6px 8px);transition:width .3s steps(8)}
+.hothero{display:block;position:relative;margin:14px 0 6px;border-radius:14px;overflow:hidden;border:1px solid rgba(242,169,0,.55);text-decoration:none;color:inherit;aspect-ratio:1200/630;background:#0b0e12}
+.hothero img{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(.62)}
+.hothero .hh{position:absolute;inset:auto 0 0 0;padding:14px 16px;display:grid;gap:4px;background:linear-gradient(transparent,rgba(5,7,10,.92))}
+.hothero b{font:26px/1.1 var(--stencil);color:var(--gold2)}.hothero .hs{font-size:14px;color:#eef1f5}
+.plays{display:grid;gap:8px}.plays .hotlink{margin:0;border-radius:12px;border-top:1px solid rgba(242,169,0,.4);gap:8px}
+.hotlink{display:flex;align-items:center;min-height:44px;margin:-8px 0 14px;padding:8px 14px;border-radius:0 0 12px 12px;background:rgba(242,169,0,.12);border:1px solid rgba(242,169,0,.4);border-top:0;color:var(--gold2);font-weight:700;font-size:14px;text-decoration:none}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -366,9 +372,16 @@ last=j.newest;if(j.live)setTimeout(chk,300000)}).catch(function(){})}chk()})();`
 const clanBlock = (clan) => (clan?.name ? `<div class="clan"><span class="ct">[${esc(clan.tag)}]</span><span class="cn">${esc(clan.name)}</span>${clan.level ? `<span class="cl">LVL ${esc(clan.level)}</span>` : ''}</div>` : '');
 
 /** Home: clan header, season totals and the session timeline. */
-export function homePage({ lang, sessions, members, recent, totals, status, origin, clan }) {
+export function homePage({ lang, sessions, members, recent, totals, status, origin, clan, hot = {} }) {
   const t = S[lang];
   const byId = new Map(members.map((m) => [m.account_id, m]));
+  const place = (z) => (z ? z.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
+  const hotText = (h) => `${t.hotFight}${h.z ? ` · ${place(h.z)}` : ''} · ${[h.kills ? t.hotKills(h.kills) : '', h.knocks ? t.hotKnocks(h.knocks) : ''].filter(Boolean).join(' · ')}`;
+  const hotHref = (s, h) => `/s/${esc(s.session_id)}?m=${h.n}&t=${Math.max(0, h.s)}`;
+  const hotLink = (s) => { const h = hot[s.session_id]; return h ? `<a class="hotlink" href="${hotHref(s, h)}">▶ ${esc(hotText(h))}</a>` : ''; };
+  // the latest session's fight of the night, big, at the top
+  const first = sessions[0], fh = first && hot[first.session_id];
+  const hero = fh ? `<a class="hothero" href="${hotHref(first, fh)}"><img src="/og/${esc(first.session_id)}.jpg" alt="" loading="eager"><span class="hh"><span class="tag">FIGHT OF THE NIGHT</span><b>▶ ${esc(t.watchNow)}</b><span class="hs">${esc(hotText(fh))} · ${esc(fmtDay(lang, first.start_at))}</span></span></a>` : '';
   const cards = sessions.map((s) => {
     const sum = s.summary;
     const ppl = JSON.parse(s.members).map((id) => byId.get(id)).filter(Boolean);
@@ -389,7 +402,7 @@ export function homePage({ lang, sessions, members, recent, totals, status, orig
         <div class="st"><b>${tm.damage.toLocaleString('en')}</b><span>${esc(t.damage)}</span></div></div>` : ''}
       ${mvp ? `<div class="row small" style="margin-top:12px">${medal('mvp', 18)} <span class="muted">${esc(t.carriedTheNight)}</span> ${who(mvp)}</div>` : ''}
       ${maps.length ? `<div class="chips">${maps.map((m) => `<span class="mapchip">${esc(m)}</span>`).join('')}</div>` : ''}
-    </a>`;
+    </a>${hotLink(s)}`;
   }).join('');
 
   const empty = `<div class="panel"><h3 style="font-size:22px">${esc(t.noSessions)}</h3><p class="muted">${esc(t.noSessionsText)}</p></div>`;
@@ -415,7 +428,7 @@ w.postMessage({url:'/t/'+encodeURIComponent(m.id),ours:m.ours,map:m.map});};one(
     </div>
     ${status.last_activity && Date.now() - status.last_activity < 75 * 60000 ? `<div class="panel live"><span class="livedot"></span><b>${esc(t.live)}</b><span class="muted small">${esc(t.liveText(ago(lang, status.last_activity)))}</span></div>` : ''}
     <h2>${esc(t.sessions)} <span class="muted small" style="margin-inline-start:auto;font-family:var(--body)">${status.last_poll ? esc(t.updated(ago(lang, status.last_poll))) : ''}</span></h2>
-    ${sessions.length ? cards : empty}${rec}`, { script: meScript + LIVE_WATCH('reload') + prepScript, og: { image: `${origin}/og/default.jpg`, title: clan?.name ? `${t.brand} · [${clan.tag}] ${clan.name}` : t.brand } });
+    ${hero}${sessions.length ? cards : empty}${rec}`, { script: meScript + LIVE_WATCH('reload') + prepScript, og: { image: `${origin}/og/default.jpg`, title: clan?.name ? `${t.brand} · [${clan.tag}] ${clan.name}` : t.brand } });
 }
 
 const METAL = { killer: 'gold', sniper: 'gold', angel: 'gold', headshot: 'gold', knocker: 'silver', assist: 'silver', pharmacy: 'silver',
@@ -608,7 +621,7 @@ function partnerBlock(lang, id, pairs, byId) {
 }
 
 /** /p/:id — a member's service record. */
-export function profilePage({ lang, p, member, hall, members, recent, clan, path }) {
+export function profilePage({ lang, p, member, hall, members, recent, clan, path, weapons = null, plays = [] }) {
   const t = S[lang];
   const byId = new Map(members.map((m) => [m.account_id, m]));
   const stat = (v, l, gold) => `<div class="st ${gold ? 'gold' : ''}"><b>${v}</b><span>${esc(l)}</span></div>`;
@@ -624,12 +637,20 @@ export function profilePage({ lang, p, member, hall, members, recent, clan, path
     <h2>${esc(t.serviceRecord)} <span class="tag">STATS</span></h2>
     <div class="stats">${stat(p.games, t.st.games)}${stat(p.wins, t.st.wins, p.wins)}${stat(`${p.win_rate}%`, t.st.winRate)}${stat(p.mvps, t.st.mvps, p.mvps)}</div>
     <div class="stats">${stat(p.kills, t.st.kills)}${stat(p.kd, t.st.kd)}${stat(p.avg_damage, t.st.avgDmg)}${stat(p.revives, t.st.revives)}</div>
+    ${plays.length ? `<h2>${esc(t.bestPlays)} <span class="tag">HIGHLIGHTS</span></h2><div class="plays">${plays.map((w) => `<a class="hotlink play" href="/s/${esc(w.sid)}?m=${w.n}&t=${Math.max(0, w.s)}">▶ <span>${esc([Math.floor(w.mine / 2) ? S[lang].hotKills(Math.floor(w.mine / 2)) : '', w.mine % 2 ? S[lang].hotKnocks(1) : ''].filter(Boolean).join(' · '))}${w.z ? ` · ${esc(w.z.replace(/\b\w/g, (c) => c.toUpperCase()))}` : ''}</span><span class="muted small" style="margin-inline-start:auto">${esc(mapName(w.map))} · ${esc(fmtDate(w.at))}</span></a>`).join('')}</div>` : ''}
+    ${weapons ? `<h2>${esc(t.stWeapons)} <span class="tag">WEAPONS</span></h2><div class="sbox wcard">
+      <div class="wst"><div><b class="num">${weapons.acc ?? '—'}${weapons.acc !== null ? '%' : ''}</b><span>${esc(t.stAcc)}</span></div><div><b class="num">${weapons.headPct ?? '—'}${weapons.headPct !== null ? '%' : ''}</b><span>${esc(t.stHead)}</span></div>
+        <div><b class="num">${weapons.dist ?? '—'}${weapons.dist !== null ? 'm' : ''}</b><span>${esc(t.stDist)}</span></div><div><b class="num">${weapons.long}m</b><span>${esc(t.stLong)}</span></div></div>
+      <div class="muted small">${esc(t.stShots.replace('{h}', weapons.hits).replace('{s}', weapons.shots))}</div>
+      ${weapons.fav ? `<div class="small" style="margin-top:4px"><span class="muted">${esc(t.stFav)}:</span> <b dir="ltr">${esc(weapons.fav)}</b></div>` : ''}
+      <div class="arsenal">${Object.entries(weapons.cls).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, v]) => { const tot = Object.values(weapons.cls).reduce((x, y) => x + y, 0) || 1; return `<div class="arow"><span data-cls="${esc(c)}"></span><span class="an">${esc(CLS_NAME[c] || c)}</span><span class="bt"><u style="width:${(v / tot * 100).toFixed(1)}%"></u></span><span class="bv num">${Math.round(v / tot * 100)}%</span></div>`; }).join('')}</div>
+      <a class="small" href="/stats" style="display:inline-block;margin-top:8px">📊 ${esc(t.navStats)} →</a></div>` : ''}
     <h2>${esc(t.medalCabinet)} <span class="tag">MEDALS</span></h2>
     ${cabinet ? `<div class="panel cabinet">${cabinet}</div>` : `<p class="muted">${esc(t.noMedals)}</p>`}
     ${held.length ? `<h2>${esc(t.recordsHeld)} <span class="tag">RECORDS</span></h2><div class="medals recs">${held.map((r) => recCard(lang, r, byId, false)).join('')}</div>` : ''}
     <h2>${esc(t.recentSessions)} <span class="tag">LOG</span></h2>
     ${recent.map((s) => `<a class="panel small" href="/s/${esc(s.session_id)}" style="padding:12px 16px"><div class="row sp"><b>${esc(fmtDay(lang, s.start_at))}</b><span class="muted">${esc(t.games(s.match_count))}</span></div></a>`).join('')}`,
-  { script: meScript });
+  { script: meScript + ';' + GUN_ICONS, scripts: ['/app/pixel.js?v=8'] });
 }
 
 export const notFoundPage = (lang) => page(lang, S[lang].notFound, `${top(lang, '/')}<h1 style="margin-top:40px;font-family:var(--head)">${esc(S[lang].notFound)}</h1><p><a href="/">${esc(S[lang].back)}</a></p>`);
@@ -761,6 +782,11 @@ a.innerHTML='<div class="row sp" style="flex-wrap:nowrap;gap:10px"><span class="
 }
 
 // ---- /stats: combat intel ----
+// fills [data-cls] / [data-gun] spans with the pixel gun icons (needs /app/pixel.js)
+const GUN_ICONS = `window.addEventListener('load',function(){if(!window.PIX)return;var W={sr:1,dmr:1,ar:1,lmg:1,smg:1,sg:1,pistol:1};
+var cls=function(w){w=String(w).toLowerCase();return /kar98|m24|awm|mosin|win94|lynx|dragunov/.test(w)?'sr':/mini14|sks|slr|mk14|mk12|vss|qbu|fnfal|dmr/.test(w)?'dmr':/s12k|s1897|s686|saiga|dbs|o12|sawnoff/.test(w)?'sg':/m249|dp28|mg3/.test(w)?'lmg':/uzi|ump|vector|tommy|thompson|bizon|mp5|mp9|p90|js9/.test(w)?'smg':/p92|p1911|p18|r1895|r45|deagle|skorpion/.test(w)?'pistol':'ar'};
+var put=function(el,c){var ic=W[c]&&PIX.gun(c);if(ic)el.innerHTML='<img class="gi" src="'+ic.url+'" alt="">'};
+document.querySelectorAll('[data-cls]').forEach(function(e){put(e,e.dataset.cls)});document.querySelectorAll('[data-gun]').forEach(function(e){put(e,cls(e.dataset.gun))});});`;
 const CLS_NAME = { sr: 'Sniper', dmr: 'DMR', ar: 'AR', lmg: 'LMG', smg: 'SMG', sg: 'Shotgun', pistol: 'Pistol', boom: 'Explosives', melee: 'Melee', other: 'Other' };
 const fmtN = (t, s, o) => s.replace(/\{(\w+)\}/g, (_, k) => (o[k] == null ? '' : o[k]));
 /** One series over sessions: a 2 px line, dots with a hover title, first/last values labelled. */
@@ -829,10 +855,7 @@ export function statsPage({ lang, path, stats, members, matches, clan }) {
         <div class="kicker" style="margin-top:10px">${esc(t.stDeathTeam)}</div>${Object.entries(dz.team).sort().map(([k, v]) => `<div class="arow"><span class="an" dir="ltr">${esc(k)} × </span><span class="bt"><u style="width:${(v / dTot * 100).toFixed(1)}%"></u></span><span class="bv num">${v}</span></div>`).join('')}</div>
       <div class="sbox"><div class="kicker">${esc(t.stKillers)}</div>${dz.killers.map(([n, v]) => `<div class="brow"><span class="bn" dir="ltr"><b>${esc(n)}</b></span><span class="bv num">×${v}</span></div>`).join('')}</div></div>` : '';
   const body = matches ? `${first}${trends}${weaponCards}${profile}${move}${pairs}${enemy}` : `<p class="muted">${esc(t.stNone)}</p>`;
-  const script = `window.addEventListener('load',function(){if(!window.PIX)return;var W={sr:1,dmr:1,ar:1,lmg:1,smg:1,sg:1,pistol:1};
-var cls=function(w){w=String(w).toLowerCase();return /kar98|m24|awm|mosin|win94|lynx|dragunov/.test(w)?'sr':/mini14|sks|slr|mk14|mk12|vss|qbu|fnfal|dmr/.test(w)?'dmr':/s12k|s1897|s686|saiga|dbs|o12|sawnoff/.test(w)?'sg':/m249|dp28|mg3/.test(w)?'lmg':/uzi|ump|vector|tommy|thompson|bizon|mp5|mp9|p90|js9/.test(w)?'smg':/p92|p1911|p18|r1895|r45|deagle|skorpion/.test(w)?'pistol':'ar'};
-var put=function(el,c){var ic=W[c]&&PIX.gun(c);if(ic)el.innerHTML='<img class="gi" src="'+ic.url+'" alt="">'};
-document.querySelectorAll('[data-cls]').forEach(function(e){put(e,e.dataset.cls)});document.querySelectorAll('[data-gun]').forEach(function(e){put(e,cls(e.dataset.gun))});});`;
+  const script = GUN_ICONS;
   return page(lang, `${t.stTitle} · ${t.brand}`, `${top(lang, path, false, clan)}${nav(lang, 'stats')}<h1 style="margin-top:18px;font-family:var(--head)">${esc(t.stTitle)}</h1>
     <p class="muted">${esc(fmtN(t, t.stSub, { n: matches }))}</p>${body}`, { scripts: ['/app/pixel.js?v=8'], script });
 }

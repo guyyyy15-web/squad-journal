@@ -101,10 +101,14 @@ async function clanOf(db) {
 async function home(env, origin, lang) {
   const db = env.DB;
   // Cheap page: ≤ 40 sessions + members + three settings rows. Totals are precomputed by rebuildSessions.
-  const [sessions, members, cached] = await db.batch([
+  // one round trip: sessions, members, settings and each session's fight of the night (combat cards' `top`)
+  const [sessions, members, cached, hotRows] = await db.batch([
     db.prepare('SELECT * FROM sessions ORDER BY start_at DESC LIMIT 40'),
     db.prepare('SELECT * FROM members'),
     db.prepare("SELECT key, value FROM settings WHERE key IN ('totals', 'poll_state', 'clan')"),
+    db.prepare(`SELECT sm.session_id, sm.match_id, m.created_at, json_extract(c.json, '$.top[0]') AS top FROM session_matches sm
+      JOIN matches m ON m.match_id = sm.match_id LEFT JOIN combat c ON c.match_id = sm.match_id
+      WHERE sm.session_id IN (SELECT session_id FROM sessions ORDER BY start_at DESC LIMIT 40) ORDER BY m.created_at`),
   ]);
   const kv = Object.fromEntries(cached.results.map((r) => [r.key, r.value]));
   let totals = null;
@@ -127,7 +131,16 @@ async function home(env, origin, lang) {
   }
   let poll = {}; let clan = null;
   try { poll = JSON.parse(kv.poll_state || '{}'); clan = JSON.parse(kv.clan || 'null'); } catch { /* ignore */ }
-  return homePage({ lang, sessions: list, members: members.results, recent: recent.results, totals, status: poll, origin, clan });
+  // the fight of the night for each listed session (from the combat cards' precomputed `top`), so the home page jumps
+  // straight into the action
+  const hot = {}; const n = {};
+  for (const r of hotRows.results) {
+    n[r.session_id] = (n[r.session_id] || 0) + 1;
+    let w = null;
+    try { w = JSON.parse(r.top || 'null'); } catch { /* none */ }
+    if (w && (!hot[r.session_id] || w.score > hot[r.session_id].score)) hot[r.session_id] = { ...w, n: n[r.session_id] };
+  }
+  return homePage({ lang, sessions: list, members: members.results, recent: recent.results, totals, status: poll, origin, clan, hot });
 }
 
 async function session(env, id, origin, lang, path) {
@@ -546,8 +559,25 @@ export default {
           const member = members.find((m) => m.account_id === pm[1]);
           const p = hall.players.find((x) => x.account_id === pm[1]);
           if (!member || !p) return notFoundPage(lang);
-          const recent = (await env.DB.prepare("SELECT session_id, start_at, match_count FROM sessions WHERE members LIKE '%' || ? || '%' ORDER BY start_at DESC LIMIT 6").bind(pm[1]).all()).results;
-          return profilePage({ lang, p, member, hall, members, recent, clan, path });
+          const [recentR, cardsR, rowsR, orderR] = await env.DB.batch([
+            env.DB.prepare("SELECT session_id, start_at, match_count FROM sessions WHERE members LIKE '%' || ? || '%' ORDER BY start_at DESC LIMIT 6").bind(pm[1]),
+            // this player's combat cards (accuracy, weapons) and the fights they scored in
+            env.DB.prepare(`SELECT c.match_id, c.json, m.map, m.created_at FROM combat c JOIN matches m ON m.match_id = c.match_id
+              JOIN participants p ON p.match_id = c.match_id AND p.account_id = ?`).bind(pm[1]),
+            env.DB.prepare(`SELECT p.account_id, p.match_id, p.place, p.kills, p.damage, p.time_survived, m.created_at, sm.session_id FROM participants p
+              JOIN matches m ON m.match_id = p.match_id JOIN session_matches sm ON sm.match_id = p.match_id WHERE p.account_id = ?`).bind(pm[1]),
+            env.DB.prepare(`SELECT sm.session_id, sm.match_id, m.created_at, m.map FROM session_matches sm JOIN matches m ON m.match_id = sm.match_id ORDER BY m.created_at`),
+          ]);
+          const cards = cardsR.results.map((r) => ({ match_id: r.match_id, map: r.map, created_at: r.created_at, card: JSON.parse(r.json) }));
+          const agg = aggregate(cards, rowsR.results, [member]);
+          const weapons = agg.players.find((x) => x.id === pm[1]) || null;
+          // where each match sits in its session (?m=<n>), then this player's best fights
+          const pos = {}; const cnt = {};
+          for (const r of orderR.results) { cnt[r.session_id] = (cnt[r.session_id] || 0) + 1; pos[r.match_id] = { sid: r.session_id, n: cnt[r.session_id], at: r.created_at, map: r.map }; }
+          const plays = [];
+          for (const c of cards) for (const w of c.card.top || []) if (w.by && w.by[pm[1]] && pos[c.match_id]) plays.push({ ...w, mine: w.by[pm[1]], ...pos[c.match_id] });
+          plays.sort((a, b) => b.mine - a.mine || b.score - a.score);
+          return profilePage({ lang, p, member, hall, members, recent: recentR.results, clan, path, weapons, plays: plays.slice(0, 6) });
         }
         if (path === '/api/live') {
           const st = JSON.parse((await setting(env.DB, 'poll_state')) || '{}');

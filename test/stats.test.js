@@ -39,3 +39,10 @@ test('aggregate: per player, fights, trends, pairs', () => {
   assert.ok(a.pairs.length >= 1 && a.pairs[0].n === 2);
   assert.ok(a.fights.n === card.fights.length);
 });
+
+test('combat card lists the hottest fights with who scored in them', () => {
+  const c = combatStats(d, MAP_SIZE.Baltic_Main);
+  assert.ok(c.top.length >= 1 && c.top.length <= 5);
+  for (let i = 1; i < c.top.length; i++) assert.ok(c.top[i - 1].score >= c.top[i].score);
+  for (const w of c.top) { assert.ok(w.e > w.s); for (const id of Object.keys(w.by)) assert.ok(d.players[id]); }
+});

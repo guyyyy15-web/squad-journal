@@ -94,7 +94,7 @@ GitHub does **not** deploy.
   marker positions are eased each frame (snap on seeks / jumps > 40 units); a name pill in the member's colour with a
   pixel gun icon (`PIX.gun`) next to it; tracers are rounds in flight (pointed tips, dashed sniper streaks).
 - **Stats** (`/stats`, `src/stats.js`, tested): `combatStats(derived, mapSize)` → a ~2–5 KB combat card per match in D1
-  `combat` (migration 0003; `COMBAT_V`, now 2), computed by `warm()` one per cron run (never in a page request; backfill
+  `combat` (migration 0003; `COMBAT_V`, now 3; `top` = the match's 5 hottest fights with who scored, used by the home page "fight of the night" hero/links and the profile's "best plays"), computed by `warm()` one per cron run (never in a page request; backfill
   locally with a script + `wrangler d1 execute --file`). `aggregate()` merges cards with members' PUBG stats: first shot
   vs clean-win rate (no one of ours lost and dealt ≥ taken), session trends, accuracy (hits/shots), headshot %, fight
   distance, damage by weapon class, knock ratio, time to knock, trade ratio, revives, landing heat, time to first fight,

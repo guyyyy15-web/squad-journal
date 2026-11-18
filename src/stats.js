@@ -3,7 +3,7 @@
 // per-match stats into what /stats shows. Numbers are never invented: everything is counted from telemetry.
 import { weaponClass, actionWindows, battleModel, fightOf, posAt, zoneAt, opAt } from './replay.js';
 
-export const COMBAT_V = 2;
+export const COMBAT_V = 3;
 const r1 = (v) => Math.round(v * 10) / 10;
 
 /** One match → { v, players: { acc: {...} }, fights: [...], deaths: [...] }. mapSize in centimetres. */
@@ -92,7 +92,17 @@ export function combatStats(d, mapSize) {
     for (const k of Object.keys(m.wpn)) m.wpn[k] = Math.round(m.wpn[k]);
     if (m.firstFight !== null && m.land) m.firstFight = Math.round(m.firstFight - m.land[2]); else m.firstFight = null;
   }
-  return { v: COMBAT_V, players: P, fights, deaths };
+  // the match's hottest fights (for the home page and the player pages): where to jump in, and who did what
+  const top = actionWindows(d, ours).slice().sort((a, b) => b.score - a.score).slice(0, 5).map((w) => {
+    const by = {};
+    for (const e of d.events || []) {
+      if (e.t < w.s || e.t > w.e || !set.has(e.a) || set.has(e.v)) continue;
+      if (e.k === 'kill') by[e.a] = (by[e.a] || 0) + 2; else if (e.k === 'knock') by[e.a] = (by[e.a] || 0) + 1;
+    }
+    const z = (d.events || []).find((e) => e.t >= w.s && e.t <= w.e && e.z);
+    return { s: Math.round(w.s), e: Math.round(w.e), score: w.score, kills: w.kills, knocks: w.knocks, deaths: w.deaths, z: z ? z.z : '', by };
+  });
+  return { v: COMBAT_V, players: P, fights, deaths, top };
 }
 
 const add = (o, k, v) => { o[k] = (o[k] || 0) + v; };
