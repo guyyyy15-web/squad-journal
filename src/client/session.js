@@ -777,7 +777,7 @@
           var px0 = pixOf(kd, colorOf(id), gn, false, an, stateOf(pix, id, t)), sk = px0.url;
           if (sprKey[i] !== sk) {
             sprKey[i] = sk;
-            var flat0 = kd === 'down' || kd.indexOf('veh') === 0, sc0 = kd === 'veh4' ? 0.45 : 1, ph = 9 * sc0 * px0.h / 28, pw = 9 * sc0 * px0.w / 28;
+            var flat0 = kd === 'down' || kd.indexOf('veh') === 0, sc0 = kd === 'veh4' ? 0.8 : kd.indexOf('veh') === 0 ? 1.8 : 1, ph = 9 * sc0 * px0.h / 28, pw = 9 * sc0 * px0.w / 28;
             sprEl[i].setAttribute('href', px0.url); sprEl[i].setAttribute('width', pw.toFixed(2)); sprEl[i].setAttribute('height', ph.toFixed(2));
             sprEl[i].setAttribute('x', (-pw / 2).toFixed(2)); sprEl[i].setAttribute('y', (-ph * (flat0 ? 0.7 : 0.94)).toFixed(2));
           }
@@ -785,7 +785,7 @@
           var gIc = gn && PIX.gun(gn);
           // passengers: no sprite or HP bar of their own, their name pills stacked under the driver's
           // the name pill keeps its size on screen when the sprites grow in a close-up
-          var ls = spriteMode ? 1.55 * Math.max(0.5, Math.min(1.25, u * 0.62 / us)) : 1.15, sh = ls / 1.55;
+          var ls = spriteMode ? 1.55 * Math.max(0.42, Math.min(1.05, u * 0.62 / us)) : 1.15, sh = ls / 1.55;
           var lblT = rider ? (spriteMode ? 'translate(0 ' + (seat[i] * 4.3 * sh).toFixed(2) + ') scale(' + ls.toFixed(3) + ')' : 'translate(0 ' + (1.4 + seat[i] * 3.1).toFixed(1) + ') scale(1.15)') : (spriteMode ? 'scale(' + ls.toFixed(3) + ')' : 'translate(0 1.4) scale(1.15)');
           if (lblEl[i].getAttribute('transform') !== lblT) lblEl[i].setAttribute('transform', lblT);
           var showSpr = !rider && spriteMode, showIco = !rider && !spriteMode;
