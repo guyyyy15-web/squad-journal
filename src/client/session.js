@@ -167,9 +167,10 @@
     el.style.backgroundImage = 'none';
     el.innerHTML = staticSvg(match, d, zoomed ? focus : [0, 0, 1000])
       + '<button type="button" class="bigplay"><b>▶</b>' + esc(S.playReplay || S.replay) + '</button>'
-      + '<div class="tools"><button type="button" class="zm">' + esc(zoomed ? S.fullMap : S.zoomIn) + '</button><button type="button" class="rp">▶ ' + esc(S.replay) + '</button></div>';
+      + '<div class="tools"><button type="button" class="nw">📺 ' + esc(S.news) + '</button><button type="button" class="zm">' + esc(zoomed ? S.fullMap : S.zoomIn) + '</button><button type="button" class="rp">▶ ' + esc(S.replay) + '</button></div>';
     $('.zm', el).onclick = function () { el.dataset.zoom = zoomed ? 'full' : ''; renderStatic(match, el, d); };
     $('.rp', el).onclick = function () { replay(match, el, d, 0); };
+    $('.nw', el).onclick = function () { newsReel(match, el, d); };
     $('.bigplay', el).onclick = function () { replay(match, el, d, 0); };
   }
 
@@ -249,7 +250,7 @@
   var ribs = [];
   function label() { return ''; } // no text callouts on the map (Guy): the kill feed in the corner tells the story
   // Place names from telemetry ("yasnayapolyana" → "Yasnaya Polyana")
-  var PLACE = { yasnayapolyana: 'Yasnaya Polyana', georgopol: 'Georgopol', pochinki: 'Pochinki', rozhok: 'Rozhok', mylta: 'Mylta', militarybase: 'Military Base', schoolapartments: 'School', shootingrange: 'Shooting Range', mylta_power: 'Mylta Power', lipovka: 'Lipovka', primorsk: 'Primorsk', novorepnoye: 'Novorepnoye', zharki: 'Zharki', severny: 'Severny', kameshki: 'Kameshki', gatka: 'Gatka', stalber: 'Stalber', ferrypier: 'Ferry Pier', quarry: 'Quarry', boatyard: 'Boatyard', ruins: 'Ruins', mansion: 'Mansion', prison: 'Prison', hospital: 'Hospital', school: 'School', farm: 'Farm', shelter: 'Shelter', waterTown: 'Water Town', dekamesto: 'Deka Mesto', podvosto: 'Podvosto', dobromesto: 'Dobro Mesto', krichas: 'Krichas', vihar: 'Vihar', cosmodrome: 'Cosmodrome', hotsprings: 'Hot Springs', jadenacity: 'Jadena City', meyran: 'Mey Ran', neonfactory: 'Neon Factory', ladrillera: 'La Cobreria', losleones: 'Los Leones', elpozo: 'El Pozo', sanmartin: 'San Martin', bootcamp: 'Bootcamp', paradise: 'Paradise Resort', ruins_sanhok: 'Ruins' };
+  var PLACE = { yasnayapolyana: 'Yasnaya Polyana', georgopol: 'Georgopol', pochinki: 'Pochinki', rozhok: 'Rozhok', mylta: 'Mylta', militarybase: 'Military Base', schoolapartments: 'School', shootingrange: 'Shooting Range', mylta_power: 'Mylta Power', myltapower: 'Mylta Power', militarybase: 'Military Base', sosnovkamilitarybase: 'Military Base', yasnaya: 'Yasnaya Polyana', novorepnoye: 'Novorepnoye', georgopolcrates: 'Georgopol Crates', lipovka: 'Lipovka', stalber: 'Stalber', kameshki: 'Kameshki', mansion: 'Mansion', farm: 'Farm', lipovka: 'Lipovka', primorsk: 'Primorsk', novorepnoye: 'Novorepnoye', zharki: 'Zharki', severny: 'Severny', kameshki: 'Kameshki', gatka: 'Gatka', stalber: 'Stalber', ferrypier: 'Ferry Pier', quarry: 'Quarry', boatyard: 'Boatyard', ruins: 'Ruins', mansion: 'Mansion', prison: 'Prison', hospital: 'Hospital', school: 'School', farm: 'Farm', shelter: 'Shelter', waterTown: 'Water Town', dekamesto: 'Deka Mesto', podvosto: 'Podvosto', dobromesto: 'Dobro Mesto', krichas: 'Krichas', vihar: 'Vihar', cosmodrome: 'Cosmodrome', hotsprings: 'Hot Springs', jadenacity: 'Jadena City', meyran: 'Mey Ran', neonfactory: 'Neon Factory', ladrillera: 'La Cobreria', losleones: 'Los Leones', elpozo: 'El Pozo', sanmartin: 'San Martin', bootcamp: 'Bootcamp', paradise: 'Paradise Resort', ruins_sanhok: 'Ruins' };
   function placeName(z) {
     if (!z || /event|spot/i.test(z)) return '';
     if (PLACE[z]) return PLACE[z];
@@ -1375,6 +1376,150 @@
       window.SJ.lastClip = blob;
     }).catch(function (e) { body.textContent = e && e.message === 'unsupported' ? S.clipNoSupport : S.failed; });
   }
+
+  // ---------- news reel: the match's hottest fights as one video, "live from the news helicopter" ----------
+  // The replay plays the top fights (clip mode, one after another); each frame its SVG is drawn into a canvas with a
+  // broadcast frame around it and recorded with MediaRecorder. Everything stays in the browser.
+  function newsReel(match, el, d) {
+    var mime = clipMime();
+    var box = document.createElement('div');
+    box.className = 'clipbox';
+    box.innerHTML = '<div class="panel"><div class="row sp"><b style="font:20px/1 var(--stencil)">📺 ' + esc(S.news) + '</b><button type="button" class="ghost x" style="min-height:40px;padding:4px 12px">✕</button></div><div class="cl-body muted small" style="margin-top:10px"></div></div>';
+    document.body.appendChild(box);
+    var body = $('.cl-body', box), cancelled = false;
+    $('.x', box).onclick = function () { cancelled = true; box.remove(); if (active) active.stop(); };
+    if (!mime || !HTMLCanvasElement.prototype.captureStream) { body.textContent = S.clipNoSupport; return; }
+    var windows = actionWindows(d, match.ours).slice().sort(function (a, b) { return b.score - a.score; }).slice(0, 3).sort(function (a, b) { return a.s - b.s; });
+    if (!windows.length) { body.textContent = S.noMoments; return; }
+    var W = 720, H = 1000, MAPY = 112, MS = 720;
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    window.SJ.newsCanvas = cv; // for the screenshot check
+    var g = cv.getContext('2d');
+    var mapName = (MAP_NAMES[match.map] || match.map || '').toUpperCase();
+    var ours = new Set(match.ours);
+    var fightInfo = windows.map(function (w) {
+      var z = '', foes = {}, lines = [];
+      d.events.forEach(function (e) {
+        if (e.t < w.s || e.t > w.e) return;
+        if (!z && e.z) z = e.z;
+        if (ours.has(e.a) && !ours.has(e.v)) foes[e.vn] = 1;
+        if (ours.has(e.v) && e.a && !ours.has(e.a)) foes[e.an] = 1;
+        if (e.k === 'revive') { if (ours.has(e.a)) lines.push(nameOf(match, e.a, e.an) + ' REVIVES ' + nameOf(match, e.v, e.vn)); return; }
+        if (!(ours.has(e.a) || ours.has(e.v))) return;
+        lines.push(nameOf(match, e.a, e.an) + (e.k === 'kill' ? ' ELIMINATES ' : ' KNOCKS ') + nameOf(match, e.v, e.vn) + (e.w ? ' · ' + weapon(e.w).toUpperCase() : '') + (e.d ? ' ' + e.d + 'M' : ''));
+      });
+      var nf = Object.keys(foes).length;
+      return { w: w, head: 'FIREFIGHT' + (z ? ' AT ' + placeName(z).toUpperCase() : '') + ' · ' + new Set(match.ours).size + ' VS ' + (nf || '?'), ticker: lines.length ? 'BREAKING: ' + lines.join('   ◆   ') : 'BREAKING: SHOTS FIRED' };
+    });
+    // images inside the SVG must be inline for the canvas: the base map once, the sharp tiles as they come
+    var inl = {};
+    var toData = function (url) { if (inl[url] !== undefined) return; inl[url] = null; fetch(url).then(function (r) { return r.blob(); }).then(function (b) { var fr = new FileReader(); fr.onload = function () { inl[url] = fr.result; }; fr.readAsDataURL(b); }).catch(function () {}); };
+    toData('/maps/' + match.map + '.jpg?v=2');
+    var frameSvg = function () {
+      var svg = $('svg.mp', el);
+      if (!svg || !$('.pms', svg)) return null;
+      var str = new XMLSerializer().serializeToString(svg);
+      str = str.replace(/<image([^>]*?) href="(\/maps\/[^"]+)"([^>]*?)\/?>/g, function (m0, a, url, b) {
+        if (inl[url]) return '<image' + a + ' href="' + inl[url] + '"' + b + '/>';
+        toData(url); return '';
+      });
+      return str.replace('<svg ', '<svg width="' + MS + '" height="' + MS + '" preserveAspectRatio="xMidYMid slice" ');
+    };
+    var loadSvg = function (str) { return new Promise(function (res) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { res(null); }; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str); }); };
+    var cur = 0, phase = 'intro', phaseAt = performance.now(), lastImg = null, ticker = 0, done = false;
+    var stencil = '"Black Ops One", sans-serif', pixel = '"Press Start 2P", monospace';
+    function header(now) {
+      g.fillStyle = '#0b0d12'; g.fillRect(0, 0, W, MAPY);
+      g.fillStyle = '#e5383b'; g.fillRect(0, 0, W, 6);
+      if (Math.floor(now / 600) % 2) { g.fillStyle = '#ff3b3b'; g.beginPath(); g.arc(40, 52, 11, 0, 7); g.fill(); }
+      g.fillStyle = '#fff'; g.font = '700 30px ' + stencil; g.textBaseline = 'middle'; g.fillText('LIVE', 62, 54);
+      g.fillStyle = '#ffcf4d'; g.font = '28px ' + stencil; g.fillText('SQUAD NEWS', 170, 54);
+      g.fillStyle = '#9fd3e6'; g.font = '13px ' + pixel; g.fillText('HELI-CAM 3 · ' + mapName + ' · MATCH ' + match.n, 170, 90);
+    }
+    function lower(now, info) {
+      var y = MAPY + MS;
+      g.fillStyle = '#0b0d12'; g.fillRect(0, y, W, H - y);
+      g.fillStyle = '#ffcf4d'; g.fillRect(0, y, W, 58);
+      g.fillStyle = '#111'; g.font = '26px ' + stencil; g.textBaseline = 'middle'; g.fillText(info ? info.head : 'SQUAD NEWS', 20, y + 30, W - 40);
+      g.fillStyle = '#e5383b'; g.fillRect(0, y + 70, 150, 46); g.fillStyle = '#fff'; g.font = '15px ' + pixel; g.fillText('BREAKING', 14, y + 94);
+      g.save(); g.beginPath(); g.rect(150, y + 70, W - 150, 46); g.clip();
+      g.fillStyle = '#1a1d23'; g.fillRect(150, y + 70, W - 150, 46);
+      g.fillStyle = '#eef1f5'; g.font = '700 22px Rubik, sans-serif';
+      var txt = info ? info.ticker : '', tw = g.measureText(txt).width + 120;
+      ticker = (ticker + 2.2) % Math.max(1, tw);
+      g.fillText(txt, 170 + W - 150 - ticker, y + 94); g.fillText(txt, 170 + W - 150 - ticker + tw, y + 94);
+      g.restore();
+      g.fillStyle = '#7d8590'; g.font = '11px ' + pixel; g.fillText('SQUAD JOURNAL · ' + (SJ.title || ''), 20, H - 24);
+    }
+    function heliFrame(now) {
+      var wob = Math.sin(now / 170) * 2 + Math.sin(now / 53) * 0.8;
+      if (lastImg) { g.save(); g.beginPath(); g.rect(0, MAPY, W, MS); g.clip(); g.drawImage(lastImg, wob - 6, MAPY - 6 + wob * 0.6, MS + 12, MS + 12); g.restore(); }
+      // camera reticle: corner brackets, a centre cross, altitude and zoom readout
+      g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 3;
+      [[24, MAPY + 24, 1, 1], [W - 24, MAPY + 24, -1, 1], [24, MAPY + MS - 24, 1, -1], [W - 24, MAPY + MS - 24, -1, -1]].forEach(function (c) { g.beginPath(); g.moveTo(c[0], c[1] + 40 * c[3]); g.lineTo(c[0], c[1]); g.lineTo(c[0] + 40 * c[2], c[1]); g.stroke(); });
+      g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,.45)'; var cx = W / 2, cy = MAPY + MS / 2;
+      g.beginPath(); g.moveTo(cx - 26, cy); g.lineTo(cx - 8, cy); g.moveTo(cx + 8, cy); g.lineTo(cx + 26, cy); g.moveTo(cx, cy - 26); g.lineTo(cx, cy - 8); g.moveTo(cx, cy + 8); g.lineTo(cx, cy + 26); g.stroke();
+      var clock = $('.clock', el), alive = $('.h-left', el), cam = String(window.SJ.cam || '').split(':')[1] || '1000';
+      g.fillStyle = 'rgba(11,13,18,.7)'; g.fillRect(W - 210, MAPY + 40, 170, 64);
+      g.fillStyle = '#eef1f5'; g.font = '13px ' + pixel; g.textBaseline = 'middle';
+      g.fillText((clock ? clock.textContent : '') + '  ' + (alive ? alive.textContent : ''), W - 198, MAPY + 60);
+      g.fillStyle = '#9fd3e6'; g.fillText('ALT ' + Math.round(Number(cam) * 8 / 10) * 10 + 'M  ×' + Math.max(1, Math.round(1000 / Number(cam))), W - 198, MAPY + 86);
+    }
+    function card(now, lines, big) {
+      g.fillStyle = '#0b0d12'; g.fillRect(0, MAPY, W, MS);
+      if (lastImg) { g.globalAlpha = 0.25; g.drawImage(lastImg, 0, MAPY, MS, MS); g.globalAlpha = 1; }
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#ffcf4d'; g.font = '44px ' + stencil; g.fillText(big, W / 2, MAPY + 250, W - 60);
+      g.fillStyle = '#eef1f5'; g.font = '16px ' + pixel;
+      lines.forEach(function (l, i) { g.fillText(l, W / 2, MAPY + 330 + i * 40, W - 60); });
+      g.textAlign = 'start';
+    }
+    var summary = function () {
+      var place = match.place || 0, kills = 0, dmg = 0;
+      d.events.forEach(function (e) { if (e.k === 'kill' && ours.has(e.a) && !ours.has(e.v)) kills++; });
+      (d.dmg || []).forEach(function (x) { var a = d.pp[x[1]] && d.pp[x[1]][0], v = d.pp[x[2]] && d.pp[x[2]][0]; if (ours.has(a) && !ours.has(v)) dmg += x[3]; });
+      return { big: place === 1 ? 'WINNER WINNER CHICKEN DINNER' : 'FINISHED #' + place, lines: [kills + ' KILLS · ' + Math.round(dmg) + ' DAMAGE', windows.length + ' FIREFIGHTS ON TAPE', 'REPORTING FROM ' + mapName] };
+    };
+    var stream = cv.captureStream(30), chunks = [], rec;
+    try { rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 }); } catch (e) { body.textContent = S.clipNoSupport; return; }
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = function () {
+      if (cancelled) return;
+      if (active) active.stop();
+      var blob = new Blob(chunks, { type: mime.split(';')[0] }), ext = /mp4/.test(blob.type) ? 'mp4' : 'webm';
+      var file = new File([blob], 'squad-news-match-' + match.n + '.' + ext, { type: blob.type }), url = URL.createObjectURL(blob);
+      body.innerHTML = '<video src="' + url + '" controls playsinline autoplay muted loop style="width:100%;max-height:60vh;border-radius:10px;background:#000"></video><div class="row" style="margin-top:10px"><button type="button" class="btn sh" style="flex:1">📤 ' + esc(S.clipShare) + '</button><a class="btn ghost" download="' + esc(file.name) + '" href="' + url + '">⬇ ' + esc(S.clipSave) + '</a></div>';
+      var sh = $('.sh', body);
+      if (navigator.canShare && navigator.canShare({ files: [file] })) sh.onclick = function () { navigator.share({ files: [file], title: document.title }).catch(function () {}); };
+      else sh.remove();
+      window.SJ.lastNews = blob;
+    };
+    var startClip = function (i) {
+      cur = i;
+      var w = windows[i];
+      el.scrollIntoView({ block: 'center' });
+      replay(match, el, d, w.s, { clip: [w.s, w.e], auto: true, next: function () { if (i + 1 < windows.length) startClip(i + 1); else { phase = 'outro'; phaseAt = performance.now(); } } });
+    };
+    rec.start(500);
+    var busy = false;
+    (function loop() {
+      if (cancelled) { try { rec.stop(); } catch (e) {} return; }
+      var now = performance.now();
+      body.textContent = fmt(S.newsMaking, { n: Math.min(99, Math.round(((phase === 'intro' ? 0 : phase === 'outro' ? windows.length : cur + 0.5)) / (windows.length + 0.5) * 100)) });
+      if (phase === 'intro') {
+        header(now); card(now, ['MATCH ' + match.n + ' · ' + mapName, windows.length + ' FIREFIGHTS COMING UP'], 'LIVE FROM THE BATTLEFIELD'); lower(now, null);
+        if (now - phaseAt > 2200) { phase = 'play'; startClip(0); }
+      } else if (phase === 'play') {
+        if (!busy) { var str = frameSvg(); if (str) { busy = true; loadSvg(str).then(function (im) { if (im) lastImg = im; busy = false; }); } }
+        header(now); heliFrame(now); lower(now, fightInfo[cur]);
+      } else if (phase === 'outro') {
+        var sm = summary(); header(now); card(now, sm.lines, sm.big); lower(now, { head: 'END OF REPORT', ticker: 'BREAKING: ' + sm.big + '   ◆   ' + sm.lines.join('   ◆   ') });
+        if (now - phaseAt > 3500) { done = true; rec.stop(); return; }
+      }
+      requestAnimationFrame(loop);
+    })();
+  }
+  var MAP_NAMES = { Baltic_Main: 'Erangel', Erangel_Main: 'Erangel', Desert_Main: 'Miramar', Savage_Main: 'Sanhok', DihorOtok_Main: 'Vikendi', Summerland_Main: 'Karakin', Chimera_Main: 'Paramo', Tiger_Main: 'Taego', Kiki_Main: 'Deston', Neon_Main: 'Rondo', Heaven_Main: 'Haven', Range_Main: 'Camp Jackal' };
 
   // ---------- loading: derived data for every match ----------
   function overlay(el, text, pct) {

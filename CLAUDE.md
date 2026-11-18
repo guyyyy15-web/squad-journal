@@ -114,6 +114,15 @@ GitHub does **not** deploy.
   body (grey ✕ when far); a knocked other lies down until their kill. **End screen** (`endCard()`, full replay only):
   retro WINNER WINNER CHICKEN DINNER (pixel drumstick, `PIX.thing('chicken')`) or BETTER LUCK NEXT TIME #place / teams,
   each of us with kills, damage and time of death, buttons replay / next match / ✕ (the map's own ✕ and ⛶ stay on top).
+- **News reel** (`newsReel()`, 📺 on each match): the match's top 3 fights by score play in clip mode while every frame's
+  SVG (images inlined as data URLs; tiles fetched on demand) is drawn into a 720×1000 canvas with a "live from the news
+  chopper" frame — LIVE header, heli-cam wobble, reticle, game clock/ALT readout, headline per fight, BREAKING ticker —
+  plus an intro and a summary card; recorded with MediaRecorder (mp4 where supported), shared or saved, nothing uploaded.
+- **Loading:** pixel progress bar with % (the worker estimates from the gzip size × 11); the home page prepares new
+  matches in the background (`/api/pending` → up to 2 matches below `DERIVED_V`, analysed in the visitor's browser).
+- **Replay polish:** enemies are nudged off our soldiers (`nudge`), enemy names under the fighters, a knock merged into
+  the kill line, the frame shifts away from the feed/banner in fights, a minimap when zoomed in (< 300 units), timeline
+  icons (☠ ◐ ✕ ✚ ✈ ▣) over a tension strip, drifting cloud shadows, a pixel gun flash over our kills.
 - **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
 - **Big screen:** ⛶ / "Fullscreen" chip / F → theater + real fullscreen where the browser allows it (phones try a
