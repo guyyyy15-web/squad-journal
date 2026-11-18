@@ -351,7 +351,8 @@
     el.style.backgroundImage = 'none';
     el.innerHTML = svg.join('')
       + '<div class="hud"><b class="clock">0:00</b><span class="h-sq"></span><span class="h-left"></span><span class="h-ph"></span><span class="h-ar"></span></div><div class="h-sm hide">SLOW-MO</div>'
-      + '<ol class="kf" aria-live="polite"></ol><div class="vig"></div><i class="lbx t"></i><i class="lbx b"></i><div class="tn"></div><div class="sqb"></div><button type="button" class="irb hide"></button>'
+      + '<div class="mini"><svg viewBox="0 0 1000 1000"><image href="/maps/' + esc(match.map) + '.jpg?v=2" width="1000" height="1000"/><circle class="mz" fill="none" stroke="#5aa2ff" stroke-width="18" r="0"/><g class="md"></g><rect class="mv" fill="none" stroke="#ffcf4d" stroke-width="14"/></svg></div>'
+      + '<ol class="kf" aria-live="polite"></ol><div class="vig"></div><div class="clouds"></div><i class="lbx t"></i><i class="lbx b"></i><div class="tn"></div><div class="sqb"></div><button type="button" class="irb hide"></button>'
       + '<div class="tools"><button type="button" class="th" aria-label="' + esc(S.theater) + '">⛶</button><button type="button" class="cl" aria-label="' + esc(S.stop) + '">✕</button></div>';
 
     var bar = $('[data-rbar="' + match.id + '"]');
@@ -361,8 +362,14 @@
     var tl = marks.map(function (m, i) {
       if (lastByK[m.k] != null && m.t - lastByK[m.k] < (tEnd - t0) * 0.012) return '';
       lastByK[m.k] = m.t;
-      return '<button type="button" class="mk ' + m.k + '" data-i="' + i + '" style="left:' + ((m.t - t0) / (tEnd - t0) * 100).toFixed(2) + '%;--c:' + esc(colorOf(m.k === 'death' ? m.v : m.a)) + '" aria-label="' + mmss(m.t) + '"></button>';
-    }).join('');
+      return '<button type="button" class="mk ' + m.k + '" data-i="' + i + '" style="left:' + ((m.t - t0) / (tEnd - t0) * 100).toFixed(2) + '%;--c:' + esc(colorOf(m.k === 'death' ? m.v : m.a)) + '" aria-label="' + mmss(m.t) + '">' + ({ kill: '☠', knock: '◐', death: '✕', revive: '✚' }[m.k] || '•') + '</button>';
+    }).join('')
+      + (d.plane ? '<i class="tic" style="left:' + ((firstJump - t0) / (tEnd - t0) * 100).toFixed(2) + '%">✈</i>' : '')
+      + (d.cp || []).map(function (c) { return c[0] > t0 && c[0] < tEnd ? '<i class="tic cp" style="left:' + ((c[0] - t0) / (tEnd - t0) * 100).toFixed(2) + '%">▣</i>' : ''; }).join('');
+    // tension under the scrubber: where the action is, before you get there
+    var tpts = [];
+    for (var ti = 0; ti <= 120; ti++) { var tt = t0 + (tEnd - t0) * ti / 120; tpts.push((ti / 1.2).toFixed(1) + ',' + (10 - tensAt(tt) * 9).toFixed(1)); }
+    tl += '<svg class="tens" viewBox="0 0 100 10" preserveAspectRatio="none"><polygon points="0,10 ' + tpts.join(' ') + ' 100,10" fill="rgba(242,169,0,.28)"/><polyline points="' + tpts.join(' ') + '" fill="none" stroke="#f2a900" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>';
     var chips = '<button type="button" class="cam on" data-cam="auto">🎥 ' + esc(S.camAuto) + '</button><button type="button" class="cam" data-cam="full">🗺 ' + esc(S.fullMap) + '</button>'
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
       + '<button type="button" class="cam snd' + (sfx.on ? ' on' : '') + '">' + (sfx.on ? '🔊 ' : '🔇 ') + esc(S.sound) + '</button>'
@@ -382,7 +389,7 @@
     var chute = pm.map(function (g) { return g.querySelector('.chute'); });
     var sprEl = pm.map(function (g) { return g.querySelector('.spr'); }), tagEl = pm.map(function (g) { return g.querySelector('.pmt'); });
     var icoEl = pm.map(function (g) { return g.querySelector('.ico'); }), spwEl = pm.map(function (g) { return g.querySelector('.spw'); }), lblEl = pm.map(function (g) { return g.querySelector('.lbl'); }), wicEl = pm.map(function (g) { return g.querySelector('.wic'); });
-    var dispPos = [], spriteMode = true, modeKey = '', wicKey = [];
+    var dispPos = [], spriteMode = true, modeKey = '', wicKey = [], offX = 0, offY = 0;
     var sprKey = [], faceOf = {};
     var GUNTAG = { sr: 'SR', dmr: 'DMR', ar: 'AR', lmg: 'LMG', smg: 'SMG', sg: 'SG', pistol: 'PST', boom: '', melee: '', other: '' };
     // the gun in hand: the last shot within 20 s, else the last gun picked up
@@ -402,6 +409,17 @@
     var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
     // the sprite's game state at time t: helmet/vest level, hurt or knocked eyes, healing or reviving
     var pp2acc = function (i) { return d.pp && d.pp[i] ? d.pp[i][0] : ''; };
+    // keep an enemy sprite off our soldiers (their eased positions this frame)
+    function nudge(p, gap) {
+      var x = p[0], y = p[1];
+      for (var k = 0; k < dispPos.length; k++) {
+        var q = dispPos[k];
+        if (!q || !pm[k] || pm[k].style.display === 'none') continue;
+        var dx = x - q[0], dy = y - q[1], dd = Math.hypot(dx, dy);
+        if (dd < gap) { if (dd < 0.01) { dx = 1; dy = 0; dd = 1; } x = q[0] + dx / dd * gap; y = q[1] + dy / dd * gap; }
+      }
+      return [x, y];
+    }
     // the people we killed stay where they fell: a muted body (X eyes), no loud colours once the moment has passed
     function bodyAt(e, u, us) {
       var flip = e.ap && e.ap[0] > e.vp[0];
@@ -706,8 +724,11 @@
         if (model.ourIdx.has(hh.a) || model.ourIdx.has(hh.v)) { shake = Math.max(shake, cur[2] * 0.01 * (1 - (t - hh.t) / 0.3)); if (hh.head) punch = 0.94; }
       }
       if (performance.now() < freezeUntil) punch = Math.min(punch, 0.9);
+      var frameShift = (phase === 'fight' || bannerUntil) ? 1 : 0;
+      offX += ((frameShift ? -0.06 : 0) - offX) * Math.min(1, (realDt || 0.016) * 2);
+      offY += ((frameShift ? -0.03 : 0) - offY) * Math.min(1, (realDt || 0.016) * 2);
       var vs = cur[2] * punch;
-      var vx = cur[0] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2, vy = cur[1] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2;
+      var vx = cur[0] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2 + offX * vs, vy = cur[1] + (cur[2] - vs) / 2 + (Math.random() - 0.5) * shake * 2 + offY * vs;
       view = [vx, vy, vs];
       // the vignette centres on the shooter during an instant replay
       if (irp) { var sp = irp.m.e.ap && (irp.m.e.ap[0] || irp.m.e.ap[1]) ? irp.m.e.ap : irp.m.e.vp; vig.style.setProperty('--vx', ((sp[0] - vx) / vs * 100).toFixed(1) + '%'); vig.style.setProperty('--vy', ((sp[1] - vy) / vs * 100).toFixed(1) + '%'); }
@@ -739,6 +760,7 @@
         var zr = z.safe[2], zx = z.safe[0], zy = z.safe[1];
         zout.setAttribute('d', 'M-3000 -3000H4000V4000H-3000Z M' + (zx - zr).toFixed(1) + ' ' + zy.toFixed(1) + 'a' + zr.toFixed(1) + ' ' + zr.toFixed(1) + ' 0 1 0 ' + (2 * zr).toFixed(1) + ' 0a' + zr.toFixed(1) + ' ' + zr.toFixed(1) + ' 0 1 0 ' + (-2 * zr).toFixed(1) + ' 0Z');
       } else zout.setAttribute('d', '');
+      if (nowMs - lastMini > 200) { lastMini = nowMs; drawMini(z); }
       if (z && z.warn) { zw.setAttribute('cx', z.warn[0]); zw.setAttribute('cy', z.warn[1]); zw.setAttribute('r', z.warn[2]); } else zw.setAttribute('r', 0);
       // players
       var moveFx = [];
@@ -883,12 +905,14 @@
           if (!pos[0] && !pos[1]) return;
           diam[i] = 1;
           var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
+          if (spriteMode) pos = nudge(pos, us * 6);
           var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
           if (spriteMode) fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea, stateOf(ip, pp2acc(ip), t)));
           else fxh.push('<path d="M' + f1(pos[0]) + ' ' + f1(pos[1] - u * 1.6) + 'L' + f1(pos[0] + u * 1.6) + ' ' + f1(pos[1]) + 'L' + f1(pos[0]) + ' ' + f1(pos[1] + u * 1.6) + 'L' + f1(pos[0] - u * 1.6) + ' ' + f1(pos[1]) + 'Z" fill="' + (eDn ? '#ff4d4d' : '#dfe3ea') + '" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
           fxh.push(hpBar(pos[0], pos[1] - us * 10, us, hh));
           var eGr = gearAt(model, ip, t);
-          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + us * 2.4) + '" font-size="' + f1(us * 1.3) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
+          if (spriteMode) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + us * 2.6) + '" font-size="' + f1(Math.max(us * 1.5, u * 1.25)) + '" text-anchor="middle" fill="#d6dbe2" stroke="#05070a" stroke-width="' + f1(Math.max(us, u * 0.8) * 0.5) + '" paint-order="stroke" font-family="Rubik, sans-serif" font-weight="700">' + esc(name(ip)) + '</text>');
+          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + us * 2.4 + Math.max(us * 1.6, u * 1.4)) + '" font-size="' + f1(us * 1.3) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
         });
       }
       var oh = [], dim = [];
@@ -959,8 +983,17 @@
         var pi = model ? model.idx.get(e.v) : undefined, ps = (pi !== undefined && opBy[pi] && opAt(opBy[pi], t)) || e.vp;
         fxh.push(ring(ps, u * 2.4, dn.bleed, '#ff4d4d', u));
       });
+      var nowG = performance.now();
+      gunFlash = gunFlash.filter(function (g) { return nowG - g.born < 1400; });
+      gunFlash.forEach(function (g) {
+        var ic = PIX.gun(g.c), a = (nowG - g.born) / 1400;
+        if (!ic) return;
+        var w = Math.max(us, u * 0.7) * 9 * (1 + (a < 0.15 ? (0.15 - a) * 3 : 0)), h = w * 7 / 18;
+        fxh.push('<g opacity="' + (a < 0.7 ? 1 : (1 - a) / 0.3).toFixed(2) + '"><use href="#' + pxRef(ic) + '" x="' + f1(g.p[0] - w / 2) + '" y="' + f1(g.p[1] - w * 1.25 - a * w * 0.3) + '" width="' + f1(w) + '" height="' + f1(h) + '"/></g>');
+      });
       fx.innerHTML = moveFx.join('') + fxh.join('');
       lb.innerHTML = lbh.join('') + ribbons(u);
+      recent = recent.filter(function (e) { return !(e.k === 'knock' && recent.some(function (k2) { return k2.k === 'kill' && k2.v === e.v && k2.t >= e.t && k2.t - e.t <= 15; })); });
       var shown = recent.slice(-3);
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
       if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
@@ -1018,11 +1051,19 @@
       });
     }
     function endFight(keepBanner) { phase = null; curW = null; fight = null; if (!keepBanner) hideBanner(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
-    var lastBattle = 0, lastSq = 0, pops = [], POP_MS = 2000; // damage numbers live 2 s of real time
+    var lastBattle = 0, lastSq = 0, pops = [], POP_MS = 2000, gunFlash = []; // damage numbers live 2 s of real time
     var aspect = 1;
     var measure = function () { var r = el.getBoundingClientRect(); aspect = r.height > 50 ? r.width / r.height : 1; };
     measure();
     if (window.ResizeObserver) new ResizeObserver(measure).observe(el); else window.addEventListener('resize', measure);
+    var mini = $('.mini', el), mz = $('.mz', el), mdG = $('.md', el), mv = $('.mv', el), lastMini = 0;
+    function drawMini(z) {
+      mini.classList.toggle('on', view[2] < 300);
+      if (view[2] >= 300) return;
+      if (z) { mz.setAttribute('cx', z.safe[0]); mz.setAttribute('cy', z.safe[1]); mz.setAttribute('r', z.safe[2]); }
+      mv.setAttribute('x', Math.max(0, view[0]).toFixed(0)); mv.setAttribute('y', Math.max(0, view[1]).toFixed(0)); mv.setAttribute('width', Math.max(20, view[2]).toFixed(0)); mv.setAttribute('height', Math.max(20, view[2]).toFixed(0));
+      mdG.innerHTML = squadIds.map(function (id) { var p = posAt(d.players[id], t); return p ? '<circle cx="' + p[0].toFixed(0) + '" cy="' + p[1].toFixed(0) + '" r="22" fill="' + esc(colorOf(id)) + '" stroke="#000" stroke-width="6"/>' : ''; }).join('');
+    }
     var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
     // end of the match: a retro results screen (WINNER WINNER CHICKEN DINNER or the place), our numbers, what next
     function endCard() {
@@ -1115,6 +1156,8 @@
             if (!doneIR[mo.t] && mo.t + 0.9 > tPrev && mo.t + 0.9 <= t) { doneIR[mo.t] = 1; startReplay(mo); break; }
           }
           if (irp && irp.ph === 'play' && t >= irp.until) endReplay();
+          // a gun flash over the victim when one of ours gets a kill
+          for (var gk = 0; gk < ourEv.length; gk++) { var ge = ourEv[gk]; if (ge.k === 'kill' && ours.has(ge.a) && !ours.has(ge.v) && ge.t > tPrev && ge.t <= t) gunFlash.push({ p: ge.vp, c: weaponClass(ge.w || ''), born: performance.now() }); }
           // gunfire
           if (sfx.on && hasShots) for (var gs = shotStart(tPrev); gs < shots.length && shots[gs].t <= t; gs++) sfx.shot(wcOf(shots[gs].w), model.ourIdx.has(shots[gs].p));
           else if (sfx.on) for (var gi = 0; gi < model.dmg.length; gi++) {

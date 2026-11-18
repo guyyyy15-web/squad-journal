@@ -117,6 +117,15 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .map .ecr b{font:700 13px var(--body);color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .map .eca{display:flex;gap:8px;justify-content:center}.map .eca button{min-height:44px;padding:0 14px;border-radius:4px;border:2px solid var(--gold);background:#111;color:var(--gold2);font:10px "Press Start 2P",monospace}
 .map .ecb{position:relative}.map .eca .ec-x{position:absolute;top:4px;inset-inline-end:4px;min-height:36px;min-width:36px;padding:0;border:0;background:none;color:var(--muted);font-size:14px}
+.map .mini{position:absolute;right:6px;bottom:56px;width:84px;height:84px;z-index:3;border:2px solid #0b0d12;outline:1px solid rgba(255,255,255,.25);border-radius:4px;overflow:hidden;opacity:0;transition:opacity .4s;pointer-events:none;background:#0b0d12}
+.map .mini.on{opacity:.92}.map .mini svg{width:100%;height:100%;display:block}
+.match.theater .map .mini{width:150px;height:150px;bottom:64px}
+.map .clouds{position:absolute;inset:-20%;z-index:1;pointer-events:none;opacity:.22;mix-blend-mode:multiply;background:radial-gradient(32% 22% at 20% 30%,#000 0,transparent 70%),radial-gradient(26% 18% at 70% 60%,#000 0,transparent 70%),radial-gradient(22% 16% at 45% 85%,#000 0,transparent 70%);animation:clouds 70s linear infinite}
+@keyframes clouds{from{transform:translate(-8%,-4%)}to{transform:translate(8%,4%)}}
+.rbar .mk::before{content:none}.rbar .mk{font:12px/22px var(--mono);color:var(--c);text-shadow:0 0 3px #000,0 0 1px #000;text-align:center}
+.rbar .mk.kill{color:#ff6b6b}.rbar .mk.revive{color:#7ee2a8}
+.rbar .tic{position:absolute;top:-4px;margin-inline-start:-6px;font:11px/22px var(--mono);color:#cfd5dd;font-style:normal;pointer-events:none;text-shadow:0 0 3px #000}.rbar .tic.cp{color:#ff8a8a}
+.rbar .tens{position:absolute;left:0;right:0;bottom:-2px;width:100%;height:12px;pointer-events:none}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -492,7 +501,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=8', '/app/session.js?v=85'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=8', '/app/session.js?v=86'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 
