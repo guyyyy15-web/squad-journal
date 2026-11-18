@@ -402,6 +402,13 @@
     var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
     // the sprite's game state at time t: helmet/vest level, hurt or knocked eyes, healing or reviving
     var pp2acc = function (i) { return d.pp && d.pp[i] ? d.pp[i][0] : ''; };
+    // the people we killed stay where they fell: a muted body (X eyes), no loud colours once the moment has passed
+    function bodyAt(e, u, us) {
+      var flip = e.ap && e.ap[0] > e.vp[0];
+      if (spriteMode) return '<g opacity=".8" style="filter:saturate(.55) brightness(.85)">' + sprite('down', '#7d7452', '', true, e.vp[0], e.vp[1], us * 8, flip ? 270 : 90) + '</g>';
+      var r = Math.min(u, 6) * 0.9;
+      return '<path d="M' + f1(e.vp[0] - r) + ' ' + f1(e.vp[1] - r) + 'L' + f1(e.vp[0] + r) + ' ' + f1(e.vp[1] + r) + 'M' + f1(e.vp[0] + r) + ' ' + f1(e.vp[1] - r) + 'L' + f1(e.vp[0] - r) + ' ' + f1(e.vp[1] + r) + '" stroke="#b9bdb4" stroke-opacity=".75" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
+    }
     function stateOf(pi, acc, at) {
       var st = { helm: 2, vest: 2, eyes: '', prop: '' };
       if (model && pi !== undefined) {
@@ -809,8 +816,9 @@
           fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], us * 7, 0) + smokeFx(e.vp, age, u, (e.t % 7) / 7));
           if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + (e.d ? ' ' + e.d + 'm' : ''), '#ff8a8a', weaponClass(e.w || '')));
         } else if (age > 8) {
-          if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
+          if (e.k === 'kill') fxh.push(bodyAt(e, u, us));
         } else {
+          if (e.k === 'kill') fxh.push(bodyAt(e, u, us));
           var f = age / 8, col = e.k === 'revive' ? '#7ee2a8' : e.k === 'knock' ? '#f2a900' : '#ff4d4d';
           fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * (1.2 + f * 5)) + '" fill="none" stroke="' + col + '" stroke-opacity="' + (1 - f) + '" stroke-width="3" vector-effect="non-scaling-stroke"/>');
           fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.2) + '" fill="' + col + '"/>');

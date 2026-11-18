@@ -108,6 +108,8 @@ GitHub does **not** deploy.
   the kill feed, bottom-left (3 lines, pixel gun icon + distance, also during fights). On the map: sprites, HP bars,
   rings, damage numbers. Damage numbers (`pops`) live 2 s of **real** time (`POP_MS`), heals/armour breaks scale with
   the pace, so they stay readable at any speed. Phones: the battle panel is under the map again.
+- **Bodies stay:** everyone we killed stays where they fell (`bodyAt`: muted lying soldier with X eyes in close-ups, a grey ✕
+  on wide shots). Red/yellow are for the moment only (hits, knocks, kills, damage numbers), never permanent markers.
 - **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
 - **Big screen:** ⛶ / "Fullscreen" chip / F → theater + real fullscreen where the browser allows it (phones try a
