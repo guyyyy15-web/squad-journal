@@ -87,7 +87,8 @@ GitHub does **not** deploy.
   zoomed in (< 170 units). Desktop ≥ 1100 px: map + side column (battle panel, feed, tables); keys space/←/→/F/Esc.
 - **Session page = replays first:** hero with ▶ place badges (`data-play`, jump into that match's replay), highlights
   as a swipe carousel (`.momrow`), then the matches (big ▶ on each map), and MVP/medals/logs/narrator folded in one
-  `<details class="debrief">`. Sprite scale `us = min(u, 3.4) × 0.62` (≈5.5% of the frame in close-ups, capped wide).
+  `<details class="debrief">`. Sprite scale `us = min(2.1, max(u × 0.62, 0.34))`: ≈5.5% of the frame normally, bigger on screen in close-ups
+  (a minimum size on the map), capped on wide shots; name pills are scaled back so they stay the same size on screen.
 - **Replay markers (Guy's call):** no instant replays/killcams inside the replay (they broke the pacing; `moments = []`);
   no walking trails; pixel sprites only when the camera is close (view < 190 units, back to unit patches > 230);
   marker positions are eased each frame (snap on seeks / jumps > 40 units); a name pill in the member's colour with a
@@ -111,8 +112,8 @@ GitHub does **not** deploy.
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
 - **Big screen:** ⛶ / "Fullscreen" chip / F → theater; on desktop it also requests real browser fullscreen, the map as
   tall as the screen with the battle panel beside it.
-- **Director camera** (`directorShot`, replay.js, tested): shot types kill (24–55 units) → duel (28–85) → approach
-  (45–110) → stalk (48–115) → follow the biggest group, ignoring stragglers (80–140); action shots are held 2.5 s; when most of us are together a straggler's
+- **Director camera** (`directorShot`, replay.js, tested): shot types kill (14–45 units) → duel (16–70) → approach
+  (26–95) → stalk (30–100) → follow the biggest group, ignoring stragglers (60–120) — blurry close-ups are fine (Guy); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move
   pulls back on the way (zoom out → glide → zoom in), zoom eases slower out than in, shake on hits, punch on headshots, close markers fan
   out. Sharp close-ups come from 8192 px map tiles in R2 (`maps/hi/<code>/<x>_<y>.jpg`, 8×8 of 1024 px, from

@@ -682,7 +682,7 @@
       window.SJ.cam = shot.kind + ':' + Math.round(vs);
       svgEl.setAttribute('viewBox', vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + vs.toFixed(1) + ' ' + vs.toFixed(1));
       if (nowMs - lastTiles > 250) { lastTiles = nowMs; tiles(tileG, match.map, view); }
-      var u = vs / 100, us = Math.min(u, 3.4) * 0.62; // sprite scale: ~5.5% of the frame in close-ups, capped on wide shots
+      var u = vs / 100, us = Math.min(3.4 * 0.62, Math.max(u * 0.62, 0.34)); // close-ups: sprites keep a minimum size on the map, so they grow on screen // sprite scale: ~5.5% of the frame in close-ups, capped on wide shots
       // HUD
       hud.clock.textContent = mmss(t);
       range.value = String(Math.round(t));
@@ -759,7 +759,9 @@
           if (spriteMode && (kd === 'walkA' || kd === 'walkB')) moveFx.push(dustFx(pos, pPrev, u, false));
           var gIc = gn && PIX.gun(gn);
           // passengers: no sprite or HP bar of their own, their name pills stacked under the driver's
-          var lblT = rider ? (spriteMode ? 'translate(0 ' + (seat[i] * 4.3).toFixed(1) + ') scale(1.55)' : 'translate(0 ' + (1.4 + seat[i] * 3.1).toFixed(1) + ') scale(1.15)') : (spriteMode ? 'scale(1.55)' : 'translate(0 1.4) scale(1.15)');
+          // the name pill keeps its size on screen when the sprites grow in a close-up
+          var ls = spriteMode ? 1.55 * Math.max(0.45, Math.min(1, u * 0.62 / us)) : 1.15, sh = ls / 1.55;
+          var lblT = rider ? (spriteMode ? 'translate(0 ' + (seat[i] * 4.3 * sh).toFixed(2) + ') scale(' + ls.toFixed(3) + ')' : 'translate(0 ' + (1.4 + seat[i] * 3.1).toFixed(1) + ') scale(1.15)') : (spriteMode ? 'scale(' + ls.toFixed(3) + ')' : 'translate(0 1.4) scale(1.15)');
           if (lblEl[i].getAttribute('transform') !== lblT) lblEl[i].setAttribute('transform', lblT);
           var showSpr = !rider && spriteMode, showIco = !rider && !spriteMode;
           if (spwEl[i].getAttribute('display') !== (showSpr ? '' : 'none')) spwEl[i].setAttribute('display', showSpr ? '' : 'none');
@@ -927,8 +929,8 @@
       if (kind === 'intro') {
         var foes = fight.them.map(function (i) { return name(i); });
         var fz = ''; d.events.some(function (e2) { if (e2.t >= curW.s && e2.t <= curW.e && e2.z) { fz = placeName(e2.z); return !!fz; } return false; });
-        bn.innerHTML = '<b class="bt">ENGAGEMENT</b> <span class="bv">' + fight.us.length + ' VS ' + (fight.them.length || '?') + '</span>' + (fz ? '<span class="bz"> · ' + esc(fz.toUpperCase()) + '</span>' : '')
-          + (foes.length ? '<div class="bs" dir="ltr">' + esc(foes.slice(0, 3).join(' · ') + (foes.length > 3 ? ' +' + (foes.length - 3) : '')) + '</div>' : '');
+        bn.innerHTML = '<b class="bt">ENGAGEMENT</b> <span class="bv">' + fight.us.length + ' VS ' + (fight.them.length || '?') + '</span>'
+          + '<div class="bs" dir="ltr">' + (fz ? '<span class="bz">' + esc(fz.toUpperCase()) + '</span> · ' : '') + esc(foes.slice(0, 3).join(' · ') + (foes.length > 3 ? ' +' + (foes.length - 3) : '')) + '</div>';
       } else {
         var w = curW, mv = fight.mvp, mm = mv !== null ? member(model.pp[mv][0]) : null;
         var line = [w.kills ? plural('ffKills', w.kills) : '', w.knocks ? plural('ffKnocks', w.knocks) : '', w.deaths ? plural('ffDown', w.deaths) : ''].filter(Boolean).map(esc).join(' · ');

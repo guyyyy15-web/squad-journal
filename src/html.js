@@ -105,7 +105,7 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .map .battle.onmap .fr .patch,.map .battle.onmap .fr .foe{width:14px;height:16px;font-size:11px}.map .battle.onmap .gi{width:18px;height:7px}
 .map .battle.onmap{max-height:30%;padding:3px 5px}.map .battle.onmap .bh,.map .battle.onmap .fr .gr{display:none}.map .battle.onmap .fr{padding:0}.map .battle.onmap .fr .hpb{margin-top:1px}
 .map.cine .bn{top:calc(6% + 46px)}
-.map .bn .bz{font:9px/1.3 "Press Start 2P",monospace;color:#9fd3e6}.map .hud .h-ar{color:#9fd3e6}
+.map .bn .bz{font:8px/1.3 "Press Start 2P",monospace;color:#9fd3e6}.map .hud .h-ar{color:#9fd3e6}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -477,7 +477,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=74'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=76'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

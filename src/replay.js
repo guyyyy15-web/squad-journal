@@ -282,7 +282,7 @@ export function directorShot(d, model, ours, t, follow = '') {
     const a = real(kc.ap) ? kc.ap : kc.vp; const v = kc.vp;
     const dist = Math.hypot(a[0] - v[0], a[1] - v[1]);
     const c = dist < 45 ? [(a[0] + v[0]) / 2, (a[1] + v[1]) / 2] : v;
-    return { box: box(c[0], c[1], clamp(Math.min(dist, 45) * 1.5 + 18, 24, 55)), kind: 'kill' };
+    return { box: box(c[0], c[1], clamp(Math.min(dist, 45) * 1.35 + 10, 14, 45)), kind: 'kill' };
   }
   // 2. duel: shooters and targets of hits around now
   if (model) {
@@ -300,7 +300,7 @@ export function directorShot(d, model, ours, t, follow = '') {
     if (pts.length) {
       const X = pts.map((p) => p[0]); const Y = pts.map((p) => p[1]);
       const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
-      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.35 + 16, 28, 85)), kind: 'duel' };
+      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.25 + 10, 16, 70)), kind: 'duel' };
     }
   }
   // 3. approach: the next fight of ours within 6 s
@@ -313,7 +313,7 @@ export function directorShot(d, model, ours, t, follow = '') {
     const target = nx.vp;
     const who = posOf(nx.a) || posOf(nx.v) || alive.slice().sort((p, q) => Math.hypot(p[1][0] - target[0], p[1][1] - target[1]) - Math.hypot(q[1][0] - target[0], q[1][1] - target[1]))[0][1];
     const dist = Math.hypot(who[0] - target[0], who[1] - target[1]);
-    if (dist < 150) return { box: box((who[0] + target[0]) / 2, (who[1] + target[1]) / 2, clamp(dist * 1.4 + 30, 45, 110)), kind: 'approach' };
+    if (dist < 150) return { box: box((who[0] + target[0]) / 2, (who[1] + target[1]) / 2, clamp(dist * 1.3 + 18, 26, 95)), kind: 'approach' };
     return { box: box(who[0], who[1], 90), kind: 'approach' };
   }
   // 4. stalk: someone closing in on the group (derived v6) → frame both, the camera creeps in
@@ -324,14 +324,14 @@ export function directorShot(d, model, ours, t, follow = '') {
     if (foe && fd < 90) {
       const X = best.map((x) => x[1][0]).concat(foe[0]); const Y = best.map((x) => x[1][1]).concat(foe[1]);
       const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
-      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.3 + 24, 48, 115)), kind: 'stalk' };
+      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.2 + 16, 30, 100)), kind: 'stalk' };
     }
   }
   // 5. follow the biggest group (members within 50 units of each other), not the stragglers
   if (alive.length) {
     const X = best.map((x) => x[1][0]); const Y = best.map((x) => x[1][1]);
     const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
-    return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.5 + 55, 80, 140)), kind: 'follow' };
+    return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.4 + 45, 60, 120)), kind: 'follow' };
   }
   // 6. nobody of ours left: stay on the last fall
   const deaths = Object.keys(d.players).filter(mine).map((id) => d.players[id].death).filter(Boolean).sort((a, b) => b[2] - a[2]);
