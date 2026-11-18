@@ -25,7 +25,9 @@ export function extractDerived(events, ours, mapSize) {
   const Z = (c) => (c && Array.isArray(c.zone) && c.zone[0] ? String(c.zone[0]).slice(0, 32) : '');
   const players = {};
   const pl = (c) => (players[c.accountId] ||= { name: c.name, team: c.teamId, land: null, death: null, path: [] });
-  const out = { v: 10, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [], vr: [], cp: [], sw: [] };
+  const out = { v: 11, plane: null, zones: [], final: null, alive: [], players, events: [], enemies: [], pp: [], wp: [], dmg: [], heal: [], gear: [], op: [], sh: [], vr: [], cp: [], sw: [], od: [], ok: [] };
+  // v11 — everyone else's fights: od hits [t10, a, v, ax, ay, vx, vy] (≤ 1 per attacker→victim per 0.5 s), ok knocks/kills [t, a, v, kind 0|1, x, y]
+  const odBuf = []; const okBuf = []; const odLast = {};
   // v9 — our vehicle rides vr: [t, p, cls, on] (cls 0 car · 1 motorbike · 2 bicycle · 3 boat · 4 glider · 5 buggy · 6 truck/armour),
   // care packages landing cp: [t, x, y], our swims sw: [t, p, on]
   const vrBuf = []; const swBuf = [];
@@ -151,6 +153,10 @@ export function extractDerived(events, ours, mapSize) {
           const ap = a.location ? P(a.location) : [0, 0]; const vp = v.location ? P(v.location) : [0, 0];
           out.dmg.push([T10(e), pIdx(a), pIdx(v), Math.min(1000, Math.round(e.damage)), wIdx(W({ damageCauserName: e.damageCauserName }) || '?'), hp, e.damageReason === 'HeadShot' ? 1 : 0, ap[0], ap[1], vp[0], vp[1]]);
         }
+        if (a && v && !set.has(a.accountId) && !set.has(v.accountId) && e.damage > 0 && a.accountId !== v.accountId && a.location && v.location) {
+          const k = a.accountId + '>' + v.accountId; const t10 = T10(e);
+          if (odLast[k] === undefined || t10 - odLast[k] >= 5) { odLast[k] = t10; odBuf.push([t10, a, v, ...P(a.location), ...P(v.location)]); }
+        }
         if (!a || !v || !a.teamId || !v.teamId || a.teamId === v.teamId || !(e.damage > 0)) break;
         if (set.has(a.accountId) && !set.has(v.accountId)) enemy(v, T(e)).dd += e.damage;
         else if (set.has(v.accountId) && !set.has(a.accountId)) enemy(a, T(e)).dt += e.damage;
@@ -162,6 +168,7 @@ export function extractDerived(events, ours, mapSize) {
           if (set.has(a.accountId) && !set.has(v.accountId)) enemy(v, T(e)).kn++;
           else if (set.has(v.accountId) && !set.has(a.accountId)) enemy(a, T(e)).dn++;
         }
+        if (a && v && !set.has(a.accountId) && !set.has(v.accountId) && v.location) okBuf.push([T(e), a, v, 0, ...P(v.location)]);
         if ((a && set.has(a.accountId)) || (v && set.has(v.accountId))) {
           out.events.push({ t: T(e), k: 'knock', a: a?.accountId || '', an: a?.name || '', at: a?.teamId || 0, v: v.accountId, vn: v.name, vt: v.teamId || 0,
             ap: a ? P(a.location) : null, vp: P(v.location), w: W(e), d: Math.round((e.distance || 0) / 100), z: Z(v), b: /^ai\./.test(v.accountId) ? 1 : 0 });
@@ -172,6 +179,7 @@ export function extractDerived(events, ours, mapSize) {
         const v = e.victim; const k = e.killer || e.finisher;
         if (!v) break;
         const ourV = set.has(v.accountId); const ourK = k && set.has(k.accountId);
+        if (!ourV && !ourK && v.location) okBuf.push([T(e), k || null, v, 1, ...P(v.location)]);
         if (ourV) pl(v).death = [...P(v.location), T(e)];
         else othDead[v.accountId] = T(e);
         if (k && k.teamId && v.teamId && k.teamId !== v.teamId) {
@@ -232,6 +240,8 @@ export function extractDerived(events, ours, mapSize) {
     }
     out.op.push(row);
   }
+  for (const o of odBuf) { if (out.od.length >= 6000) break; out.od.push([o[0], pIdx(o[1]), pIdx(o[2]), o[3], o[4], o[5], o[6]]); }
+  for (const o of okBuf) { if (out.ok.length >= 300) break; out.ok.push([o[0], o[1] ? pIdx(o[1]) : -1, pIdx(o[2]), o[3], o[4], o[5]]); }
   if (out.dmg.length > 2500) out.dmg = out.dmg.slice(0, 2500);
   if (out.heal.length > 1500) out.heal = out.heal.slice(0, 1500);
   if (out.gear.length > 1500) out.gear = out.gear.slice(0, 1500);
@@ -263,7 +273,7 @@ const str = (s, max = 64) => typeof s === 'string' && s.length <= max;
 
 /** Server-side check of an uploaded derived blob. Returns true if it looks like extractDerived output. */
 export function validDerived(d, allowedIds) {
-  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
+  if (!d || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(d.v) || typeof d.players !== 'object' || !Array.isArray(d.zones) || !Array.isArray(d.events)) return false;
   if (d.plane !== null && !(Array.isArray(d.plane) && d.plane.length === 2 && d.plane.every((p) => isPt(p, 2)))) return false;
   if (d.final !== null && !isPt(d.final, 3)) return false;
   if (d.alive !== undefined && !(Array.isArray(d.alive) && d.alive.length <= 400 && d.alive.every((a) => isPt(a, 3)))) return false;
@@ -286,6 +296,11 @@ export function validDerived(d, allowedIds) {
     if (!ok(d.dmg, 2500, (x) => x.length === 11 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, P - 1) && isInt(x[3], 0, 1000) && isInt(x[4], 0, Wn - 1) && isInt(x[5], 0, 100) && (x[6] === 0 || x[6] === 1) && isInt(x[7]) && isInt(x[8]) && isInt(x[9]) && isInt(x[10]))) return false;
     if (!ok(d.heal, 1500, (x) => x.length === 3 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 100))) return false;
     if (!ok(d.gear, 1500, (x) => x.length === 4 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, 3) && isInt(x[3], 0, x[2] >= 2 ? Wn - 1 : 3))) return false;
+  }
+  if (d.v >= 11) {
+    const P = d.pp.length;
+    if (!Array.isArray(d.od) || d.od.length > 6000 || !d.od.every((x) => Array.isArray(x) && x.length === 7 && isInt(x[0], 0, 100000) && isInt(x[1], 0, P - 1) && isInt(x[2], 0, P - 1) && isInt(x[3]) && isInt(x[4]) && isInt(x[5]) && isInt(x[6]))) return false;
+    if (!Array.isArray(d.ok) || d.ok.length > 300 || !d.ok.every((x) => Array.isArray(x) && x.length === 6 && isInt(x[0], 0, 100000) && isInt(x[1], -1, P - 1) && isInt(x[2], 0, P - 1) && (x[3] === 0 || x[3] === 1) && isInt(x[4]) && isInt(x[5]))) return false;
   }
   if (d.v >= 9) {
     const P = d.pp.length;

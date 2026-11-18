@@ -41,7 +41,7 @@ GitHub does **not** deploy.
 - **Copy:** every UI string lives in `src/i18n.js` in both `en` and `he`. Award and moment *titles* are English
   in both languages (military commendations); descriptions are translated. Share images (OG) are always
   English (link previews are fetched without the language cookie). Playful banter, nothing hurtful.
-- **Telemetry data versions:** `derived.json.v` (now 10: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match; v7 drops their plane ride/parachute; v8 `sh` = real shots fired [t10, p, w, x, y] by us and the enemies who traded damage with us (±15 s), and only the first parachute landing counts; v9 `vr` our vehicle rides [t, p, cls 0 car·1 moto·2 bicycle·3 boat·4 glider·5 buggy·6 truck, on], `cp` care packages landing [t, x, y], `sw` our swims [t, p, on]; v10 events carry `z` = the named area of the victim ("pochinki") and `b` = 1 for a bot (ai.* account), players carry `lz` = where they landed). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
+- **Telemetry data versions:** `derived.json.v` (now 11: v3 `alive`, v4 enemy squads + attacker team `at`, v5 the director's `pp`/`wp`/`dmg`/`heal`/`gear`; HP, heals and gear levels are clamped to 0–100 / 1–3; v6 `op` = every other player's position every 10 s, landing → death, ~50 KB a match; v7 drops their plane ride/parachute; v8 `sh` = real shots fired [t10, p, w, x, y] by us and the enemies who traded damage with us (±15 s), and only the first parachute landing counts; v9 `vr` our vehicle rides [t, p, cls 0 car·1 moto·2 bicycle·3 boat·4 glider·5 buggy·6 truck, on], `cp` care packages landing [t, x, y], `sw` our swims [t, p, on]; v10 events carry `z` = the named area of the victim ("pochinki") and `b` = 1 for a bot (ai.* account), players carry `lz` = where they landed; v11 everyone else's fights: `od` hits [t10, a, v, ax, ay, vx, vy] (≤ 1 per pair per 0.5 s, ≤ 6000) and `ok` knocks/kills [t, a|-1, v, 0|1, x, y] — no extra PUBG API calls, all from the stored telemetry). Heals/gear stay limited to the fighters: other players join `pp` only after that filter. Bump it in `extractDerived` when the extraction
   changes; the page re-analyses older versions and the server replaces a row only with a newer version.
   Session summaries are cached in `sessions.summary_json` with their own `v` (`SUMMARY_V`, now 3).
 - **AI narrator** (`src/narrator.js`): Workers AI (`env.AI`), Llama 3.3 70B, English recap shown in both languages
@@ -110,6 +110,10 @@ GitHub does **not** deploy.
   the pace, so they stay readable at any speed. Phones: the battle panel is under the map again.
 - **Bodies stay:** everyone we killed stays where they fell (`bodyAt`: muted lying soldier with X eyes in close-ups, a grey ✕
   on wide shots). Red/yellow are for the moment only (hits, knocks, kills, damage numbers), never permanent markers.
+- **Other squads' fights** (v11): faint white tracers between them, a short yellow/red ring on a knock/kill, then a muted
+  body (grey ✕ when far); a knocked other lies down until their kill. **End screen** (`endCard()`, full replay only):
+  retro WINNER WINNER CHICKEN DINNER (pixel drumstick, `PIX.thing('chicken')`) or BETTER LUCK NEXT TIME #place / teams,
+  each of us with kills, damage and time of death, buttons replay / next match / ✕ (the map's own ✕ and ⛶ stay on top).
 - **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
 - **Big screen:** ⛶ / "Fullscreen" chip / F → theater + real fullscreen where the browser allows it (phones try a

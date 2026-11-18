@@ -476,6 +476,17 @@
     others.forEach(function (r) { opBy[r[0]] = r; });
     (d.enemies || []).forEach(function (x) { foeT[x.t] = x; });
     var opsG = $('.ops', el);
+    // v11: everyone else's fights — hits as faint tracers, knocks/kills as a short flash, their bodies stay (muted)
+    var od = (d.od || []).map(function (x) { return { t: x[0] / 10, a: [x[3], x[4]], v: [x[5], x[6]] }; });
+    var okk = (d.ok || []).map(function (x) { return { t: x[0], a: x[1], v: x[2], kind: x[3], p: [x[4], x[5]] }; }).sort(function (a, b) { return a.t - b.t; });
+    var downedOther = {};
+    okk.forEach(function (k) {
+      if (k.kind !== 0) return;
+      var end = okk.filter(function (x) { return x.v === k.v && x.kind === 1 && x.t >= k.t; })[0];
+      (downedOther[k.v] ||= []).push([k.t, end ? end.t : k.t + 45]);
+    });
+    var isDownedOther = function (pi, at) { var r = downedOther[pi]; if (!r) return false; for (var k = 0; k < r.length; k++) if (at >= r[k][0] && at < r[k][1]) return true; return false; };
+    var odStart = function (from) { var lo = 0, hi = od.length; while (lo < hi) { var mid = (lo + hi) >> 1; if (od[mid].t < from) lo = mid + 1; else hi = mid; } return lo; };
     var kfKey = '';
 
     var knockedFoes = d.events.filter(function (e) { return e.k === 'knock' && ours.has(e.a) && !ours.has(e.v); });
@@ -881,6 +892,19 @@
         });
       }
       var oh = [], dim = [];
+      var inView = function (p) { return p[0] > view[0] - 15 && p[0] < view[0] + view[2] + 15 && p[1] > view[1] - 15 && p[1] < view[1] + view[2] + 15; };
+      for (var oq = odStart(t - 0.4); oq < od.length && od[oq].t <= t; oq++) {
+        var ox = od[oq], oa = t - ox.t;
+        if (!inView(ox.v) && !inView(ox.a)) continue;
+        oh.push(line(ox.a, lerp(ox.a, ox.v, Math.min(1, oa / 0.12)), '#e8ecf2', (1 - oa / 0.4) * 0.55, 1));
+      }
+      okk.forEach(function (k) {
+        var ka = t - k.t;
+        if (ka < 0 || !inView(k.p)) return;
+        if (ka < 1.5) oh.push('<circle cx="' + f1(k.p[0]) + '" cy="' + f1(k.p[1]) + '" r="' + f1(u * (0.8 + ka * 3)) + '" fill="none" stroke="' + (k.kind ? '#ff6b6b' : '#f2a900') + '" stroke-opacity="' + (0.8 * (1 - ka / 1.5)).toFixed(2) + '" stroke-width="2" vector-effect="non-scaling-stroke"/>');
+        if (k.kind === 1) oh.push(spriteMode ? '<g opacity=".55" style="filter:saturate(.3)">' + sprite('down', '#7d7452', '', true, k.p[0], k.p[1], us * 7, 90) + '</g>'
+          : '<path d="M' + f1(k.p[0] - u * 0.6) + ' ' + f1(k.p[1] - u * 0.6) + 'L' + f1(k.p[0] + u * 0.6) + ' ' + f1(k.p[1] + u * 0.6) + 'M' + f1(k.p[0] + u * 0.6) + ' ' + f1(k.p[1] - u * 0.6) + 'L' + f1(k.p[0] - u * 0.6) + ' ' + f1(k.p[1] + u * 0.6) + '" stroke="#9aa0a6" stroke-opacity=".55" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
+      });
       for (var oi = 0; oi < others.length; oi++) {
         var orow = others[oi], opos = opAt(orow, t);
         if (!opos || (diam && diam[orow[0]])) continue;
@@ -901,7 +925,7 @@
         } else if (spriteMode && opos[0] > view[0] - 15 && opos[0] < view[0] + view[2] + 15 && opos[1] > view[1] - 15 && opos[1] < view[1] + view[2] + 15) {
           // everyone near us is a full soldier on the map in close-ups, fighting us or not
           var dp0 = opAt(orow, t - 1);
-          oh.push(sprite(kindOf(dp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], dp0, opos), stateOf(orow[0], pp2acc(orow[0]), t)));
+          oh.push(sprite(isDownedOther(orow[0], t) ? 'down' : kindOf(dp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], dp0, opos), stateOf(orow[0], pp2acc(orow[0]), t)));
           if (model && model.tl[orow[0]]) oh.push(hpBar(opos[0], opos[1] - us * 9, us, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
@@ -1000,6 +1024,31 @@
     measure();
     if (window.ResizeObserver) new ResizeObserver(measure).observe(el); else window.addEventListener('resize', measure);
     var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
+    // end of the match: a retro results screen (WINNER WINNER CHICKEN DINNER or the place), our numbers, what next
+    function endCard() {
+      if ($('.endcard', el)) return;
+      var place = match.place || 0, teams = d.alive && d.alive.length ? d.alive[0][2] : 0, win = place === 1;
+      var rows = squadIds.map(function (id) {
+        var pi = model ? model.idx.get(id) : undefined, dmg = 0, kills = 0;
+        if (model && pi !== undefined) model.dmg.forEach(function (x) { if (x.a === pi && !model.ourIdx.has(x.v)) dmg += x.dmg; });
+        d.events.forEach(function (e) { if (e.k === 'kill' && e.a === id && !ours.has(e.v)) kills++; });
+        var p = d.players[id], m = member(id);
+        return '<div class="ecr">' + (m ? patchSvg(m.emblem, m.color, 18) : patchSvg('chevrons', GUEST, 18)) + '<b>' + esc(nameOf(match, id)) + '</b><span>' + kills + ' K</span><span>' + Math.round(dmg) + ' DMG</span><span>' + (p.death ? mmss(p.death[2]) : 'ALIVE') + '</span></div>';
+      }).join('');
+      var ch = PIX.thing('chicken', '#ffb703');
+      var box = document.createElement('div');
+      box.className = 'endcard' + (win ? ' win' : '');
+      box.innerHTML = '<div class="ecb">' + (win ? '<img class="ecc" src="' + ch.url + '" alt=""><div class="ect">WINNER WINNER</div><div class="ect big">CHICKEN DINNER!</div>'
+          : '<div class="ect">BETTER LUCK NEXT TIME</div><div class="ect big">#' + place + (teams ? '<small> / ' + teams + '</small>' : '') + '</div>')
+        + '<div class="ecs">' + rows + '</div><div class="eca"><button type="button" class="ec-again">↻ ' + esc(S.replay) + '</button>'
+        + (nextMatch() ? '<button type="button" class="ec-next">⏭ ' + esc(S.next) + '</button>' : '') + '<button type="button" class="ec-x">✕</button></div></div>';
+      el.appendChild(box);
+      $('.ec-again', box).onclick = function () { box.remove(); seek(t0); playing = true; pp.textContent = '❚❚'; };
+      $('.ec-x', box).onclick = function () { box.remove(); };
+      var nb = $('.ec-next', box);
+      if (nb) nb.onclick = function () { var nm = nextMatch(), nel = $('.map[data-match="' + nm.id + '"]'); nel.scrollIntoView({ behavior: 'smooth', block: 'center' }); replay(nm, nel, data[nm.id], 0); };
+    }
+    function nextMatch() { var i = SJ.matches.indexOf(match); var n = SJ.matches[i + 1]; return n && data[n.id] ? n : null; }
     function startReplay(mo) {
       // a visible rewind (no jump): time runs back fast, plays slowly, then fast-forwards to where we were
       irp = { m: mo, resume: t, until: mo.t + 1.3, from: mo.t - 5, ph: 'rw' };
@@ -1094,13 +1143,13 @@
             if (nx) { t = nx.s; snap = true; } else { t = tEnd; playing = false; pp.textContent = '▶'; }
           }
         }
-        if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; }
+        if (t >= tEnd) { t = tEnd; playing = false; pp.textContent = '▶'; if (!clip) endCard(); }
       }
       if (ts - lastSq > 150) { lastSq = ts; squadBar(); }
       draw(realDt);
       raf = requestAnimationFrame(frame);
     }
-    function seek(x) { pops = []; if (irp) { irp = null; irb.classList.add('hide'); } t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
+    function seek(x) { pops = []; var ec = $('.endcard', el); if (ec) ec.remove(); if (irp) { irp = null; irb.classList.add('hide'); } t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = si ? '×' + speeds[si] : 'AUTO'; };
     $('.snd', bar).onclick = function () { var b = $('.snd', bar); sfx.toggle(); b.classList.toggle('on', sfx.on); b.innerHTML = (sfx.on ? '🔊 ' : '🔇 ') + esc(S.sound); };
@@ -1293,7 +1342,7 @@
   }
   function analyze(match, el, retried) {
     return new Promise(function (resolve) {
-      var w = new Worker('/app/extract-worker.js?v=14');
+      var w = new Worker('/app/extract-worker.js?v=15');
       overlay(el, S.downloading);
       w.onmessage = function (ev) {
         var m = ev.data;
@@ -1319,7 +1368,7 @@
   }
   function load(match) {
     var el = $('.map[data-match="' + match.id + '"]');
-    var p = match.derived >= 10
+    var p = match.derived >= 11
       ? fetch('/api/derived/' + encodeURIComponent(match.id)).then(function (r) { if (!r.ok) throw r.status; return r.json(); })
       : analyze(match, el);
     return p.catch(function () { return analyze(match, el); }).then(function (d) {
@@ -1330,11 +1379,11 @@
   function loadAll() {
     var mom = $('#moments');
     var i = 0;
-    SJ.matches.forEach(function (m) { if (!(m.derived >= 10)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
+    SJ.matches.forEach(function (m) { if (!(m.derived >= 11)) overlay($('.map[data-match="' + m.id + '"]'), S.queued); });
     var next = function () {
       if (i >= SJ.matches.length) return Promise.resolve();
       var m = SJ.matches[i++];
-      if (!(m.derived >= 10)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
+      if (!(m.derived >= 11)) mom.innerHTML = '<div class="muted small">' + esc(fmt(S.analyzing, { i: i, n: SJ.matches.length })) + '</div>';
       return load(m).then(next);
     };
     return next();

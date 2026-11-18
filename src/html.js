@@ -106,6 +106,17 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .map .battle.onmap{max-height:30%;padding:3px 5px}.map .battle.onmap .bh,.map .battle.onmap .fr .gr{display:none}.map .battle.onmap .fr{padding:0}.map .battle.onmap .fr .hpb{margin-top:1px}
 .map.cine .bn{top:calc(6% + 46px)}
 .map .bn .bz{font:8px/1.3 "Press Start 2P",monospace;color:#9fd3e6}.map .hud .h-ar{color:#9fd3e6}
+.map .tools{z-index:6!important}
+.map .endcard{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(4,6,9,.62);animation:vsIn .4s ease-out;padding:10px}
+.map .ecb{background:#0b0d12;border:3px solid #eef1f5;box-shadow:0 0 0 3px #0b0d12,0 0 0 6px var(--gold);padding:14px 14px 10px;text-align:center;max-width:94%;image-rendering:pixelated}
+.map .endcard.win .ecb{box-shadow:0 0 0 3px #0b0d12,0 0 0 6px var(--gold),0 0 40px rgba(242,169,0,.45)}
+.map .ecc{width:64px;height:64px;image-rendering:pixelated;animation:bob 1.2s ease-in-out infinite}@keyframes bob{50%{transform:translateY(-5px)}}
+.map .ect{font:11px/1.5 "Press Start 2P",monospace;color:#cfd5dd;letter-spacing:.06em}.map .ect.big{font-size:20px;color:var(--gold2);text-shadow:3px 3px 0 #000;margin:4px 0 10px}
+.map .ect.big small{font-size:12px;color:var(--muted)}.map .endcard:not(.win) .ect.big{color:#eef1f5}
+.map .ecs{display:grid;gap:4px;margin:0 auto 10px;text-align:start}.map .ecr{display:grid;grid-template-columns:20px minmax(0,1fr) auto auto auto;gap:8px;align-items:center;font:9px/1.4 "Press Start 2P",monospace;color:#cfd5dd}
+.map .ecr b{font:700 13px var(--body);color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map .eca{display:flex;gap:8px;justify-content:center}.map .eca button{min-height:44px;padding:0 14px;border-radius:4px;border:2px solid var(--gold);background:#111;color:var(--gold2);font:10px "Press Start 2P",monospace}
+.map .ecb{position:relative}.map .eca .ec-x{position:absolute;top:4px;inset-inline-end:4px;min-height:36px;min-width:36px;padding:0;border:0;background:none;color:var(--muted);font-size:14px}
 .debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
 .debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
 .map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
@@ -481,7 +492,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=7', '/app/session.js?v=83'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=8', '/app/session.js?v=85'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 
@@ -808,5 +819,5 @@ var cls=function(w){w=String(w).toLowerCase();return /kar98|m24|awm|mosin|win94|
 var put=function(el,c){var ic=W[c]&&PIX.gun(c);if(ic)el.innerHTML='<img class="gi" src="'+ic.url+'" alt="">'};
 document.querySelectorAll('[data-cls]').forEach(function(e){put(e,e.dataset.cls)});document.querySelectorAll('[data-gun]').forEach(function(e){put(e,cls(e.dataset.gun))});});`;
   return page(lang, `${t.stTitle} · ${t.brand}`, `${top(lang, path, false, clan)}${nav(lang, 'stats')}<h1 style="margin-top:18px;font-family:var(--head)">${esc(t.stTitle)}</h1>
-    <p class="muted">${esc(fmtN(t, t.stSub, { n: matches }))}</p>${body}`, { scripts: ['/app/pixel.js?v=7'], script });
+    <p class="muted">${esc(fmtN(t, t.stSub, { n: matches }))}</p>${body}`, { scripts: ['/app/pixel.js?v=8'], script });
 }

@@ -267,6 +267,25 @@
       '.....O.....OO.....O.....',
       '...........OO...........',
     ],
+    // chicken drumstick for the winner's screen (16×16)
+    chicken: [
+      '................',
+      '.........OOOO...',
+      '.......OOWWWWO..',
+      '......OWWWWWwwO.',
+      '.....OWWWWWwwwO.',
+      '.....OWWWWwwwwO.',
+      '....OWWWWwwwwwO.',
+      '....OWWWwwwwwO..',
+      '...OWWwwwwwwO...',
+      '...OWwwwwwOO....',
+      '..OOwwwOOO......',
+      '.OTTOOOO........',
+      'OTTTTO..........',
+      'OTTOTO..........',
+      '.OO.OO..........',
+      '................',
+    ],
     // jeep, side view, facing east (32×18)
     jeep: [
       '................................',
