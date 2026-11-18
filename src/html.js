@@ -138,6 +138,10 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .match.theater{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;overflow-y:auto;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));background:#07090c}
 .match.theater .map{margin:8px auto 0;width:min(100%,calc(100vh - 190px));border:1px solid var(--line);border-radius:10px}
 .match.theater .feed,.match.theater table,.match.theater .legend,.match.theater .winner{display:none}
+@media (min-width:1100px){.match.theater{padding:12px 16px;background:#06080b}.match.theater .mbody{grid-template-columns:minmax(0,1fr) 340px;align-items:start}
+ .match.theater .stage .map{width:min(100%,calc(100vh - 150px));margin:0 auto}.match.theater .side .enemies{display:none}
+ .match.theater .map .hud>*{font-size:13px}.match.theater .map .kf li{font-size:14px}}
+.match:fullscreen{overflow-y:auto}
 html.noscroll,html.noscroll body{overflow:hidden}html.noscroll .share,html.replaying .share{display:none}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:10px}
 .feed{margin:10px 0 0;padding:0;list-style:none;font-size:13px}
@@ -473,7 +477,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=70'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=72'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

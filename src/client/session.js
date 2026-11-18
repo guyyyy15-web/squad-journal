@@ -367,7 +367,8 @@
       + ids.filter(function (id) { return member(id); }).map(function (id) { var m = member(id); return '<button type="button" class="cam" data-cam="' + esc(id) + '">' + patchSvg(m.emblem, m.color, 16) + esc(m.nick) + '</button>'; }).join('')
       + '<button type="button" class="cam snd' + (sfx.on ? ' on' : '') + '">' + (sfx.on ? '🔊 ' : '🔇 ') + esc(S.sound) + '</button>'
       + (windows.length && !clip ? '<button type="button" class="cam" data-act="1">⚡ ' + esc(S.actionOnly) + '</button>' : '')
-      + (model ? '<button type="button" class="cam on" data-dir="1">🎬 ' + esc(S.director) + '</button>' : '');
+      + (model ? '<button type="button" class="cam on" data-dir="1">🎬 ' + esc(S.director) + '</button>' : '')
+      + '<button type="button" class="cam bigscr">⛶ ' + esc(S.theater) + '</button>';
     // action stretches as bands on the timeline; the current clip highlighted
     var pct = function (x) { return Math.max(0, Math.min(100, (x - t0) / (tEnd - t0) * 100)).toFixed(2); };
     var bands = windows.map(function (w) { return '<i class="band' + (clip && w.s <= clip[0] + 1 && w.e >= clip[1] - 1 ? ' cur' : '') + '" style="left:' + pct(w.s) + '%;width:' + (pct(w.e) - pct(w.s)).toFixed(2) + '%"></i>'; }).join('')
@@ -713,13 +714,26 @@
         pm.forEach(function (g, k) { icoEl[k].setAttribute('display', spriteMode ? 'none' : ''); spwEl[k].setAttribute('display', spriteMode ? '' : 'none'); lblEl[k].setAttribute('transform', spriteMode ? 'scale(1.55)' : 'translate(0 1.4) scale(1.15)'); php[k].setAttribute('transform', spriteMode ? '' : 'translate(0 6.4)'); });
       }
       var mScale = spriteMode ? us : Math.min(u, 6) * 0.8, kSm = 1 - Math.exp(-(realDt || 0.016) * 9);
+      // riding together: members in the same kind of vehicle within ~50 m share one vehicle (the first is the driver)
+      var rideCls = ids.map(function (id) { var pi2 = model ? model.idx.get(id) : undefined; return pi2 !== undefined ? stateAt(rides, pi2, t) : -1; });
+      var rPos = ids.map(function (id) { return posAt(d.players[id], t); });
+      var leaderOf = ids.map(function (_, i) { return i; }), seat = ids.map(function () { return 0; });
+      ids.forEach(function (_, i) {
+        if (rideCls[i] < 0 || !rPos[i]) return;
+        for (var j = 0; j < i; j++) {
+          if (leaderOf[j] === j && rideCls[j] === rideCls[i] && rPos[j] && Math.hypot(rPos[j][0] - rPos[i][0], rPos[j][1] - rPos[i][1]) < 6) {
+            leaderOf[i] = j; seat[i] = 1 + ids.filter(function (_, k) { return k < i && leaderOf[k] === j && k !== j; }).length; break;
+          }
+        }
+      });
       ids.forEach(function (id, i) {
         var p = d.players[id], pos = posAt(p, t);
         pm[i].style.display = pos ? '' : 'none';
         if (pos) {
           // fan out markers that would sit on top of each other in a close-up
-          var mx = pos[0], my = pos[1], gap = mScale * 6;
-          for (var oj = 0; oj < i; oj++) {
+          var mx = pos[0], my = pos[1], gap = mScale * 6, rider = leaderOf[i] !== i;
+          if (rider) { mx = rPos[leaderOf[i]][0]; my = rPos[leaderOf[i]][1]; }
+          for (var oj = 0; oj < i && !rider; oj++) {
             var op = posAt(d.players[ids[oj]], t);
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
@@ -734,7 +748,7 @@
           var vIn = pix !== undefined ? stateAt(rides, pix, t) : -1, swI = pix !== undefined ? stateAt(swims, pix, t) : -1;
           var kd = inAir ? 'stand' : dnO ? 'down' : vIn >= 0 ? 'veh' + vIn : swI > 0 ? 'swim' : kindOf(pPrev, pos, dnO);
           var gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
-          if (spriteMode && kd.indexOf('veh') === 0 && pPrev && Math.hypot(pos[0] - pPrev[0], pos[1] - pPrev[1]) > 0.3) moveFx.push(dustFx(pos, pPrev, u, true));
+          if (spriteMode && !rider && kd.indexOf('veh') === 0 && pPrev && Math.hypot(pos[0] - pPrev[0], pos[1] - pPrev[1]) > 0.3) moveFx.push(dustFx(pos, pPrev, u, true));
           var px0 = pixOf(kd, colorOf(id), gn, false, an), sk = px0.url;
           if (sprKey[i] !== sk) {
             sprKey[i] = sk;
@@ -744,6 +758,12 @@
           }
           if (spriteMode && (kd === 'walkA' || kd === 'walkB')) moveFx.push(dustFx(pos, pPrev, u, false));
           var gIc = gn && PIX.gun(gn);
+          // passengers: no sprite or HP bar of their own, their name pills stacked under the driver's
+          var lblT = rider ? (spriteMode ? 'translate(0 ' + (seat[i] * 4.3).toFixed(1) + ') scale(1.55)' : 'translate(0 ' + (1.4 + seat[i] * 3.1).toFixed(1) + ') scale(1.15)') : (spriteMode ? 'scale(1.55)' : 'translate(0 1.4) scale(1.15)');
+          if (lblEl[i].getAttribute('transform') !== lblT) lblEl[i].setAttribute('transform', lblT);
+          var showSpr = !rider && spriteMode, showIco = !rider && !spriteMode;
+          if (spwEl[i].getAttribute('display') !== (showSpr ? '' : 'none')) spwEl[i].setAttribute('display', showSpr ? '' : 'none');
+          if (icoEl[i].getAttribute('display') !== (showIco ? '' : 'none')) icoEl[i].setAttribute('display', showIco ? '' : 'none');
           if (wicKey[i] !== gn) { wicKey[i] = gn; if (gIc) { wicEl[i].setAttribute('href', gIc.url); wicEl[i].setAttribute('display', ''); } else wicEl[i].setAttribute('display', 'none'); }
           var gr = pix !== undefined && model ? gearAt(model, pix, t) : null;
           tagEl[i].textContent = spriteMode && gr ? ((gr.helmet ? 'H' + gr.helmet : '') + (gr.vest ? ' V' + gr.vest : '')).trim() : '';
@@ -755,6 +775,7 @@
             phf[i].setAttribute('fill', hpCol(hp));
             php[i].setAttribute('opacity', hp.state === 1 ? (Math.floor(performance.now() / 300) % 2 ? '1' : '.35') : '1');
           } else php[i].setAttribute('display', 'none');
+          if (rider) php[i].setAttribute('display', 'none');
         }
       });
       // events: flashes + callouts on the map, kill feed in the corner
@@ -1054,8 +1075,18 @@
         bar.querySelectorAll('.cam[data-cam]').forEach(function (x) { x.classList.toggle('on', x === b); });
       };
     });
-    var setTheater = function (on) { card.classList.toggle('theater', on); document.documentElement.classList.toggle('noscroll', on); };
+    var setTheater = function (on) {
+      card.classList.toggle('theater', on); document.documentElement.classList.toggle('noscroll', on);
+      // desktop: real fullscreen, the map as tall as the screen with the battle panel beside it
+      try {
+        if (on && window.innerWidth >= 1100 && !document.fullscreenElement && card.requestFullscreen) card.requestFullscreen().catch(function () {});
+        if (!on && document.fullscreenElement) document.exitFullscreen().catch(function () {});
+      } catch (e) {}
+      snap = true;
+    };
+    document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement && card.classList.contains('theater')) { card.classList.remove('theater'); document.documentElement.classList.remove('noscroll'); } });
     $('.th', el).onclick = function () { setTheater(!card.classList.contains('theater')); };
+    $('.bigscr', bar).onclick = function () { setTheater(!card.classList.contains('theater')); };
     var ctl = {
       stop: function (silent) { cancelAnimationFrame(raf); setTheater(false); if (battle) battle.remove(); document.documentElement.classList.remove('replaying'); bar.classList.add('hide'); bar.innerHTML = ''; active = null; renderStatic(match, el, d); },
       seek: seek,

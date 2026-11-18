@@ -103,8 +103,12 @@ GitHub does **not** deploy.
   stacked so they never overlap). Outside the safe zone is shaded blue (`.zout`, even-odd path). The HUD shows the area
   name (`placeName`), so does the ENGAGEMENT banner. On phones the battle panel sits on the map (`.battle.onmap`:
   names + HP only); on desktop it stays in the side column.
-- **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
-  (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
+- **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
+  first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
+- **Big screen:** ⛶ / "Fullscreen" chip / F → theater; on desktop it also requests real browser fullscreen, the map as
+  tall as the screen with the battle panel beside it.
+- **Director camera** (`directorShot`, replay.js, tested): shot types kill (24–55 units) → duel (28–85) → approach
+  (45–110) → stalk (48–115) → follow the biggest group, ignoring stragglers (80–140); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move
   pulls back on the way (zoom out → glide → zoom in), zoom eases slower out than in, shake on hits, punch on headshots, close markers fan
   out. Sharp close-ups come from 8192 px map tiles in R2 (`maps/hi/<code>/<x>_<y>.jpg`, 8×8 of 1024 px, from
