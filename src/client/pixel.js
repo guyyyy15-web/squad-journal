@@ -402,12 +402,18 @@
 
   function chibi(o) {
     var dir = o.dir || 'S', pose = o.pose || 'idle', gun = o.gun || '', enemy = !!o.enemy;
-    var key = 'chibi' + dir + pose + gun + o.team + (enemy ? 'e' : '');
+    // game state: helmet level 0–3, vest level 0–3, eyes ('', 'x' knocked, 'hurt' low HP), prop ('heal', 'revive')
+    var helm = o.helm === undefined ? 2 : o.helm, vest = o.vest === undefined ? 2 : o.vest, eyes = o.eyes || '', prop = o.prop || '';
+    if (prop === 'heal' || prop === 'revive') gun = '';
+    var key = 'chibi' + dir + pose + gun + o.team + (enemy ? 'e' : '') + helm + vest + eyes + prop;
     if (cache[key]) return cache[key];
     var W = 32, H = 32, side = dir === 'E' || dir === 'W', back = dir === 'N';
     var cam = enemy ? DESERTC : WOODLAND;
     var helmetC = enemy ? '#8c7b52' : mixc(o.team || '#ffb703', '#5c6637', 0.45);
-    var mats = { helmet: tones(helmetC), band: tones(enemy ? '#7a3b2e' : (o.team || '#ffb703')), cloth: cam.cloth, pants: cam.pants, pouch: cam.pouch };
+    if (helm >= 3) helmetC = mixc(helmetC, '#1c2016', 0.35);
+    var mats = { helmet: tones(helmetC), band: tones(enemy ? '#7a3b2e' : (o.team || '#ffb703')), cloth: cam.cloth, pants: cam.pants, pouch: cam.pouch,
+      hair: ['#6b4a2e', '#4a3220', '#33220f', '#1a1108'], plate: ['#a4ab9a', '#7b8273', '#575d51', '#30342c'], kit: ['#ffffff', '#e9eef2', '#b8c2cc', '#6e7a86'],
+      cross: ['#7ff0b0', '#3ddc97', '#24a46c', '#11603e'], sweat: ['#e0f6ff', '#9fd3e6', '#5d9fba', '#2f5a6c'], visor: ['#5a6670', '#2c3238', '#1b1f23', '#0c0e10'] };
     for (var k in MAT) mats[k] = MAT[k];
     var grid = [];
     for (var y = 0; y < H; y++) { grid.push([]); for (var x = 0; x < W; x++) grid[y].push(null); }
@@ -434,16 +440,21 @@
     }
     // ---- legs & boots (walk cycle: one leg forward/up) ----
     var lA = pose === 'walk1' ? -1 : pose === 'walk2' ? 1 : 0;
-    var by = 24 - bob;
-    rect(11 + lean, by, 4, 4 + lA, 'pants', 1); rect(17 + lean, by, 4, 4 - lA, 'pants', 1);
-    rect(10 + lean, by + 4 + lA, 5, 3, 'boot', 1); rect(17 + lean, by + 4 - lA, 5, 3, 'boot', 1);
+    var kneel = prop === 'revive' ? 3 : 0;
+    var by = 24 - bob + kneel;
+    if (kneel) { rect(10 + lean, by, 12, 2, 'pants', 1); rect(8 + lean, by + 1, 5, 2, 'boot', 1); rect(20 + lean, by + 1, 4, 2, 'boot', 1); }
+    else {
+      rect(11 + lean, by, 4, 4 + lA, 'pants', 1); rect(17 + lean, by, 4, 4 - lA, 'pants', 1);
+      rect(10 + lean, by + 4 + lA, 5, 3, 'boot', 1); rect(17 + lean, by + 4 - lA, 5, 3, 'boot', 1);
+    }
     // ---- body: vest over a shirt, belt, pouches ----
-    var ty = 16 - bob;
+    var ty = 16 - bob + kneel;
     rect(9 + lean, ty, 14, 9, 'cloth', 1);
     if (!back) {
-      rect(11 + lean, ty + 1, 10, 6, 'pouch', 1);
-      line(16 + lean, ty + 1, 16 + lean, ty + 6, 'strap', -1);
-      put(12 + lean, ty + 4, 'strap', -1); put(19 + lean, ty + 4, 'strap', -1);
+      // vest by level: 0 none · 1 straps · 2 pouches · 3 armour plates with shoulder pads
+      if (vest >= 2) rect(11 + lean, ty + 1, 10, 6, vest >= 3 ? 'plate' : 'pouch', 1);
+      if (vest >= 1) { line(16 + lean, ty + 1, 16 + lean, ty + 6, 'strap', -1); put(12 + lean, ty + 4, 'strap', -1); put(19 + lean, ty + 4, 'strap', -1); }
+      if (vest >= 3) { rect(8 + lean, ty, 3, 3, 'plate', 1); rect(21 + lean, ty, 3, 3, 'plate', 1); line(12 + lean, ty + 3, 20 + lean, ty + 3, 'strap', -0.6); }
     } else {
       rect(10, ty - 1, 12, 9, 'pouch', 1); // backpack
       line(12, ty + 3, 19, ty + 3, 'strap', -1);
@@ -453,19 +464,44 @@
     rect(6 + lean, ty + 1, 4, 6, 'cloth', 1); rect(22 + lean, ty + 1, 4, 6, 'cloth', 1);
     ell(8 + lean, ty + 7.5, 1.6, 1.6, 'skin'); ell(24 + lean, ty + 7.5, 1.6, 1.6, 'skin');
     // ---- head: a big chibi head under a helmet ----
-    var hy = 10 - bob;
+    var hy = 10 - bob + kneel;
     if (!back) {
       ell(16 + lean, hy + 2.8, 6.9, 5.3, 'skin');
-      // eyes: big, with a glint; a hint of a mouth
       var ex = side ? [16, 20] : [12, 18];
-      for (var e = 0; e < 2; e++) { rect(ex[e], hy + 2, 2, 3, 'eye'); put(ex[e], hy + 2, 'glint', 1); }
-      put(15 + lean + (side ? 3 : 0), hy + 6, 'skin', -1); put(16 + lean + (side ? 3 : 0), hy + 6, 'skin', -1);
+      if (eyes === 'x') {
+        // knocked out: X eyes and a flat mouth
+        for (var e1 = 0; e1 < 2; e1++) { put(ex[e1], hy + 2, 'eye', 0); put(ex[e1] + 1, hy + 3, 'eye', 0); put(ex[e1] + 2, hy + 4, 'eye', 0); put(ex[e1] + 2, hy + 2, 'eye', 0); put(ex[e1], hy + 4, 'eye', 0); }
+        line(14 + lean + (side ? 3 : 0), hy + 6, 17 + lean + (side ? 3 : 0), hy + 6, 'eye', 0);
+      } else if (eyes === 'hurt') {
+        // low on HP: squinting, a sweat drop
+        for (var e2 = 0; e2 < 2; e2++) rect(ex[e2], hy + 3, 2, 1, 'eye');
+        put(ex[0] - 1, hy + 2, 'eye', 0); put(ex[1] + 2, hy + 2, 'eye', 0);
+        ell(side ? 12 : 23, hy + 1, 0.9, 1.4, 'sweat');
+        put(15 + lean + (side ? 3 : 0), hy + 6, 'eye', 0); put(16 + lean + (side ? 3 : 0), hy + 6, 'eye', 0);
+      } else {
+        // big eyes with a glint; a hint of a mouth
+        for (var e = 0; e < 2; e++) { rect(ex[e], hy + 2, 2, 3, 'eye'); put(ex[e], hy + 2, 'glint', 1); }
+        put(15 + lean + (side ? 3 : 0), hy + 6, 'skin', -1); put(16 + lean + (side ? 3 : 0), hy + 6, 'skin', -1);
+      }
     }
-    // helmet dome, the team band, goggles on the helmet
-    ell(16 + lean, hy - 3.4, 8.8, 5.6, 'helmet');
-    for (var bx = 7 + lean; bx <= 25 + lean; bx++) put(bx, hy + 0.6, 'band', 0.2);
-    if (!back) { rect(10 + lean + (side ? 2 : 0), hy - 5, 5, 2, 'lens'); rect(16 + lean + (side ? 2 : 0), hy - 5, 5, 2, 'lens'); put(15 + lean + (side ? 2 : 0), hy - 4, 'strap', -1); }
-    else ell(16, hy + 1, 6.4, 3.2, 'helmet');
+    // head gear by level: 0 bare head (hair) · 1 soft cap · 2 helmet with goggles · 3 heavy helmet with a visor
+    if (helm <= 0) {
+      ell(16 + lean, hy - 1.6, 7.6, 4.4, 'hair');
+      for (var bx0 = 9 + lean; bx0 <= 23 + lean; bx0++) put(bx0, hy + 0.2, 'band', 0.2);
+    } else if (helm === 1) {
+      ell(16 + lean, hy - 2, 8, 4.2, 'helmet');
+      for (var bx1 = 8 + lean; bx1 <= 24 + lean; bx1++) put(bx1, hy + 0.6, 'band', 0.2);
+      if (!back) line(side ? 22 : 9, hy + 1, side ? 26 : 23, hy + 1, 'helmet', -0.5); // brim
+    } else {
+      ell(16 + lean, hy - 3.4, 8.8, 5.6, 'helmet');
+      for (var bx = 7 + lean; bx <= 25 + lean; bx++) put(bx, hy + 0.6, 'band', 0.2);
+      if (!back && helm >= 3) { rect(9 + lean + (side ? 2 : 0), hy - 2, 14, 2, 'visor', 1); rect(7 + lean, hy - 2, 2, 4, 'helmet', 0); rect(23 + lean, hy - 2, 2, 4, 'helmet', 0); }
+      else if (!back) { rect(10 + lean + (side ? 2 : 0), hy - 5, 5, 2, 'lens'); rect(16 + lean + (side ? 2 : 0), hy - 5, 5, 2, 'lens'); put(15 + lean + (side ? 2 : 0), hy - 4, 'strap', -1); }
+    }
+    if (back && helm >= 1) ell(16, hy + 1, 6.4, 3.2, 'helmet'); else if (back) ell(16, hy + 1, 6.4, 3.2, 'hair');
+    // props: a first-aid kit in hand, or a green cross over a kneeling medic
+    if (prop === 'heal' && !back) { rect(side ? 18 : 13, ty + 3, 6, 5, 'kit', 1); line(side ? 21 : 16, ty + 4, side ? 21 : 16, ty + 6, 'cross', 0); line(side ? 20 : 15, ty + 5, side ? 22 : 17, ty + 5, 'cross', 0); }
+    if (prop === 'revive') { rect(23, 1, 5, 5, 'kit', 1); line(25, 2, 25, 4, 'cross', 0); line(24, 3, 26, 3, 'cross', 0); }
     // ---- gun, held diagonally across the body (front) or forward (side) ----
     var G = { sr: 15, dmr: 13, ar: 12, lmg: 13, smg: 9, sg: 11, pistol: 5 }[gun];
     if (G && !back) {
@@ -516,7 +552,7 @@
   function downed(team, enemy, flip) {
     var key = 'down' + team + (enemy ? 'e' : '') + (flip ? 'f' : '');
     if (cache[key]) return cache[key];
-    var src = chibi({ dir: 'E', pose: 'idle', gun: '', team: team, enemy: enemy });
+    var src = chibi({ dir: 'E', pose: 'idle', gun: '', team: team, enemy: enemy, eyes: 'x' });
     var im = new Image(); im.src = src.url;
     var cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
     var res = { url: src.url, w: 32, h: 32 };

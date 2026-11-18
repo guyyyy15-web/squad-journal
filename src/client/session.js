@@ -400,14 +400,28 @@
     }
     // angle (0 = north) → which way the pixel soldier faces; side views win unless clearly up/down
     var dirOf = function (ang) { var r = ang * Math.PI / 180, dx = Math.sin(r), dy = -Math.cos(r); return Math.abs(dx) >= 0.45 ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N'; };
-    function pixOf(kind, color, gun, enemy, ang) {
+    // the sprite's game state at time t: helmet/vest level, hurt or knocked eyes, healing or reviving
+    var pp2acc = function (i) { return d.pp && d.pp[i] ? d.pp[i][0] : ''; };
+    function stateOf(pi, acc, at) {
+      var st = { helm: 2, vest: 2, eyes: '', prop: '' };
+      if (model && pi !== undefined) {
+        var g = gearAt(model, pi, at), h = hpAt(model, pi, at);
+        if (model.gear[pi]) { st.helm = g.helmet; st.vest = g.vest; }
+        if (h.state === 0 && h.hp < 35) st.eyes = 'hurt';
+        for (var k = 0; k < (d.heal || []).length; k++) { var hr = d.heal[k]; if (hr[1] === pi && at - hr[0] / 10 >= 0 && at - hr[0] / 10 < 2.5) { st.prop = 'heal'; break; } }
+      }
+      if (acc) for (var k2 = 0; k2 < d.events.length; k2++) { var ev = d.events[k2]; if (ev.k === 'revive' && ev.a === acc && at >= ev.t - 10 && at <= ev.t) { st.prop = 'revive'; break; } }
+      return st;
+    }
+    function pixOf(kind, color, gun, enemy, ang, st) {
       var dir = dirOf(ang || 0);
       if (kind.indexOf('veh') === 0) { var vk = VEH[Number(kind.slice(3))] || 'jeep'; return PIX.thing(vk, color, enemy, vk !== 'plane' && dir === 'W'); }
       if (kind === 'swim') { var sw2 = PIX.swim(color, enemy); if (sw2.fresh && sw2.ref) { sw2.fresh = false; var sy2 = document.getElementById(sw2.ref); if (sy2) sy2.firstChild.setAttribute('href', sw2.url); } return sw2; }
       if (kind === 'down') { var dd2 = PIX.downed(color, enemy, dir === 'W'); if (dd2.fresh && dd2.ref) { dd2.fresh = false; var sy = document.getElementById(dd2.ref); if (sy) sy.firstChild.setAttribute('href', dd2.url); } return dd2; }
       if (kind === 'car') return PIX.thing('jeep', color, enemy, dir === 'W');
       if (kind === 'crate' || kind === 'drop') return PIX.thing(kind, color, enemy);
-      return PIX.soldier({ dir: dir, pose: kind === 'walkA' ? 'walk1' : kind === 'walkB' ? 'walk2' : 'idle', gun: gun, team: color, enemy: enemy });
+      st = st || {};
+      return PIX.soldier({ dir: st.prop === 'revive' ? 'S' : dir, pose: st.prop ? 'idle' : kind === 'walkA' ? 'walk1' : kind === 'walkB' ? 'walk2' : 'idle', gun: gun, team: color, enemy: enemy, helm: st.helm, vest: st.vest, eyes: st.eyes, prop: st.prop });
     }
     // each pixel image is defined once (<symbol>) and placed with <use>, so a frame never re-parses data URLs
     var pxDefs = null, pxN = 0;
@@ -423,8 +437,8 @@
       return px.ref;
     }
     // standing on (x, y): the sprite's feet on the spot, `size` = its height in map units
-    function sprite(kind, color, gun, enemy, x, y, size, ang) {
-      var px = pixOf(kind, color, gun, enemy, ang), h = size * px.h / 28, w = size * px.w / 28, flat = kind === 'down' || kind === 'car' || kind === 'crate' || kind === 'drop';
+    function sprite(kind, color, gun, enemy, x, y, size, ang, st) {
+      var px = pixOf(kind, color, gun, enemy, ang, st), h = size * px.h / 28, w = size * px.w / 28, flat = kind === 'down' || kind === 'car' || kind === 'crate' || kind === 'drop';
       return '<ellipse cx="' + f1(x) + '" cy="' + f1(y + size * 0.04) + '" rx="' + f1(w * 0.36) + '" ry="' + f1(size * 0.11) + '" fill="#000" fill-opacity=".4"/>'
         + '<use href="#' + pxRef(px) + '" x="' + f1(x - w / 2) + '" y="' + f1(y - h * (flat ? 0.7 : 0.94)) + '" width="' + f1(w) + '" height="' + f1(h) + '"/>';
     }
@@ -753,7 +767,7 @@
           var kd = inAir ? 'stand' : dnO ? 'down' : vIn >= 0 ? 'veh' + vIn : swI > 0 ? 'swim' : kindOf(pPrev, pos, dnO);
           var gn = gunOf(pix, t), an = inAir ? 0 : facing(id, pix, pPrev, pos);
           if (spriteMode && !rider && kd.indexOf('veh') === 0 && pPrev && Math.hypot(pos[0] - pPrev[0], pos[1] - pPrev[1]) > 0.3) moveFx.push(dustFx(pos, pPrev, u, true));
-          var px0 = pixOf(kd, colorOf(id), gn, false, an), sk = px0.url;
+          var px0 = pixOf(kd, colorOf(id), gn, false, an, stateOf(pix, id, t)), sk = px0.url;
           if (sprKey[i] !== sk) {
             sprKey[i] = sk;
             var flat0 = kd === 'down' || kd.indexOf('veh') === 0, sc0 = kd === 'veh4' ? 0.45 : 1, ph = 9 * sc0 * px0.h / 28, pw = 9 * sc0 * px0.w / 28;
@@ -851,7 +865,7 @@
           diam[i] = 1;
           var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
           var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
-          if (spriteMode) fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea));
+          if (spriteMode) fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea, stateOf(ip, pp2acc(ip), t)));
           else fxh.push('<path d="M' + f1(pos[0]) + ' ' + f1(pos[1] - u * 1.6) + 'L' + f1(pos[0] + u * 1.6) + ' ' + f1(pos[1]) + 'L' + f1(pos[0]) + ' ' + f1(pos[1] + u * 1.6) + 'L' + f1(pos[0] - u * 1.6) + ' ' + f1(pos[1]) + 'Z" fill="' + (eDn ? '#ff4d4d' : '#dfe3ea') + '" stroke="#000" stroke-width="1.5" vector-effect="non-scaling-stroke"/>');
           fxh.push(hpBar(pos[0], pos[1] - us * 10, us, hh));
           var eGr = gearAt(model, ip, t);
@@ -879,7 +893,7 @@
         } else if (spriteMode && opos[0] > view[0] - 15 && opos[0] < view[0] + view[2] + 15 && opos[1] > view[1] - 15 && opos[1] < view[1] + view[2] + 15) {
           // everyone near us is a full soldier on the map in close-ups, fighting us or not
           var dp0 = opAt(orow, t - 1);
-          oh.push(sprite(kindOf(dp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], dp0, opos)));
+          oh.push(sprite(kindOf(dp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], dp0, opos), stateOf(orow[0], pp2acc(orow[0]), t)));
           if (model && model.tl[orow[0]]) oh.push(hpBar(opos[0], opos[1] - us * 9, us, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }

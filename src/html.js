@@ -481,7 +481,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=78'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=7', '/app/session.js?v=79'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 
@@ -808,5 +808,5 @@ var cls=function(w){w=String(w).toLowerCase();return /kar98|m24|awm|mosin|win94|
 var put=function(el,c){var ic=W[c]&&PIX.gun(c);if(ic)el.innerHTML='<img class="gi" src="'+ic.url+'" alt="">'};
 document.querySelectorAll('[data-cls]').forEach(function(e){put(e,e.dataset.cls)});document.querySelectorAll('[data-gun]').forEach(function(e){put(e,cls(e.dataset.gun))});});`;
   return page(lang, `${t.stTitle} · ${t.brand}`, `${top(lang, path, false, clan)}${nav(lang, 'stats')}<h1 style="margin-top:18px;font-family:var(--head)">${esc(t.stTitle)}</h1>
-    <p class="muted">${esc(fmtN(t, t.stSub, { n: matches }))}</p>${body}`, { scripts: ['/app/pixel.js?v=6'], script });
+    <p class="muted">${esc(fmtN(t, t.stSub, { n: matches }))}</p>${body}`, { scripts: ['/app/pixel.js?v=7'], script });
 }
