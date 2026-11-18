@@ -130,7 +130,7 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .map .hud>*:first-child{border:0;color:var(--gold2);font-size:10px}.map .hud span:empty{display:none}
 .map .h-sm{position:absolute;top:6px;right:6px;font:800 8px/1 var(--mono);letter-spacing:.1em;background:rgba(242,169,0,.8);color:#111;border-radius:4px;padding:3px 5px;pointer-events:none}
 .map .kf{position:absolute;bottom:6px;inset-inline-start:6px;margin:0;padding:0;list-style:none;display:grid;gap:2px;max-width:66%;justify-items:start;pointer-events:none}
-.map.fighting .kf{display:none}
+.map .kf{bottom:10px;z-index:3}.map .kf li{display:flex;align-items:center;gap:4px}.map .kf .gi{width:22px;height:8.5px;margin:0 2px}
 .map .kf li{font-size:10px;line-height:1.2;background:rgba(10,12,15,.6);border-inline-start:2px solid #ff4d4d;border-radius:3px;padding:2px 5px;animation:kfin .25s ease-out;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .map .kf li.kn{border-color:#f2a900}.map .kf li.rv{border-color:#7ee2a8}.map .kf li.dd{border-color:#fff;background:rgba(80,10,10,.88)}
 .map .kf i{font-style:normal;color:var(--muted);font-size:9px}.map .kf span{color:var(--muted)}
@@ -477,7 +477,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=72'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=74'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

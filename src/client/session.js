@@ -247,7 +247,7 @@
   var view = [0, 0, 1000];
   // Callouts are collected per frame and laid out as RPG ribbons that never sit on top of each other.
   var ribs = [];
-  function label(x, y, u, text, color, gun) { ribs.push({ x: x, y: y, u: u, text: text, color: color, gun: gun || '' }); return ''; }
+  function label() { return ''; } // no text callouts on the map (Guy): the kill feed in the corner tells the story
   // Place names from telemetry ("yasnayapolyana" → "Yasnaya Polyana")
   var PLACE = { yasnayapolyana: 'Yasnaya Polyana', georgopol: 'Georgopol', pochinki: 'Pochinki', rozhok: 'Rozhok', mylta: 'Mylta', militarybase: 'Military Base', schoolapartments: 'School', shootingrange: 'Shooting Range', mylta_power: 'Mylta Power', lipovka: 'Lipovka', primorsk: 'Primorsk', novorepnoye: 'Novorepnoye', zharki: 'Zharki', severny: 'Severny', kameshki: 'Kameshki', gatka: 'Gatka', stalber: 'Stalber', ferrypier: 'Ferry Pier', quarry: 'Quarry', boatyard: 'Boatyard', ruins: 'Ruins', mansion: 'Mansion', prison: 'Prison', hospital: 'Hospital', school: 'School', farm: 'Farm', shelter: 'Shelter', waterTown: 'Water Town', dekamesto: 'Deka Mesto', podvosto: 'Podvosto', dobromesto: 'Dobro Mesto', krichas: 'Krichas', vihar: 'Vihar', cosmodrome: 'Cosmodrome', hotsprings: 'Hot Springs', jadenacity: 'Jadena City', meyran: 'Mey Ran', neonfactory: 'Neon Factory', ladrillera: 'La Cobreria', losleones: 'Los Leones', elpozo: 'El Pozo', sanmartin: 'San Martin', bootcamp: 'Bootcamp', paradise: 'Paradise Resort', ruins_sanhok: 'Ruins' };
   function placeName(z) {
@@ -566,7 +566,7 @@
     function lifeFx(u) {
       var out = '';
       (d.heal || []).forEach(function (h) {
-        var age = t - h[0] / 10;
+        var age = (t - h[0] / 10) / Math.max(1, paceNow) * 0.8; // ~1.75 s of real time at any speed
         if (age < 0 || age > 1.4) return;
         var p = placeOf(h[1], t);
         if (!p) return;
@@ -575,7 +575,7 @@
           + '<text x="' + f1(p[0] + u * 2.6) + '" y="' + f1(p[1] - u * (2 + age * 3)) + '" font-size="' + f1(u * 2) + '" fill="#3ddc97" fill-opacity="' + op + '" stroke="#05070a" stroke-width="' + f1(u * 0.5) + '" paint-order="stroke" font-family="Press Start 2P, monospace">+' + h[2] + '</text>';
       });
       breaks.forEach(function (g) {
-        var age = t - g[0];
+        var age = (t - g[0]) / Math.max(1, paceNow) * 0.7;
         if (age < 0 || age > 1.2) return;
         var p = placeOf(g[1], t);
         if (!p) return;
@@ -642,7 +642,7 @@
       var A = '<b style="color:' + esc(colorOf(e.a)) + '">' + esc(nameOf(match, e.a, e.an)) + '</b>';
       var V = '<b style="color:' + esc(colorOf(e.v)) + '">' + esc(nameOf(match, e.v, e.vn)) + '</b>';
       if (e.k === 'revive') return '<li class="rv">' + A + ' <span>✚</span> ' + V + '</li>';
-      var w = e.w ? '<i>' + esc(weapon(e.w)) + (e.d ? ' ' + e.d + 'm' : '') + '</i>' : '';
+      var gi2 = e.w && PIX.gun(weaponClass(e.w)), w = e.w ? (gi2 ? '<img class="gi" src="' + gi2.url + '" alt="' + esc(weapon(e.w)) + '">' : '<i>' + esc(weapon(e.w)) + '</i>') + (e.d ? '<i>' + e.d + 'm</i>' : '') : '';
       return '<li class="' + (e.k === 'kill' ? (ours.has(e.v) ? 'dd' : 'kl') : 'kn') + '">' + (e.a ? A : '') + ' <span>' + (e.k === 'kill' ? '▸' : '◐') + '</span> ' + w + ' ' + V + '</li>';
     }
     function draw(realDt) {
@@ -822,12 +822,13 @@
           if (c && hx.t - c.last < 0.5) { c.sum += hx.dmg; c.last = hx.t; c.n++; c.head = c.head || hx.head; c.vp = hx.vp; }
           else { c = combos[hx.v] = { sum: hx.dmg, last: hx.t, n: 1, head: hx.head, vp: hx.vp, col: hcol }; shown.push(c); }
         }
-        shown.forEach(function (c) {
-          var age = t - c.last;
-          if (age > 1.6) return;
-          var big = c.n > 1 || c.head, fy = c.vp[1] - u * (3.5 + age * 5), op = (1 - age / 1.6).toFixed(2);
+        var nowP = performance.now();
+        pops = pops.filter(function (c) { return nowP - c.born < POP_MS; });
+        pops.forEach(function (c) {
+          var age = (nowP - c.born) / POP_MS * 1.6; // 0..1.6 as before, but in real time: readable at any speed
+          var big = c.n > 1 || c.head, fy = c.vp[1] - u * (3.5 + age * 2.5), op = (age < 1.1 ? 1 : 1 - (age - 1.1) / 0.5).toFixed(2);
           fxh.push('<text x="' + c.vp[0] + '" y="' + fy + '" font-size="' + (u * (big ? 4.2 : 3.4)) + '" text-anchor="middle" fill="' + c.col + '" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.8) + '" paint-order="stroke" font-family="Press Start 2P, monospace">-' + c.sum + '</text>');
-          if ((c.head || c.n > 2) && age < 1) fxh.push('<text x="' + c.vp[0] + '" y="' + (fy - u * 4.4) + '" font-size="' + (u * 2) + '" text-anchor="middle" fill="#fff" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.6) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + (c.head ? 'HEADSHOT' : 'x' + c.n) + '</text>');
+          if ((c.head || c.n > 2) && age < 1.3) fxh.push('<text x="' + c.vp[0] + '" y="' + (fy - u * 4.4) + '" font-size="' + (u * 2) + '" text-anchor="middle" fill="#fff" fill-opacity="' + op + '" stroke="#000" stroke-width="' + (u * 0.6) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + (c.head ? 'HEADSHOT' : 'x' + c.n) + '</text>');
         });
         if (lastHit) fxh.push(ruler(lastHit.ap, lastHit.vp, t - lastHit.t, u));
         fxh.push(shotFx(u));
@@ -903,7 +904,7 @@
       });
       fx.innerHTML = moveFx.join('') + fxh.join('');
       lb.innerHTML = lbh.join('') + ribbons(u);
-      var shown = recent.slice(-2);
+      var shown = recent.slice(-3);
       var key = shown.map(function (e) { return e.t + e.k + e.v; }).join('|');
       if (key !== kfKey) { kfKey = key; kf.innerHTML = shown.map(feedLine).join(''); }
     }
@@ -943,7 +944,7 @@
         battle = document.createElement('div'); battle.className = 'battle';
         var side = card.querySelector('.side');
         if (side && window.matchMedia('(min-width:1100px)').matches) side.insertBefore(battle, side.firstChild);
-        else { battle.className = 'battle onmap'; el.appendChild(battle); } // phones: on the map, so the fight and the panel are seen together
+        else el.parentNode.insertBefore(battle, el.nextSibling); // phones: under the map; on the map only the fighters' own HP bars
       }
       battle.innerHTML = '<div class="bh"><span>' + esc(S.squad) + '</span><span class="vsm">VS</span><span>' + esc(S.enemy) + '</span></div><div class="bg"><div class="side us"></div><div class="side them"></div></div>';
       battle.classList.remove('hide');
@@ -960,7 +961,7 @@
       });
     }
     function endFight(keepBanner) { phase = null; curW = null; fight = null; if (!keepBanner) hideBanner(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
-    var lastBattle = 0, lastSq = 0;
+    var lastBattle = 0, lastSq = 0, pops = [], POP_MS = 2000; // damage numbers live 2 s of real time
     var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
     function startReplay(mo) {
       // a visible rewind (no jump): time runs back fast, plays slowly, then fast-forwards to where we were
@@ -1036,6 +1037,15 @@
             if (gx.t > tPrev && (model.ourIdx.has(gx.a) || model.ourIdx.has(gx.v))) sfx.shot(weaponClass(gx.w), model.ourIdx.has(gx.a));
           }
         }
+        if (model && t > tPrev) for (var pi3 = 0; pi3 < model.dmg.length; pi3++) {
+          var hx3 = model.dmg[pi3];
+          if (hx3.t > t) break;
+          if (hx3.t <= tPrev) continue;
+          var col3 = model.ourIdx.has(hx3.a) ? '#ffcf4d' : '#ff6b6b', prev3 = null;
+          for (var q3 = pops.length - 1; q3 >= 0; q3--) if (pops[q3].v === hx3.v && hx3.t - pops[q3].gt < 0.6) { prev3 = pops[q3]; break; }
+          if (prev3) { prev3.sum += hx3.dmg; prev3.n++; prev3.head = prev3.head || hx3.head; prev3.gt = hx3.t; prev3.vp = hx3.vp; prev3.born = performance.now(); }
+          else pops.push({ v: hx3.v, sum: hx3.dmg, n: 1, head: hx3.head, vp: hx3.vp, col: col3, gt: hx3.t, born: performance.now() });
+        }
         if (clip && !irp && t >= clip[1] && phase !== 'fight' && !(bannerUntil && $('.bn.result', el))) {
           introduced = {};
           if (opts.next && opts.auto) { opts.next(); return; } // reel: on to the next clip
@@ -1053,7 +1063,7 @@
       draw(realDt);
       raf = requestAnimationFrame(frame);
     }
-    function seek(x) { if (irp) { irp = null; irb.classList.add('hide'); } t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
+    function seek(x) { pops = []; if (irp) { irp = null; irb.classList.add('hide'); } t = Math.max(t0, Math.min(tEnd, x)); snap = true; endFight(); introduced = {}; draw(0); }
     pp.onclick = function () { if (t >= tEnd) seek(t0); playing = !playing; pp.textContent = playing ? '❚❚' : '▶'; };
     spb.onclick = function () { si = (si + 1) % speeds.length; spb.textContent = si ? '×' + speeds[si] : 'AUTO'; };
     $('.snd', bar).onclick = function () { var b = $('.snd', bar); sfx.toggle(); b.classList.toggle('on', sfx.on); b.innerHTML = (sfx.on ? '🔊 ' : '🔇 ') + esc(S.sound); };

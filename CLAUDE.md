@@ -103,6 +103,10 @@ GitHub does **not** deploy.
   stacked so they never overlap). Outside the safe zone is shaded blue (`.zout`, even-odd path). The HUD shows the area
   name (`placeName`), so does the ENGAGEMENT banner. On phones the battle panel sits on the map (`.battle.onmap`:
   names + HP only); on desktop it stays in the side column.
+- **No text over the action (Guy):** no callouts/ribbons on the map (`label()` is a no-op); who-killed-whom lives only in
+  the kill feed, bottom-left (3 lines, pixel gun icon + distance, also during fights). On the map: sprites, HP bars,
+  rings, damage numbers. Damage numbers (`pops`) live 2 s of **real** time (`POP_MS`), heals/armour breaks scale with
+  the pace, so they stay readable at any speed. Phones: the battle panel is under the map again.
 - **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
 - **Big screen:** ⛶ / "Fullscreen" chip / F → theater; on desktop it also requests real browser fullscreen, the map as
