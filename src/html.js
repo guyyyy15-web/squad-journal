@@ -142,6 +142,10 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
  .match.theater .stage .map{width:min(100%,calc(100vh - 150px));margin:0 auto}.match.theater .side .enemies{display:none}
  .match.theater .map .hud>*{font-size:13px}.match.theater .map .kf li{font-size:14px}}
 .match:fullscreen{overflow-y:auto}
+/* big screen: the map takes the whole width and height (the replay frame widens to fit) */
+.match.theater .map{width:100%!important;max-width:none;aspect-ratio:auto;height:calc(100vh - 150px);height:calc(100dvh - 150px);margin:6px 0 0}
+@media (min-width:1100px){.match.theater .mbody{grid-template-columns:minmax(0,1fr) 300px}.match.theater .map .sqb .sh{width:60px}.match.theater .map .sqb .sg{font-size:10px}.match.theater .map .sqb .gi{width:24px;height:9px}}
+@media (orientation:landscape) and (max-height:500px){.match.theater .map{height:calc(100dvh - 96px)}.match.theater .hd,.match.theater .muted.small{display:none}}
 html.noscroll,html.noscroll body{overflow:hidden}html.noscroll .share,html.replaying .share{display:none}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:10px}
 .feed{margin:10px 0 0;padding:0;list-style:none;font-size:13px}
@@ -477,7 +481,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=76'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=6', '/app/session.js?v=77'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

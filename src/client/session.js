@@ -680,9 +680,13 @@
       // the vignette centres on the shooter during an instant replay
       if (irp) { var sp = irp.m.e.ap && (irp.m.e.ap[0] || irp.m.e.ap[1]) ? irp.m.e.ap : irp.m.e.vp; vig.style.setProperty('--vx', ((sp[0] - vx) / vs * 100).toFixed(1) + '%'); vig.style.setProperty('--vy', ((sp[1] - vy) / vs * 100).toFixed(1) + '%'); }
       window.SJ.cam = shot.kind + ':' + Math.round(vs);
-      svgEl.setAttribute('viewBox', vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + vs.toFixed(1) + ' ' + vs.toFixed(1));
+      // wide (or tall) screens: the frame grows sideways around the director's square shot instead of letterboxing
+      var vw = vs, vh = vs;
+      if (aspect > 1.02) { vw = vs * aspect; vx -= (vw - vs) / 2; } else if (aspect < 0.98) { vh = vs / aspect; vy -= (vh - vs) / 2; }
+      view = [vx, vy, Math.max(vw, vh)];
+      svgEl.setAttribute('viewBox', vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + vw.toFixed(1) + ' ' + vh.toFixed(1));
       if (nowMs - lastTiles > 250) { lastTiles = nowMs; tiles(tileG, match.map, view); }
-      var u = vs / 100, us = Math.min(3.4 * 0.62, Math.max(u * 0.62, 0.34)); // close-ups: sprites keep a minimum size on the map, so they grow on screen // sprite scale: ~5.5% of the frame in close-ups, capped on wide shots
+      var u = vs / 100, us = Math.min(3.4 * 0.5, Math.max(u * 0.5, 0.22)); // close-ups: sprites keep a minimum size on the map, so they grow on screen // sprite scale: ~5.5% of the frame in close-ups, capped on wide shots
       // HUD
       hud.clock.textContent = mmss(t);
       range.value = String(Math.round(t));
@@ -760,7 +764,7 @@
           var gIc = gn && PIX.gun(gn);
           // passengers: no sprite or HP bar of their own, their name pills stacked under the driver's
           // the name pill keeps its size on screen when the sprites grow in a close-up
-          var ls = spriteMode ? 1.55 * Math.max(0.45, Math.min(1, u * 0.62 / us)) : 1.15, sh = ls / 1.55;
+          var ls = spriteMode ? 1.55 * Math.max(0.5, Math.min(1.25, u * 0.62 / us)) : 1.15, sh = ls / 1.55;
           var lblT = rider ? (spriteMode ? 'translate(0 ' + (seat[i] * 4.3 * sh).toFixed(2) + ') scale(' + ls.toFixed(3) + ')' : 'translate(0 ' + (1.4 + seat[i] * 3.1).toFixed(1) + ') scale(1.15)') : (spriteMode ? 'scale(' + ls.toFixed(3) + ')' : 'translate(0 1.4) scale(1.15)');
           if (lblEl[i].getAttribute('transform') !== lblT) lblEl[i].setAttribute('transform', lblT);
           var showSpr = !rider && spriteMode, showIco = !rider && !spriteMode;
@@ -964,6 +968,10 @@
     }
     function endFight(keepBanner) { phase = null; curW = null; fight = null; if (!keepBanner) hideBanner(); el.classList.remove('fighting'); if (battle) battle.classList.add('hide'); }
     var lastBattle = 0, lastSq = 0, pops = [], POP_MS = 2000; // damage numbers live 2 s of real time
+    var aspect = 1;
+    var measure = function () { var r = el.getBoundingClientRect(); aspect = r.height > 50 ? r.width / r.height : 1; };
+    measure();
+    if (window.ResizeObserver) new ResizeObserver(measure).observe(el); else window.addEventListener('resize', measure);
     var tn = $('.tn', el), vig = $('.vig', el), sqb = $('.sqb', el), irb = $('.irb', el);
     function startReplay(mo) {
       // a visible rewind (no jump): time runs back fast, plays slowly, then fast-forwards to where we were
@@ -1091,7 +1099,7 @@
       card.classList.toggle('theater', on); document.documentElement.classList.toggle('noscroll', on);
       // desktop: real fullscreen, the map as tall as the screen with the battle panel beside it
       try {
-        if (on && window.innerWidth >= 1100 && !document.fullscreenElement && card.requestFullscreen) card.requestFullscreen().catch(function () {});
+        if (on && !document.fullscreenElement && card.requestFullscreen) card.requestFullscreen().then(function () { if (screen.orientation && screen.orientation.lock && window.innerWidth < 1100) screen.orientation.lock('landscape').catch(function () {}); }).catch(function () {});
         if (!on && document.fullscreenElement) document.exitFullscreen().catch(function () {});
       } catch (e) {}
       snap = true;

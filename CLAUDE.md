@@ -87,7 +87,7 @@ GitHub does **not** deploy.
   zoomed in (< 170 units). Desktop ≥ 1100 px: map + side column (battle panel, feed, tables); keys space/←/→/F/Esc.
 - **Session page = replays first:** hero with ▶ place badges (`data-play`, jump into that match's replay), highlights
   as a swipe carousel (`.momrow`), then the matches (big ▶ on each map), and MVP/medals/logs/narrator folded in one
-  `<details class="debrief">`. Sprite scale `us = min(2.1, max(u × 0.62, 0.34))`: ≈5.5% of the frame normally, bigger on screen in close-ups
+  `<details class="debrief">`. Sprite scale `us = min(1.7, max(u × 0.5, 0.22))`: ≈5.5% of the frame normally, bigger on screen in close-ups
   (a minimum size on the map), capped on wide shots; name pills are scaled back so they stay the same size on screen.
 - **Replay markers (Guy's call):** no instant replays/killcams inside the replay (they broke the pacing; `moments = []`);
   no walking trails; pixel sprites only when the camera is close (view < 190 units, back to unit patches > 230);
@@ -110,8 +110,9 @@ GitHub does **not** deploy.
   the pace, so they stay readable at any speed. Phones: the battle panel is under the map again.
 - **Riding together:** members in the same kind of vehicle within 6 units share one vehicle (`leaderOf`/`seat`): the
   first is the driver and carries the vehicle sprite, the passengers' name pills stack under it (no own sprite/HP bar).
-- **Big screen:** ⛶ / "Fullscreen" chip / F → theater; on desktop it also requests real browser fullscreen, the map as
-  tall as the screen with the battle panel beside it.
+- **Big screen:** ⛶ / "Fullscreen" chip / F → theater + real fullscreen where the browser allows it (phones try a
+  landscape lock). The map fills the width and height; the viewBox widens around the director's square shot by the
+  element's aspect (`aspect`, ResizeObserver), so wide screens show more map instead of black bars.
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (14–45 units) → duel (16–70) → approach
   (26–95) → stalk (30–100) → follow the biggest group, ignoring stragglers (60–120) — blurry close-ups are fine (Guy); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move
