@@ -876,6 +876,11 @@
           oh.push(spriteMode ? '<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>'
             : '<circle cx="' + f1(opos[0]) + '" cy="' + f1(opos[1]) + '" r="' + f1(u * 0.9) + '" fill="#dfe3ea" stroke="#000" stroke-width="1.2" vector-effect="non-scaling-stroke"/>');
           if (model) oh.push(hpBar(opos[0], opos[1] - us * 9, us, hpAt(model, orow[0], t)));
+        } else if (spriteMode && opos[0] > view[0] - 15 && opos[0] < view[0] + view[2] + 15 && opos[1] > view[1] - 15 && opos[1] < view[1] + view[2] + 15) {
+          // everyone near us is a full soldier on the map in close-ups, fighting us or not
+          var dp0 = opAt(orow, t - 1);
+          oh.push(sprite(kindOf(dp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], dp0, opos)));
+          if (model && model.tl[orow[0]]) oh.push(hpBar(opos[0], opos[1] - us * 9, us, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');

@@ -64,7 +64,7 @@ GitHub does **not** deploy.
 - **Director** (replay): at each firefight a small ENGAGEMENT banner (n VS n, enemy names), the fight in slow
   motion with a live battle panel under the map (HP bars, DOWN/KIA, helmet/vest, guns), combo damage numbers, tracers,
   enemy markers and a combat camera, then a RESULT banner (dealt/taken, kills, MVP). Banners fade by themselves and
-  **never pause the replay**. Everyone else in the match is a faint dot (`opAt`); squads we trade with become a stronger grey
+  **never pause the replay**. Everyone else in the match is a faint dot on wide shots and a full desert-camo soldier in close-ups when inside the frame (Guy: everyone near us must show) (`opAt`); squads we trade with become a stronger grey
   (never red: red means knocked/killed) with a short fading 30 s trail from 90 s before first contact (steps > 25 units
   are not drawn). Our patches and enemies carry a floating HP bar. Map overlays use physical left/right (the map is LTR). Logic in replay.js (`battleModel`, `hpAt`, `gearAt`,
   `fightOf`, tested); RPG look uses the Press Start 2P font. Grid columns must be `minmax(0,1fr)` or they overflow.
