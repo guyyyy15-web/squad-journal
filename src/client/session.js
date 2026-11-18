@@ -166,9 +166,11 @@
     var zoomed = el.dataset.zoom !== 'full';
     el.style.backgroundImage = 'none';
     el.innerHTML = staticSvg(match, d, zoomed ? focus : [0, 0, 1000])
+      + '<button type="button" class="bigplay"><b>▶</b>' + esc(S.playReplay || S.replay) + '</button>'
       + '<div class="tools"><button type="button" class="zm">' + esc(zoomed ? S.fullMap : S.zoomIn) + '</button><button type="button" class="rp">▶ ' + esc(S.replay) + '</button></div>';
     $('.zm', el).onclick = function () { el.dataset.zoom = zoomed ? 'full' : ''; renderStatic(match, el, d); };
     $('.rp', el).onclick = function () { replay(match, el, d, 0); };
+    $('.bigplay', el).onclick = function () { replay(match, el, d, 0); };
   }
 
   // facing in 45° steps from a direction vector (0° = north)
@@ -639,7 +641,7 @@
       window.SJ.cam = shot.kind + ':' + Math.round(vs);
       svgEl.setAttribute('viewBox', vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + vs.toFixed(1) + ' ' + vs.toFixed(1));
       if (nowMs - lastTiles > 250) { lastTiles = nowMs; tiles(tileG, match.map, view); }
-      var u = vs / 100;
+      var u = vs / 100, us = Math.min(u, 3.4) * 0.62; // sprite scale: ~5.5% of the frame in close-ups, capped on wide shots
       // HUD
       hud.clock.textContent = mmss(t);
       range.value = String(Math.round(t));
@@ -660,12 +662,12 @@
         pm[i].style.display = pos ? '' : 'none';
         if (pos) {
           // fan out markers that would sit on top of each other in a close-up
-          var mx = pos[0], my = pos[1], gap = Math.min(u, 3.4) * 5;
+          var mx = pos[0], my = pos[1], gap = us * 6;
           for (var oj = 0; oj < i; oj++) {
             var op = posAt(d.players[ids[oj]], t);
             if (op && Math.abs(op[0] - pos[0]) < gap && Math.abs(op[1] - pos[1]) < gap) { mx = op[0] + (pos[0] >= op[0] ? 1 : -1) * gap; }
           }
-          pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + Math.min(u, 3.4).toFixed(3) + ')'); // capped on wide shots
+          pm[i].setAttribute('transform', 'translate(' + mx.toFixed(1) + ' ' + my.toFixed(1) + ') scale(' + us.toFixed(3) + ')');
           var inAir = p.jump && p.land && t >= p.jump[2] && t < p.land[2];
           chute[i].setAttribute('display', inAir ? '' : 'none');
           var pix = model ? model.idx.get(id) : undefined, pPrev = posAt(p, t - 1), dnO = downedAt(d, id, t);
@@ -704,7 +706,7 @@
         var mine = ours.has(e.a) || ours.has(e.v);
         if (!mine && e.k !== 'revive') return;
         if (e.k === 'kill' && ours.has(e.v)) {
-          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], u * 7, 0) + smokeFx(e.vp, age, u, (e.t % 7) / 7));
+          fxh.push(sprite('crate', colorOf(e.v), '', false, e.vp[0], e.vp[1], us * 7, 0) + smokeFx(e.vp, age, u, (e.t % 7) / 7));
           if (age <= 10) lbh.push(label(e.vp[0], e.vp[1] - u * 4, u, '✕ ' + nameOf(match, e.v, e.vn) + (e.a ? ' ◂ ' + nameOf(match, e.a, e.an) : '') + shortW(e), '#ff8a8a'));
         } else if (age > 8) {
           if (e.k === 'kill') fxh.push('<circle cx="' + e.vp[0] + '" cy="' + e.vp[1] + '" r="' + (u * 1.1) + '" fill="#ff4d4d" fill-opacity=".8"/>');
@@ -762,10 +764,10 @@
           diam[i] = 1;
           var ip = Number(i), eP0 = opBy[ip] ? opAt(opBy[ip], t - 1) : null, eDn = hh.state === 1;
           var eg = gunOf(ip, t), ea = facing('e' + ip, ip, eP0, pos);
-          fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], u * 9, ea));
-          fxh.push(hpBar(pos[0], pos[1] - u * 10, u, hh));
+          fxh.push(sprite(eDn ? 'down' : kindOf(eP0, pos, false), '#7d7452', eg, true, pos[0], pos[1], us * 9, ea));
+          fxh.push(hpBar(pos[0], pos[1] - us * 10, us, hh));
           var eGr = gearAt(model, ip, t);
-          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + u * 2.4) + '" font-size="' + f1(u * 1.05) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
+          if (vs < 170) fxh.push('<text x="' + f1(pos[0]) + '" y="' + f1(pos[1] + us * 2.4) + '" font-size="' + f1(us * 1.3) + '" text-anchor="middle" fill="#cfd5dd" stroke="#05070a" stroke-width="' + f1(u * 0.45) + '" paint-order="stroke" font-family="Press Start 2P, monospace">' + esc(((eGr.helmet ? 'H' + eGr.helmet : '') + (eGr.vest ? ' V' + eGr.vest : '') + (GUNTAG[eg] ? ' ' + GUNTAG[eg] : '')).trim()) + '</text>');
         });
       }
       var oh = [], dim = [];
@@ -783,8 +785,8 @@
             oh.push('<line x1="' + a2[0].toFixed(1) + '" y1="' + a2[1].toFixed(1) + '" x2="' + b2[0].toFixed(1) + '" y2="' + b2[1].toFixed(1) + '" stroke="#dfe3ea" stroke-opacity="' + (0.08 + 0.42 * si2 / tp.length).toFixed(2) + '" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>');
           }
           var hp0 = opAt(orow, t - 1);
-          oh.push('<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], u * 8, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>');
-          if (model) oh.push(hpBar(opos[0], opos[1] - u * 9, u, hpAt(model, orow[0], t)));
+          oh.push('<g opacity=".85">' + sprite(kindOf(hp0, opos, false), '#7d7452', gunOf(orow[0], t), true, opos[0], opos[1], us * 8, facing('e' + orow[0], orow[0], hp0, opos)) + '</g>');
+          if (model) oh.push(hpBar(opos[0], opos[1] - us * 9, us, hpAt(model, orow[0], t)));
         } else dim.push('<circle cx="' + opos[0].toFixed(1) + '" cy="' + opos[1].toFixed(1) + '" r="' + (u * 0.5).toFixed(2) + '"/>');
       }
       opsG.innerHTML = (dim.length ? '<g fill="#e8ecf2" fill-opacity=".5" stroke="#000" stroke-opacity=".55" stroke-width="1" vector-effect="non-scaling-stroke">' + dim.join('') + '</g>' : '') + oh.join('');
@@ -799,7 +801,7 @@
           fxh.push('<use href="#' + pxRef(cnp) + '" x="' + f1(P2[0] - cw2 / 2) + '" y="' + f1(P2[1] - alt - u * 9) + '" width="' + f1(cw2) + '" height="' + f1(cw2 / 2) + '"/>');
           fxh.push('<use href="#' + pxRef(drp) + '" x="' + f1(P2[0] - dw2 / 2) + '" y="' + f1(P2[1] - alt - u * 4.6) + '" width="' + f1(dw2) + '" height="' + f1(dw2) + '"/>');
         } else {
-          fxh.push(sprite('drop', '#e5383b', '', false, P2[0], P2[1], u * 7, 0));
+          fxh.push(sprite('drop', '#e5383b', '', false, P2[0], P2[1], us * 7, 0));
           var now2 = performance.now() / 1000;
           for (var k2 = 0; k2 < 6; k2++) { var ph2 = (now2 * 0.6 + k2 / 6 + ci * 0.13) % 1; fxh.push(sq(P2[0] + Math.sin(ph2 * 5 + k2) * u * 1.4, P2[1] - u * (3 + ph2 * 14), u * (1 + ph2 * 2.2), ph2 < 0.5 ? '#e5383b' : '#c46a6a', 0.55 * (1 - ph2) * (1 - age2 / 90))); }
         }
@@ -808,7 +810,7 @@
       // knocked: a bleed-out ring that runs out when they die; a green ring while a teammate picks them up
       squadIds.forEach(function (id, k) {
         var dn = downedAt(d, id, t), ps = dn && posAt(d.players[id], t);
-        if (ps) fxh.push(ring(ps, u * 3.6, dn.bleed, '#ff4d4d', u) + (dn.revive > 0 ? ring(ps, u * 4.6, dn.revive, '#3ddc97', u) : ''));
+        if (ps) fxh.push(ring(ps, us * 4.2, dn.bleed, '#ff4d4d', us) + (dn.revive > 0 ? ring(ps, us * 5.2, dn.revive, '#3ddc97', us) : ''));
       });
       knockedFoes.forEach(function (e) {
         if (e.t > t || t - e.t > 60) return;
@@ -1197,6 +1199,16 @@
     return next();
   }
 
+  // quick play: the place badges at the top start that match's replay
+  document.querySelectorAll('[data-play]').forEach(function (b) {
+    b.onclick = function () {
+      var m = SJ.matches.filter(function (x) { return x.id === b.dataset.play; })[0], el = m && $('.map[data-match="' + m.id + '"]');
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var go = function () { if (data[m.id]) replay(m, el, data[m.id], 0); else setTimeout(go, 400); };
+      go();
+    };
+  });
   // ---------- highlights: firefights (action windows) + moments, as clips ----------
   var clips = [];
   function enemyNames(d, team, match) {
@@ -1262,7 +1274,7 @@
       return '<button type="button" class="mom" data-i="' + i + '">' + (m ? patchSvg(m.emblem, m.color, 36) : patchSvg('crosshair', '#f2a900', 36))
         + '<div><div class="mt">' + title + '</div><div class="md">' + esc(text) + '</div><div class="mw">' + esc(fmt(S.matchAt, { m: c.match.n, t: mmss(c.t) })) + ' · ' + Math.round(c.e - c.s) + 's ▶</div></div></button>';
     };
-    box.innerHTML = '<button type="button" class="btn reel">▶ ' + esc(fmt(S.reel, { n: reel.length })) + '</button>' + shown.map(card).join('');
+    box.innerHTML = '<button type="button" class="btn reel">▶ ' + esc(fmt(S.reel, { n: reel.length })) + '</button><div class="momrow">' + shown.map(card).join('') + '</div>';
     $('.reel', box).onclick = function () { playClip(reel, 0, true); };
     box.querySelectorAll('.mom').forEach(function (b) { b.onclick = function () { playClip(shown, Number(b.dataset.i), false); }; });
   }

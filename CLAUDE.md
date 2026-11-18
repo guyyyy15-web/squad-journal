@@ -85,6 +85,9 @@ GitHub does **not** deploy.
   `image-rendering: pixelated`): soldiers (walk cycle, 8-way facing, gun by `weaponClass`, prone when DOWN), loot crate on
   death, vehicle when moving > 2.4 units/s. Original art: no PUBG/KRAFTON assets. In-frame tags (helmet/vest/gun) when
   zoomed in (< 170 units). Desktop ≥ 1100 px: map + side column (battle panel, feed, tables); keys space/←/→/F/Esc.
+- **Session page = replays first:** hero with ▶ place badges (`data-play`, jump into that match's replay), highlights
+  as a swipe carousel (`.momrow`), then the matches (big ▶ on each map), and MVP/medals/logs/narrator folded in one
+  `<details class="debrief">`. Sprite scale `us = min(u, 3.4) × 0.62` (≈5.5% of the frame in close-ups, capped wide).
 - **Director camera** (`directorShot`, replay.js, tested): shot types kill (32–70 units) → duel (40–110) → approach
   (60–130) → follow the biggest group, ignoring stragglers (100–170); action shots are held 2.5 s; when most of us are together a straggler's
   fight far away stays in the background (no camera jump across the map); no cuts or white flashes: a long move

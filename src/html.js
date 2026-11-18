@@ -84,6 +84,17 @@ a.panel{display:block;color:inherit;text-decoration:none;transition:transform .1
 .map .tools button{min-height:36px;padding:6px 12px;font-size:13px;border-radius:999px;background:rgba(10,12,15,.85);color:var(--text);border:1px solid var(--line);font-weight:600}
 .map .tools .th,.map .tools .cl{min-width:44px;min-height:44px;padding:0;font-size:15px;background:rgba(10,12,15,.45);border-color:transparent}
 .map .tools button.rp{background:var(--gold);color:#111;border-color:var(--gold)}
+.momrow{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:10px 0 6px;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.momrow::-webkit-scrollbar{display:none}.momrow .mom{flex:0 0 min(82%,340px);scroll-snap-align:start;margin:0}
+@media (min-width:1100px){.momrow{flex-wrap:wrap;margin-inline:0;padding-inline:0}.momrow .mom{flex:0 0 calc(33.33% - 7px)}}
+.qplay{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:4px 10px 4px 4px;border-radius:999px;border:1px solid rgba(242,169,0,.45);background:rgba(242,169,0,.1);color:var(--gold2);cursor:pointer}
+.qplay b{font-size:13px}
+.debrief{margin-top:18px}.debrief>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700;color:var(--gold2);list-style:none}
+.debrief>summary::before{content:"▸";margin-inline-end:8px;transition:transform .2s}.debrief[open]>summary::before{transform:rotate(90deg)}
+.map .bigplay{position:absolute;inset:0;margin:auto;width:max-content;height:max-content;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border-radius:999px;border:2px solid #111;background:var(--gold);color:#111;font:20px/1 var(--stencil);letter-spacing:.04em;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 6px rgba(242,169,0,.25);animation:bp 2.2s ease-in-out infinite}
+.map .bigplay b{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#111;color:var(--gold);font-size:18px}
+@keyframes bp{50%{box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 12px rgba(242,169,0,.08)}}
+
 .rbar{margin-top:10px}.rrow{display:flex;align-items:center;gap:10px}
 .rbar .trk{position:relative;flex:1;height:44px}
 .rbar input[type=range]{position:absolute;inset:0;width:100%;margin:0;accent-color:var(--gold);height:44px;background:transparent}
@@ -381,7 +392,7 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
   const hero = `<div style="margin:22px 0 4px">${pub ? `<a href="/look" class="small">${lang === 'he' ? '→' : '←'} ${esc(t.lookOther)}</a><br>` : ''}<span class="tag">${pub ? `PUBLIC REPLAY // ${esc(pub.name)}` : 'MISSION DEBRIEF'} // ${fmtDate(session.start_at)}${clan?.tag ? ` // [${esc(clan.tag)}]` : ''}</span>
     <h1 style="margin-top:8px;font-family:var(--head)">${esc(day)}</h1>
     <div class="muted num"><span dir="ltr">${fmtTime(session.start_at)}–${fmtTime(session.end_at)}</span> · ${esc(t.games(tm.games))} · ${dur(session.end_at - session.start_at)}</div>
-    <div class="row" style="margin-top:12px;gap:6px">${summary.matches.map((m) => placeBadge(m.place)).join('')}${tm.wins ? `<span class="stamp" style="font-size:20px">CHICKEN DINNER${tm.wins > 1 ? ` ×${tm.wins}` : ''}</span>` : ''}</div></div>
+    <div class="row" style="margin-top:12px;gap:6px">${summary.matches.map((m, i) => `<button type="button" class="qplay" data-play="${esc(m.match_id)}" aria-label="${esc(t.playReplay)} ${i + 1}">${placeBadge(m.place)}<b>▶</b></button>`).join('')}${tm.wins ? `<span class="stamp" style="font-size:20px">CHICKEN DINNER${tm.wins > 1 ? ` ×${tm.wins}` : ''}</span>` : ''}</div></div>
     <div class="stats">
       <div class="st ${tm.wins ? 'gold' : ''}"><b>${tm.wins ? `🍗${tm.wins > 1 ? `×${tm.wins}` : ''}` : '0'}</b><span>${esc(t.chickens)}</span></div>
       <div class="st"><b>#${tm.best_place}</b><span>${esc(t.bestPlace)}</span></div>
@@ -441,10 +452,11 @@ export function sessionPage({ lang, session, summary, members, origin, ogVer, og
     labels: { medicLog: t.medicLog, medicSub: t.medicSub, setupLog: t.setupLog, setupSub: t.setupSub, reviver: t.reviver, assister: t.assister, matchN: t.matchN(0).replace('0', '{n}') },
   };
   const ogDesc = S.en.sessionDesc(tm, mvp?.nickname);
-  return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${pub ? `<p class="muted small">${esc(t.lookPrivacy)}</p>` : narrator}${highlights}${carry}${medals}${logs}<h2>${esc(t.engagements)} <span class="tag">ENGAGEMENTS</span></h2>${matches}
+  return page(lang, `${day} · ${t.brand}`, `${top(lang, path, true, clan)}${hero}${pub ? `<p class="muted small">${esc(t.lookPrivacy)}</p>` : ''}${highlights}<h2>▶ ${esc(t.replays)} <span class="tag">REPLAYS</span></h2>${matches}
+    <details class="debrief panel"><summary>${esc(t.debrief)}</summary>${pub ? '' : narrator}${carry}${medals}${logs}</details>
     <div class="share"><button class="btn" id="share">📤 ${esc(t.share)}</button></div>`, {
     og: { title: `${S.en.brand} · ${fmtDay('en', session.start_at)}`, description: ogDesc, image: `${origin}/og/${session.session_id}.jpg?v=${ogVer}` },
-    data, scripts: ['/app/lib.js?v=10', '/app/pixel.js?v=5', '/app/session.js?v=62'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
+    data, scripts: ['/app/lib.js?v=11', '/app/pixel.js?v=5', '/app/session.js?v=65'], script: pub ? meScript : meScript + `;(function(){var r=document.getElementById('recap');if(!r||r.dataset.cached==='1')return;fetch('/api/recap/${session.session_id}').then(function(x){return x.json()}).then(function(j){if(j.text)r.querySelector('.rtext').textContent=j.text;else r.remove()}).catch(function(){r.remove()})})();` + (Date.now() - session.end_at < 3 * 3600000 ? LIVE_WATCH('toast', clientStrings(lang).newMatch) : ''),
   });
 }
 

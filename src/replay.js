@@ -324,14 +324,14 @@ export function directorShot(d, model, ours, t, follow = '') {
     if (foe && fd < 90) {
       const X = best.map((x) => x[1][0]).concat(foe[0]); const Y = best.map((x) => x[1][1]).concat(foe[1]);
       const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
-      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.5 + 36, 70, 150)), kind: 'stalk' };
+      return { box: box((Math.min(...X) + Math.max(...X)) / 2, (Math.min(...Y) + Math.max(...Y)) / 2, clamp(span * 1.4 + 30, 60, 130)), kind: 'stalk' };
     }
   }
   // 5. follow the biggest group (members within 50 units of each other), not the stragglers
   if (alive.length) {
     const X = best.map((x) => x[1][0]); const Y = best.map((x) => x[1][1]);
     const span = Math.max(Math.max(...X) - Math.min(...X), Math.max(...Y) - Math.min(...Y));
-    return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.6 + 70, 100, 170)), kind: 'follow' };
+    return { box: box(X.reduce((s, v) => s + v, 0) / X.length, Y.reduce((s, v) => s + v, 0) / Y.length, clamp(span * 1.5 + 55, 80, 140)), kind: 'follow' };
   }
   // 6. nobody of ours left: stay on the last fall
   const deaths = Object.keys(d.players).filter(mine).map((id) => d.players[id].death).filter(Boolean).sort((a, b) => b[2] - a[2]);
